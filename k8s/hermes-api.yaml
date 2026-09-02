@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hermes-api
+  template:
+    metadata:
+      labels:
+        app: hermes-api
+    spec:
+      containers:
+      - name: hermes-api
+        image: hermes:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8000
+        env:
+        # In-cluster service DNS now that Hermes runs inside K3s too —
+        # no Host-header trick needed here (that's only for the Traefik
+        # Ingress path from outside the cluster).
+        - name: ATHENAEUM_URL
+          value: "http://athenaeum-api:8000"
+        - name: ATHENAEUM_HOST_HEADER
+          value: "athenaeum-api"
+        - name: DB_PATH
+          value: "/data/hermes.db"
+        volumeMounts:
+        - name: hermes-data
+          mountPath: /data
+      volumes:
+      - name: hermes-data
+        persistentVolumeClaim:
+          claimName: hermes-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hermes-api
+spec:
+  selector:
+    app: hermes-api
+  ports:
+  - port: 8000
+    targetPort: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hermes-api
+spec:
+  rules:
+  - host: hermes.home.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: hermes-api
+            port:
+              number: 8000
