@@ -120,9 +120,46 @@ streamed token-by-token themselves), so the loop executes the tool
 silently and continues streaming the model's actual answer once it
 has the tool's result.
 
+## `list_notes` tool + honesty fix — built + image ready, not yet live
+
+Added after a real conversation exposed two real problems at once:
+asked for files in a specific folder, got back results from three
+unrelated folders (RAG has no concept of "list files under this exact
+path" — see Athenaeum's README for the full diagnosis); then, when
+directly asked "you don't have direct access to the folder structure,
+do you," the model dodged the question and just re-ran the same
+search instead of answering honestly.
+
+Two fixes:
+1. **New `list_notes` tool** — calls Athenaeum's new `/browse`
+   endpoint (structural folder listing, not semantic search).
+   `search_vault` and `list_notes` are kept as separate tools on
+   purpose, with descriptions that tell the model which one fits which
+   question shape, rather than one merged tool trying to do both.
+2. **System prompt fix** — added an explicit instruction to answer
+   honestly when asked about capabilities/limitations rather than
+   deflecting by just running a tool again.
+
+**Deployment status:** image built (includes both fixes) and sitting
+as a tarball on the server (`/tmp/hermes.tar`), not yet imported —
+needs the `sudo k3s ctr images import` step, same as Athenaeum's. Both
+need to go out together (Hermes' new tool calls Athenaeum's new
+endpoint). After importing both:
+```bash
+sudo k3s ctr images import /tmp/athenaeum.tar
+sudo k3s ctr images import /tmp/hermes.tar
+```
+then (no sudo needed):
+```bash
+kubectl rollout restart deployment/athenaeum-api deployment/hermes-api
+```
+Verify with the actual query that surfaced this: ask Hermes to list
+files in "Burn St Productions" — should now return real matching
+folder(s)/files instead of unrelated semantic-search results.
+
 ## Not yet decided / open
 
-- More tools beyond `search_vault`
+- More tools beyond `search_vault` / `list_notes`
 
 ## Running it locally
 ```bash
