@@ -7,7 +7,7 @@ and a handler function, not restructuring anything."""
 
 import httpx
 
-from app.config import ATHENAEUM_HOST_HEADER, ATHENAEUM_URL
+from app.config import ATHENAEUM_HOST_HEADER, ATHENAEUM_URL, IRIS_URL
 
 
 def search_vault(query: str) -> str:
@@ -50,6 +50,19 @@ def list_notes(folder: str) -> str:
         files = "\n".join(f"  - {f}" for f in match["files"]) or "  (no .md files)"
         sections.append(f"Folder: {match['folder']}\n{files}")
     return "\n\n".join(sections)
+
+
+def generate_image(prompt: str, conversation_id: str | None = None) -> str:
+    response = httpx.post(
+        f"{IRIS_URL}/generate",
+        json={"prompt": prompt, "conversation_id": conversation_id},
+        timeout=120.0,  # image generation is much slower than a text tool call
+    )
+    response.raise_for_status()
+    image_url = response.json()["image_url"]
+    # Markdown image syntax — Hermes' renderer displays this as an actual
+    # <img>, not just a link (see static/index.html's renderMarkdown).
+    return f"![{prompt}]({image_url})"
 
 
 TOOLS = [
@@ -97,6 +110,30 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_image",
+            "description": (
+                "Generate an image from a text description. Use when the user asks "
+                "to create, draw, generate, or make an image/picture of something."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "prompt": {
+                        "type": "string",
+                        "description": "Description of the image to generate",
+                    }
+                },
+                "required": ["prompt"],
+            },
+        },
+    },
 ]
 
-TOOL_HANDLERS = {"search_vault": search_vault, "list_notes": list_notes}
+TOOL_HANDLERS = {
+    "search_vault": search_vault,
+    "list_notes": list_notes,
+    "generate_image": generate_image,
+}

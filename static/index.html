@@ -172,6 +172,12 @@
     border-radius: 4px;
     font-size: 0.9em;
   }
+  .msg img {
+    display: block;
+    max-width: 100%;
+    border-radius: 10px;
+    margin: 4px 0;
+  }
   form {
     display: flex;
     gap: 10px;
@@ -276,6 +282,7 @@ function renderMarkdown(raw) {
 
   function inline(text) {
     return text
+      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">')
       .replace(/`([^`]+)`/g, '<code>$1</code>')
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
       .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');

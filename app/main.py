@@ -87,7 +87,7 @@ async def chat(request: ChatRequest):
         accumulated = ""
         yield json.dumps({"type": "conversation_id", "conversation_id": conversation_id}) + "\n"
         try:
-            async for chunk in run_chat_stream(history, model=request.model):
+            async for chunk in run_chat_stream(history, model=request.model, conversation_id=conversation_id):
                 accumulated += chunk
                 yield json.dumps({"type": "token", "content": chunk}) + "\n"
         finally:

@@ -10,6 +10,11 @@ CHAT_MODEL = os.environ.get("CHAT_MODEL", "qwen2.5:7b")
 ATHENAEUM_URL = os.environ.get("ATHENAEUM_URL", "http://192.168.1.157")
 ATHENAEUM_HOST_HEADER = os.environ.get("ATHENAEUM_HOST_HEADER", "athenaeum.home.local")
 
+# Iris runs bare-metal on the host (not K3s — see its own README for why),
+# so it's reached the same way whether Hermes runs locally or in-cluster —
+# no Ingress/Host-header trick needed, just the host's LAN IP:port.
+IRIS_URL = os.environ.get("IRIS_URL", "http://192.168.1.157:8100")
+
 DB_PATH = os.environ.get("DB_PATH", "./hermes.db")
 
 SYSTEM_PROMPT = os.environ.get(
