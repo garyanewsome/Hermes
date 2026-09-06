@@ -95,12 +95,25 @@ async def run_chat_stream(messages: list[dict], model: str | None = None, conver
             name = call["function"]["name"]
             arguments = call["function"]["arguments"]
             handler = TOOL_HANDLERS.get(name)
+
             if not handler:
-                result = f"Unknown tool: {name}"
-            elif name == "generate_image":
-                result = handler(**arguments, conversation_id=conversation_id)
-            else:
-                result = handler(**arguments)
+                messages.append({"role": "tool", "content": f"Unknown tool: {name}"})
+                continue
+
+            try:
+                if name == "generate_image":
+                    result = handler(**arguments, conversation_id=conversation_id)
+                else:
+                    result = handler(**arguments)
+            except Exception as exc:
+                # A tool failure (Athenaeum/Iris down, GPU OOM, timeout, ...)
+                # must never crash the stream — that drops the connection
+                # mid-response with no visible reason. Surface it in-chat
+                # instead and let the model continue from there.
+                if name == "generate_image":
+                    yield f"\n\n*Image generation failed: {exc}*"
+                messages.append({"role": "tool", "content": f"Tool '{name}' failed: {exc}"})
+                continue
 
             if name == "generate_image":
                 # Never let the model retype the image URL itself — models
