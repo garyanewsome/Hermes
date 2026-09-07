@@ -44,6 +44,8 @@ Runs in K3s:
 
 Reaches Athenaeum over in-cluster service DNS (`http://athenaeum-api:8000`) and Iris directly by host IP:port (Iris runs bare-metal, not in K3s — see Iris' own README).
 
+To redeploy after a code change: `./deploy.sh` — builds the image, reimports it into K3s, and restarts the deployment.
+
 ## Status
 
 - [x] Streaming chat with real mid-generation cancellation
