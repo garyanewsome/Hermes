@@ -14,6 +14,7 @@
     --text-dim: #83838f;
     --accent: #2eff83;
     --accent-glow: rgba(46, 255, 131, 0.55);
+    --accent-text: #072a12;
     --user-bubble: #0f5c2a;
     --assistant-bubble: #131318;
     --hover: #131318;
@@ -41,7 +42,7 @@
     margin: 12px;
     padding: 9px 12px;
     background: var(--accent);
-    color: white;
+    color: var(--accent-text);
     border: none;
     border-radius: 8px;
     font-size: 13.5px;
@@ -203,7 +204,7 @@
   }
   button {
     background: var(--accent);
-    color: white;
+    color: var(--accent-text);
     border: none;
     border-radius: 10px;
     padding: 0 20px;
@@ -216,6 +217,7 @@
   button:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
   button.stop {
     background: #ff4d4d;
+    color: white;
     box-shadow: 0 0 14px rgba(255, 77, 77, 0.5);
   }
   button.stop:hover { box-shadow: 0 0 22px rgba(255, 77, 77, 0.5); }
