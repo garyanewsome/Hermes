@@ -12,11 +12,10 @@
     --border: #1e1e24;
     --text: #f2f2f5;
     --text-dim: #83838f;
-    --accent: #2eff83;
-    --accent-glow: rgba(46, 255, 131, 0.55);
-    --accent-text: #072a12;
-    --user-bubble: #0f5c2a;
-    --assistant-bubble: #131318;
+    --accent: #22ffe6;
+    --accent-glow: rgba(34, 255, 230, 0.55);
+    --accent-text: #052e2b;
+    --dark-bubble: #050505;
     --hover: #131318;
   }
   * { box-sizing: border-box; }
@@ -147,14 +146,17 @@
   }
   .msg.user {
     align-self: flex-end;
-    background: var(--user-bubble);
-    border: 1px solid rgba(46, 255, 131, 0.4);
+    background: var(--accent);
+    color: var(--accent-text);
+    border: none;
+    box-shadow: 0 0 10px var(--accent-glow);
     border-bottom-right-radius: 4px;
   }
   .msg.assistant {
     align-self: flex-start;
-    background: var(--assistant-bubble);
-    border: 1px solid var(--border);
+    background: var(--dark-bubble);
+    border: 1px solid var(--accent);
+    box-shadow: 0 0 10px var(--accent-glow);
     border-bottom-left-radius: 4px;
   }
   .msg.pending {
