@@ -12,6 +12,7 @@ When the model decides a tool would help, Hermes executes it and feeds the resul
 - `search_vault` — semantic search over the vault (calls Athenaeum's `/search`)
 - `list_notes` — structural folder listing (calls Athenaeum's `/browse`)
 - `generate_image` — image generation (calls Iris's `/generate`)
+- `save_project_memory` / `recall_project_memory` — persistent memory for VST/audio plugin development work (calls a self-hosted Hindsight instance). Scoped deliberately narrow via the tool description — most messages should not trigger a save, only durable decisions/facts worth recalling later.
 
 **Other endpoints:**
 - `GET /models` — chat-capable models available (filtered to Ollama's `tools`-capability models only)

@@ -15,6 +15,14 @@ ATHENAEUM_HOST_HEADER = os.environ.get("ATHENAEUM_HOST_HEADER", "athenaeum.home.
 # no Ingress/Host-header trick needed, just the host's LAN IP:port.
 IRIS_URL = os.environ.get("IRIS_URL", "http://192.168.1.157:8100")
 
+# Hindsight runs bare-metal on the host via Docker Compose (not K3s — no
+# derived resources here, just the published image), reached the same way
+# whether Hermes runs locally or in-cluster. HINDSIGHT_BANK_ID scopes
+# memory to a single project rather than mixing in everything Hermes ever
+# discusses — see the tool descriptions in tools.py.
+HINDSIGHT_URL = os.environ.get("HINDSIGHT_URL", "http://192.168.1.157:8888")
+HINDSIGHT_BANK_ID = os.environ.get("HINDSIGHT_BANK_ID", "vst-test")
+
 DB_PATH = os.environ.get("DB_PATH", "./hermes.db")
 
 SYSTEM_PROMPT = os.environ.get(

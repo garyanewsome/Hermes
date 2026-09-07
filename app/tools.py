@@ -7,7 +7,7 @@ and a handler function, not restructuring anything."""
 
 import httpx
 
-from app.config import ATHENAEUM_HOST_HEADER, ATHENAEUM_URL, IRIS_URL
+from app.config import ATHENAEUM_HOST_HEADER, ATHENAEUM_URL, HINDSIGHT_BANK_ID, HINDSIGHT_URL, IRIS_URL
 
 
 def search_vault(query: str) -> str:
@@ -63,6 +63,29 @@ def generate_image(prompt: str, conversation_id: str | None = None) -> str:
     # Markdown image syntax — Hermes' renderer displays this as an actual
     # <img>, not just a link (see static/index.html's renderMarkdown).
     return f"![{prompt}]({image_url})"
+
+
+def save_project_memory(content: str) -> str:
+    response = httpx.post(
+        f"{HINDSIGHT_URL}/v1/default/banks/{HINDSIGHT_BANK_ID}/memories",
+        json={"items": [{"content": content}]},
+        timeout=60.0,
+    )
+    response.raise_for_status()
+    return "Saved to project memory."
+
+
+def recall_project_memory(query: str) -> str:
+    response = httpx.post(
+        f"{HINDSIGHT_URL}/v1/default/banks/{HINDSIGHT_BANK_ID}/memories/recall",
+        json={"query": query},
+        timeout=30.0,
+    )
+    response.raise_for_status()
+    results = response.json()["results"]
+    if not results:
+        return "No relevant project memory found."
+    return "\n\n".join(f"[{r['type']}] {r['text']}" for r in results)
 
 
 TOOLS = [
@@ -130,10 +153,59 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "save_project_memory",
+            "description": (
+                "Save a durable fact or decision to persistent project memory — "
+                "specifically for VST/audio plugin development work (framework "
+                "choices, why something was picked over an alternative, bugs found "
+                "and how they were fixed, concrete outcomes of trying something). "
+                "Do NOT use this for routine questions, small talk, or anything "
+                "that didn't land on an actual decision or fact worth recalling "
+                "months from now — most messages should NOT trigger this."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "string",
+                        "description": "The fact or decision to remember, written as a standalone statement",
+                    }
+                },
+                "required": ["content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recall_project_memory",
+            "description": (
+                "Search persistent project memory for past VST/audio plugin "
+                "development decisions and facts. Use when the user references "
+                "earlier project decisions or asks something like 'what did we "
+                "decide about X' or 'why did we choose Y' for the VST work."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "What to search for in project memory",
+                    }
+                },
+                "required": ["query"],
+            },
+        },
+    },
 ]
 
 TOOL_HANDLERS = {
     "search_vault": search_vault,
     "list_notes": list_notes,
     "generate_image": generate_image,
+    "save_project_memory": save_project_memory,
+    "recall_project_memory": recall_project_memory,
 }
