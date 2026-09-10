@@ -8,24 +8,25 @@ from app.tools import TOOL_HANDLERS, TOOLS
 MAX_TOOL_ITERATIONS = 5
 
 
-async def _stream_ollama(messages: list[dict], model: str):
+async def _stream_ollama(messages: list[dict], model: str, think: bool):
     """Yields ('content', str) for each text chunk, and ('tool_calls', list)
     once a message carrying tool calls completes. Streaming a closed/
     cancelled consumer (client aborts) closes this httpx stream too, via
     the `async with` — which stops Ollama's own generation, not just our
-    read of it."""
+    read of it.
+
+    `think` controls Ollama's hybrid-reasoning mode (Qwen3 and similar):
+    when on, the model runs a hidden chain-of-thought pass that streams
+    under `thinking`, not `content` — Hermes never surfaces that field, so
+    the request looks silently stuck until it finishes (measured: ~10s for
+    a one-sentence reply, far worse under a real tool-decision prompt).
+    Ignored harmlessly by models with no thinking mode (verified against
+    qwen2.5), so it's safe to pass regardless of which model is active."""
     async with httpx.AsyncClient(timeout=120.0) as client:
         async with client.stream(
             "POST",
             f"{OLLAMA_HOST}/api/chat",
-            # think: false — hybrid-reasoning models (Qwen3) default to a
-            # hidden chain-of-thought pass that streams under `thinking`,
-            # not `content`, adding real latency (measured: ~10s for a
-            # one-sentence reply, worse under a longer tool-decision
-            # prompt) with nothing visible until it finishes. Ignored
-            # harmlessly by models with no thinking mode (verified against
-            # qwen2.5).
-            json={"model": model, "messages": messages, "tools": TOOLS, "stream": True, "think": False},
+            json={"model": model, "messages": messages, "tools": TOOLS, "stream": True, "think": think},
         ) as response:
             response.raise_for_status()
             tool_calls = None
@@ -63,7 +64,12 @@ def list_models() -> list[str]:
     return tool_capable
 
 
-async def run_chat_stream(messages: list[dict], model: str | None = None, conversation_id: str | None = None):
+async def run_chat_stream(
+    messages: list[dict],
+    model: str | None = None,
+    conversation_id: str | None = None,
+    think: bool = False,
+):
     """Async generator yielding assistant-visible text chunks as they
     arrive. Tool-call turns produce no visible output themselves (matches
     Ollama's own behavior — tool_calls come with empty content) — the
@@ -83,7 +89,7 @@ async def run_chat_stream(messages: list[dict], model: str | None = None, conver
         accumulated_content = ""
         tool_calls = None
 
-        async for event_type, data in _stream_ollama(messages, model):
+        async for event_type, data in _stream_ollama(messages, model, think):
             if event_type == "content":
                 accumulated_content += data
                 yield data

@@ -25,6 +25,7 @@ class ChatRequest(BaseModel):
     message: str
     conversation_id: str | None = None
     model: str | None = None
+    think: bool = False
 
 
 class RenameRequest(BaseModel):
@@ -87,7 +88,9 @@ async def chat(request: ChatRequest):
         accumulated = ""
         yield json.dumps({"type": "conversation_id", "conversation_id": conversation_id}) + "\n"
         try:
-            async for chunk in run_chat_stream(history, model=request.model, conversation_id=conversation_id):
+            async for chunk in run_chat_stream(
+                history, model=request.model, conversation_id=conversation_id, think=request.think
+            ):
                 accumulated += chunk
                 yield json.dumps({"type": "token", "content": chunk}) + "\n"
         finally:

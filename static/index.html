@@ -119,6 +119,17 @@
     justify-content: space-between;
   }
   header .title { font-weight: 600; font-size: 15px; }
+  .header-controls { display: flex; align-items: center; gap: 12px; }
+  .think-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+    color: var(--text-dim);
+    cursor: pointer;
+    user-select: none;
+  }
+  .think-toggle input { cursor: pointer; accent-color: var(--accent); }
   #model-select {
     background: var(--panel);
     color: var(--text);
@@ -240,7 +251,13 @@
 <div id="main">
   <header>
     <span class="title">Hermes</span>
-    <select id="model-select"></select>
+    <div class="header-controls">
+      <label class="think-toggle" title="Hybrid-reasoning models (Qwen3, etc.) run a hidden chain-of-thought pass before answering — slower, but can help with harder questions. No effect on models without a thinking mode.">
+        <input type="checkbox" id="think-toggle">
+        Thinking
+      </label>
+      <select id="model-select"></select>
+    </div>
   </header>
   <div id="messages"></div>
   <form id="chat-form">
@@ -255,6 +272,7 @@ const form = document.getElementById('chat-form');
 const input = document.getElementById('input');
 const sendBtn = document.getElementById('send-btn');
 const modelSelect = document.getElementById('model-select');
+const thinkToggle = document.getElementById('think-toggle');
 const conversationListEl = document.getElementById('conversation-list');
 const newChatBtn = document.getElementById('new-chat-btn');
 
@@ -513,6 +531,7 @@ form.addEventListener('submit', async (e) => {
         message: text,
         conversation_id: currentConversationId,
         model: modelSelect.value || null,
+        think: thinkToggle.checked,
       }),
       signal: currentAbortController.signal,
     });

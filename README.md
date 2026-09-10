@@ -4,7 +4,7 @@ General-purpose personal assistant with a growing tool registry — not scoped t
 
 ## What it does
 
-`POST /chat {"message": "...", "conversation_id": "...", "model": "..."}` — streams the reply back as NDJSON lines while the model generates. `conversation_id` can be `null` to start a new conversation; server owns and persists conversation history (SQLite).
+`POST /chat {"message": "...", "conversation_id": "...", "model": "...", "think": false}` — streams the reply back as NDJSON lines while the model generates. `conversation_id` can be `null` to start a new conversation; server owns and persists conversation history (SQLite). `think` toggles Ollama's hybrid-reasoning mode (relevant for Qwen3-family models) — defaults off, since the hidden chain-of-thought pass streams under a field Hermes doesn't surface, making a request look stuck until it finishes; has no effect on models without a thinking mode.
 
 When the model decides a tool would help, Hermes executes it and feeds the result back — transparent to the client, tool-call turns just produce no visible tokens until the model's actual answer streams.
 
