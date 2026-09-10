@@ -18,7 +18,14 @@ async def _stream_ollama(messages: list[dict], model: str):
         async with client.stream(
             "POST",
             f"{OLLAMA_HOST}/api/chat",
-            json={"model": model, "messages": messages, "tools": TOOLS, "stream": True},
+            # think: false — hybrid-reasoning models (Qwen3) default to a
+            # hidden chain-of-thought pass that streams under `thinking`,
+            # not `content`, adding real latency (measured: ~10s for a
+            # one-sentence reply, worse under a longer tool-decision
+            # prompt) with nothing visible until it finishes. Ignored
+            # harmlessly by models with no thinking mode (verified against
+            # qwen2.5).
+            json={"model": model, "messages": messages, "tools": TOOLS, "stream": True, "think": False},
         ) as response:
             response.raise_for_status()
             tool_calls = None
