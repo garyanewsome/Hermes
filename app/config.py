@@ -1,7 +1,7 @@
 import os
 
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://192.168.1.157:11434")
-CHAT_MODEL = os.environ.get("CHAT_MODEL", "qwen2.5:14b")
+CHAT_MODEL = os.environ.get("CHAT_MODEL", "qwen3:14b")
 
 # Athenaeum is reached via its LAN Ingress hostname. Targeted directly by
 # IP + explicit Host header for now (avoids needing local DNS / /etc/hosts
