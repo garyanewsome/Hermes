@@ -4,8 +4,8 @@ import { completeTask, createTask, listTasks, updateTask } from '../api.js';
 
 const QUADRANTS = [
   { key: 'do', label: 'Do first', hint: 'Urgent and important', urgent: true, important: true, accent: true },
-  { key: 'next', label: 'Do next', hint: 'Urgent, not important', urgent: true, important: false, accent: false },
   { key: 'schedule', label: 'Schedule / plan', hint: 'Important, not urgent', urgent: false, important: true, accent: false },
+  { key: 'next', label: 'Do next', hint: 'Urgent, not important', urgent: true, important: false, accent: false },
   { key: 'backlog', label: 'Backlog', hint: "Neither — someday, maybe", urgent: false, important: false, accent: false, dim: true },
 ];
 
