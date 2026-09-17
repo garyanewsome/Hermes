@@ -25,6 +25,23 @@ def _connect():
 
 def init_planner_db() -> None:
     with _connect() as conn:
+        # The tasks schema changed (urgent/important booleans -> a single
+        # quadrant column) after a real deploy already created the table with
+        # the old shape — CREATE TABLE IF NOT EXISTS is a no-op against an
+        # existing table, so every redeploy since kept silently running
+        # against stale columns (surfaced as 500s on every /tasks request).
+        # No real task data exists yet worth preserving, so just drop and
+        # recreate on mismatch instead of writing a real migration for a
+        # schema that's still actively settling this early on.
+        has_table = conn.execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = 'tasks'"
+        ).fetchone()
+        has_quadrant = conn.execute(
+            "SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'quadrant'"
+        ).fetchone()
+        if has_table and not has_quadrant:
+            conn.execute("DROP TABLE tasks")
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS tasks (
