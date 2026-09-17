@@ -3,7 +3,7 @@ import logging
 
 import httpx
 
-from app.config import CHAT_MODEL, OLLAMA_HOST, SYSTEM_PROMPT
+from app.config import CHAT_MODEL, IRIS_URL, OLLAMA_HOST, SYSTEM_PROMPT
 from app.tools import TOOL_HANDLERS, TOOLS
 
 MAX_TOOL_ITERATIONS = 5
@@ -25,6 +25,20 @@ async def _unload_ollama_model(model: str) -> None:
             await client.post(f"{OLLAMA_HOST}/api/generate", json={"model": model, "keep_alive": 0})
     except Exception:
         logger.exception("Failed to unload Ollama model %s before generate_image", model)
+
+
+async def _unload_iris() -> None:
+    """The other half of the handoff: free Iris's SDXL pipeline right after
+    a successful generate, before the very next step in this same turn
+    (Ollama reloading the chat model for the follow-up reply) needs the GPU
+    back. Without this, Iris's passive 5-minute idle-unload leaves the
+    pipeline resident long enough to contend with that reload. Best-effort,
+    same reasoning as _unload_ollama_model."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.post(f"{IRIS_URL}/unload")
+    except Exception:
+        logger.exception("Failed to unload Iris pipeline after generate_image")
 
 
 async def _stream_ollama(messages: list[dict], model: str, think: bool):
@@ -136,6 +150,7 @@ async def run_chat_stream(
                 if name == "generate_image":
                     await _unload_ollama_model(model)
                     result = handler(**arguments, conversation_id=conversation_id)
+                    await _unload_iris()
                 else:
                     result = handler(**arguments)
             except Exception as exc:
