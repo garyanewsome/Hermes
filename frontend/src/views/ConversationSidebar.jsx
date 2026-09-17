@@ -39,7 +39,7 @@ export default function ConversationSidebar({ conversations, currentId, onSelect
         width: 240,
         flexShrink: 0,
         background: 'var(--panel)',
-        borderRight: '1px solid var(--border)',
+        borderLeft: '1px solid var(--border)',
         display: 'flex',
         flexDirection: 'column',
       }}

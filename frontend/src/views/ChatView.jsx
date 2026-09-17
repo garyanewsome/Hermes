@@ -141,13 +141,6 @@ export default function ChatView({ onOpenDrawer }) {
 
   return (
     <div style={{ flex: 1, display: 'flex', minWidth: 0 }}>
-      <ConversationSidebar
-        conversations={conversations}
-        currentId={currentId}
-        onSelect={selectConversation}
-        onNewChat={newChat}
-        onChanged={refreshConversations}
-      />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <TopBar title="Hermes" onOpenDrawer={onOpenDrawer}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: 'var(--text-dim)' }}>
@@ -234,6 +227,13 @@ export default function ChatView({ onOpenDrawer }) {
           </button>
         </form>
       </div>
+      <ConversationSidebar
+        conversations={conversations}
+        currentId={currentId}
+        onSelect={selectConversation}
+        onNewChat={newChat}
+        onChanged={refreshConversations}
+      />
     </div>
   );
 }
