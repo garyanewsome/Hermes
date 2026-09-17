@@ -105,10 +105,20 @@ async def run_chat_stream(
     conversation_id: str | None = None,
     think: bool = False,
 ):
-    """Async generator yielding assistant-visible text chunks as they
-    arrive. Tool-call turns produce no visible output themselves (matches
-    Ollama's own behavior — tool_calls come with empty content) — the
-    loop just executes them and continues to the next streamed turn.
+    """Async generator yielding (kind, text) pairs as they arrive. Tool-call
+    turns produce no visible output themselves (matches Ollama's own
+    behavior — tool_calls come with empty content) — the loop just executes
+    them and continues to the next streamed turn.
+
+    kind is "content" for anything that should also be persisted into
+    conversation history (normal model text, error notices), or "image" for
+    the raw generate_image markdown — display it now, but never persist it:
+    a saved copy would re-enter the model's own context on the next message
+    in this conversation, and a model handed its own exact prior image URL
+    doesn't reliably treat "make another one" as a request to actually call
+    the tool again — it can just reference or half-retype the old one
+    instead (confirmed live: asking again in the same chat produced garbled
+    text plus the literal previous image, not a new generation).
 
     conversation_id isn't a model-controlled tool argument (the model
     doesn't know or manage it) — it's injected here specifically for
@@ -128,7 +138,7 @@ async def run_chat_stream(
             async for event_type, data in _stream_ollama(messages, model, think):
                 if event_type == "content":
                     accumulated_content += data
-                    yield data
+                    yield ("content", data)
                 elif event_type == "tool_calls":
                     tool_calls = data
         except Exception as exc:
@@ -139,7 +149,7 @@ async def run_chat_stream(
             # turn cleanly instead. Whatever content already streamed this
             # turn is unaffected — it was already yielded above.
             logger.exception("Ollama stream failed")
-            yield f"\n\n*Lost connection to the model: {exc}*"
+            yield ("content", f"\n\n*Lost connection to the model: {exc}*")
             return
 
         assistant_message = {"role": "assistant", "content": accumulated_content}
@@ -172,7 +182,7 @@ async def run_chat_stream(
                 # mid-response with no visible reason. Surface it in-chat
                 # instead and let the model continue from there.
                 if name == "generate_image":
-                    yield f"\n\n*Image generation failed: {exc}*"
+                    yield ("content", f"\n\n*Image generation failed: {exc}*")
                 messages.append({"role": "tool", "content": f"Tool '{name}' failed: {exc}"})
                 continue
 
@@ -181,10 +191,11 @@ async def run_chat_stream(
                 # reliably corrupt long exact strings when regenerating them
                 # token-by-token (verified: got "192.168.1.1.157" back from
                 # a real run, an extra "1." inserted mid-string). Emit the
-                # guaranteed-correct markdown directly as a content chunk,
-                # and give the model a URL-free placeholder so it has
-                # nothing to accidentally mangle in its own reply.
-                yield f"\n\n{result}"
+                # guaranteed-correct markdown directly as a display-only
+                # chunk — never persisted into history, see this function's
+                # own docstring for why (the same corruption risk, just on
+                # a later turn instead of this one).
+                yield ("image", f"\n\n{result}")
                 messages.append(
                     {
                         "role": "tool",
@@ -200,4 +211,4 @@ async def run_chat_stream(
             else:
                 messages.append({"role": "tool", "content": result})
 
-    yield "\n\nI wasn't able to finish that — too many tool calls in a row."
+    yield ("content", "\n\nI wasn't able to finish that — too many tool calls in a row.")

@@ -128,10 +128,17 @@ async def chat(request: ChatRequest):
         accumulated = ""
         yield json.dumps({"type": "conversation_id", "conversation_id": conversation_id}) + "\n"
         try:
-            async for chunk in run_chat_stream(
+            async for kind, chunk in run_chat_stream(
                 history, model=request.model, conversation_id=conversation_id, think=request.think
             ):
-                accumulated += chunk
+                # "image" chunks (the raw generate_image markdown/URL) are
+                # sent to the client like any other chunk, but deliberately
+                # excluded from what gets persisted — see run_chat_stream's
+                # docstring. A saved copy would re-enter the model's own
+                # context on the next message in this conversation and get
+                # echoed/half-retyped instead of a fresh image being made.
+                if kind == "content":
+                    accumulated += chunk
                 yield json.dumps({"type": "token", "content": chunk}) + "\n"
         finally:
             # Persist whatever was generated even on client abort/error —

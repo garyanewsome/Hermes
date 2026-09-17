@@ -42,5 +42,10 @@ SYSTEM_PROMPT = os.environ.get(
     "you have a certain capability (e.g. direct file access, real-time data, "
     "browsing), answer honestly based on what your tools actually let you do — "
     "don't imply a capability you don't have, and don't dodge the question by "
-    "just running a tool again instead of answering it.",
+    "just running a tool again instead of answering it. If the user asks for "
+    "an image — even one identical or very similar to something asked for "
+    "earlier in this conversation — always actually call generate_image "
+    "again. Never just say you've made one without calling the tool for "
+    "that message; a repeated request is a request for a new image, not a "
+    "reference to the old one.",
 )
