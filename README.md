@@ -14,7 +14,7 @@ When the model decides a tool would help, Hermes executes it and feeds the resul
 - `generate_image` — image generation (calls Iris's `/generate`)
 - `save_project_memory` / `recall_project_memory` — persistent memory for VST/audio plugin development work (calls a self-hosted Hindsight instance). Scoped deliberately narrow via the tool description — most messages should not trigger a save, only durable decisions/facts worth recalling later.
 - `add_task` / `list_tasks` / `complete_task` — to-dos filed directly into one of four quadrants (`do` / `schedule` / `next` / `backlog`), backed by a dedicated `planner` Postgres database (see below).
-- `log_habit` / `habit_status` — daily habit tracking with streak counting, same `planner` database.
+- `log_habit` / `habit_status` — daily habit tracking, same `planner` database. `habit_status` returns each of the last 7 days' actual logged/missed dates (not just the streak number), so you can ask Hermes things like "how'd I do this week" or "did I miss Tuesday" and it has real data to answer from.
 
 **Other endpoints:**
 - `GET /models` — chat-capable models available (filtered to Ollama's `tools`-capability models only)

@@ -131,15 +131,23 @@ def log_habit(name: str) -> str:
     return f"Logged \"{name}\" for today. Current streak: {streak} {day}."
 
 
+def _format_last_7_days(days: list[dict]) -> str:
+    return ", ".join(f"{d['date']}: {'done' if d['logged'] else 'missed'}" for d in days)
+
+
 def habit_status(name: str | None = None) -> str:
-    if name:
-        streak = planner_db.habit_streak(name)
-        day = "day" if streak == 1 else "days"
-        return f"\"{name}\" streak: {streak} {day}."
     habits = planner_db.list_habits_with_streaks()
     if not habits:
         return "No habits being tracked yet."
-    return "\n".join(f"{h['name']}: {h['streak']} day streak" for h in habits)
+    if name:
+        match = next((h for h in habits if h["name"] == name), None)
+        if not match:
+            return f"No habit named \"{name}\" found."
+        habits = [match]
+    return "\n".join(
+        f"{h['name']}: {h['streak']} day streak. Last 7 days — {_format_last_7_days(h['last_7_days'])}."
+        for h in habits
+    )
 
 
 TOOLS = [
@@ -349,8 +357,11 @@ TOOLS = [
         "function": {
             "name": "habit_status",
             "description": (
-                "Report current streak(s) for habits being tracked. Omit `name` "
-                "to list every tracked habit and its streak."
+                "Report streak(s) and the last 7 days' actual logged/missed dates "
+                "for habits being tracked — use this for anything about recent "
+                "consistency or patterns (e.g. 'how did I do this week', 'did I "
+                "miss meditating on Tuesday'), not just the current streak number. "
+                "Omit `name` to list every tracked habit."
             ),
             "parameters": {
                 "type": "object",
