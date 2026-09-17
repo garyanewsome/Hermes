@@ -25,7 +25,7 @@ HINDSIGHT_BANK_ID = os.environ.get("HINDSIGHT_BANK_ID", "vst-test")
 
 DB_PATH = os.environ.get("DB_PATH", "./hermes.db")
 
-# Tasks (Eisenhower matrix) and habit tracking — a separate Postgres
+# Tasks (urgency x importance quadrants) and habit tracking — a separate Postgres
 # instance from Hindsight's, deliberately: this is mutable structured
 # state (status flags, streak counts), not semantic memory to recall by
 # similarity, so it doesn't belong in Hindsight's bank.

@@ -263,8 +263,9 @@ TOOLS = [
         "function": {
             "name": "add_task",
             "description": (
-                "Add a to-do item, classified on the Eisenhower matrix by urgency "
-                "and importance. Use whenever the user asks to add/remember a task "
+                "Add a to-do item, classified by urgency and importance into one "
+                "of four quadrants (do first / schedule-plan / do next / backlog). "
+                "Use whenever the user asks to add/remember a task "
                 "or to-do. Judge urgent/important from context if the user doesn't "
                 "say explicitly (urgent = time-sensitive soon; important = matters "
                 "for their real goals, not just loud right now)."
@@ -291,7 +292,7 @@ TOOLS = [
             "description": (
                 "List to-do items, most important/urgent first. Use for 'what's on "
                 "my plate', 'what do I need to do', or questions about the "
-                "Eisenhower matrix. Defaults to open tasks only."
+                "quadrant board. Defaults to open tasks only."
             ),
             "parameters": {
                 "type": "object",

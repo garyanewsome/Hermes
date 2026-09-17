@@ -1,4 +1,4 @@
-"""Tasks (Eisenhower matrix) and habit tracking — a separate Postgres
+"""Tasks (urgency x importance quadrants) and habit tracking — a separate Postgres
 database from the SQLite conversation history in db.py. Kept out of
 Hindsight deliberately: Hindsight is semantic recall over durable facts,
 not a place for structured, constantly-mutating state like task status

@@ -13,7 +13,7 @@ When the model decides a tool would help, Hermes executes it and feeds the resul
 - `list_notes` — structural folder listing (calls Athenaeum's `/browse`)
 - `generate_image` — image generation (calls Iris's `/generate`)
 - `save_project_memory` / `recall_project_memory` — persistent memory for VST/audio plugin development work (calls a self-hosted Hindsight instance). Scoped deliberately narrow via the tool description — most messages should not trigger a save, only durable decisions/facts worth recalling later.
-- `add_task` / `list_tasks` / `complete_task` — to-dos classified on the Eisenhower matrix (urgent × important), backed by a dedicated `planner` Postgres database (see below).
+- `add_task` / `list_tasks` / `complete_task` — to-dos classified by urgency × importance into four quadrants, backed by a dedicated `planner` Postgres database (see below).
 - `log_habit` / `habit_status` — daily habit tracking with streak counting, same `planner` database.
 
 **Other endpoints:**
@@ -27,7 +27,7 @@ When the model decides a tool would help, Hermes executes it and feeds the resul
 
 React app in `frontend/`, built to `static/` and served by the same FastAPI app at `/` (`static/` is generated — not committed, see Deployment). Black background with a per-view neon accent (blue for Chat, green for Tasks, pink for Habits), switched via a hamburger menu that opens an overlay nav drawer. Views:
 - **Chat** — bubbles, streaming responses, a model dropdown, a persistent conversation sidebar (right-click to rename/delete, independent of the view-switching drawer), Enter-to-send, and a Stop button that genuinely halts generation server-side. Small dependency-free markdown renderer (bold, italic, code, headers, lists, images).
-- **Tasks** — a personal variation on the Eisenhower matrix (not the textbook one): **Do first** (urgent+important), **Do next** (urgent, not important — no delegate quadrant since there's no one to delegate to), **Schedule / plan** (important, not urgent), **Backlog** (neither — things that would traditionally be "eliminated" realistically just don't get added at all, so this is a someday/maybe pile instead). Drag a card between quadrants to recategorize it (native HTML5 drag and drop, straight to the REST API — no LLM involved); click a card to mark it done; add form for new tasks.
+- **Tasks** — four quadrants by urgency × importance: **Do first** (urgent+important), **Schedule / plan** (important, not urgent), **Do next** (urgent, not important), **Backlog** (neither — a someday/maybe pile). Drag a card between quadrants to recategorize it (native HTML5 drag and drop, straight to the REST API — no LLM involved); click a card to mark it done; add form for new tasks.
 - **Habits** — streak per habit with a 7-day dot tracker (the dots currently derive from the streak count, not real per-day history — see Not yet decided); log today, add a new habit.
 
 ## Stack
@@ -79,7 +79,7 @@ To redeploy after a code change: `./deploy.sh` — builds the image, reimports i
 - [x] Streaming chat with real mid-generation cancellation
 - [x] Tool-calling: `search_vault`, `list_notes`, `generate_image`, `save_project_memory`/`recall_project_memory`
 - [x] Server-side conversation history with rename/delete
-- [x] Tasks (Eisenhower matrix) and habit tracking, backed by a dedicated `planner` Postgres
+- [x] Tasks (four-quadrant urgency/importance board) and habit tracking, backed by a dedicated `planner` Postgres
 - [x] React UI: black + per-view neon theme, hamburger view switcher, Chat/Tasks/Habits — verified end to end locally (real Ollama model, real Postgres) before this landed
 - [x] Deployed, verified against real live services (not mocks)
 
