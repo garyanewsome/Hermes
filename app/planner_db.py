@@ -25,23 +25,17 @@ def _connect():
 
 def init_planner_db() -> None:
     with _connect() as conn:
-        # The tasks schema changed (urgent/important booleans -> a single
-        # quadrant column) after a real deploy already created the table with
-        # the old shape — CREATE TABLE IF NOT EXISTS is a no-op against an
-        # existing table, so every redeploy since kept silently running
-        # against stale columns (surfaced as 500s on every /tasks request).
-        # No real task data exists yet worth preserving, so just drop and
-        # recreate on mismatch instead of writing a real migration for a
-        # schema that's still actively settling this early on.
-        has_table = conn.execute(
-            "SELECT 1 FROM information_schema.tables WHERE table_name = 'tasks'"
-        ).fetchone()
-        has_current_columns = conn.execute(
-            "SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'position'"
-        ).fetchone()
-        if has_table and not has_current_columns:
-            conn.execute("DROP TABLE tasks")
-
+        # NEVER drop/recreate a table here to "handle" a schema change, no
+        # matter how early-stage this looks. An earlier version of this
+        # function did exactly that (drop tasks if it predated the quadrant
+        # column, again if it predated position) on the reasoning that no
+        # real data existed yet to lose — true the first time, false by the
+        # second: it silently deleted a real, in-use set of tasks on a
+        # routine deploy, with no backup to recover from. Any future schema
+        # change adds columns additively (ALTER TABLE ... ADD COLUMN IF NOT
+        # EXISTS, with a backfill UPDATE if existing rows need real values,
+        # never a default that discards information) and touches existing
+        # rows only to migrate their data forward, never to wipe them.
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS tasks (
