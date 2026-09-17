@@ -5,3 +5,5 @@ venv/
 .env
 *.db
 *.tar
+frontend/node_modules/
+static/
