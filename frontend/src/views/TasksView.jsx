@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
-import { completeTask, createTask, deleteTask, listTasks, updateTask } from '../api.js';
+import { completeTask, createTask, deleteTask, listTasks, reopenTask, updateTask } from '../api.js';
 
 const QUADRANTS = [
   { key: 'do', label: 'TODO', color: '#3bffa0', glow: 'rgba(59,255,160,0.35)' },
@@ -8,6 +8,20 @@ const QUADRANTS = [
   { key: 'next', label: 'NEXT', color: '#eaff3b', glow: 'rgba(234,255,59,0.35)' },
   { key: 'backlog', label: 'Backlog', color: '#6a6b70', glow: 'transparent', dim: true },
 ];
+
+const QUADRANT_BY_KEY = Object.fromEntries(QUADRANTS.map((q) => [q.key, q]));
+
+function timeAgo(isoString) {
+  if (!isoString) return '';
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(isoString).getTime()) / 1000));
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
 
 function TaskRow({ task, quadrant, isDragOver, onDragStart, onDragOverRow, onDragLeaveRow, onDropOnRow, onComplete, onDelete, onOpen }) {
   return (
@@ -247,8 +261,62 @@ function QuadrantBox({
   );
 }
 
+function DoneList({ tasks, onReopen, onDelete }) {
+  return (
+    <div style={{ flex: 1, minHeight: 0, padding: 24, display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
+      {tasks.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>Nothing completed yet.</div>}
+      {tasks.map((t) => {
+        const quadrant = QUADRANT_BY_KEY[t.quadrant] || QUADRANTS[0];
+        return (
+          <div
+            key={t.id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              background: 'var(--bg)',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              padding: '10px 12px',
+              fontSize: 13,
+            }}
+          >
+            <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: quadrant.color }} />
+            <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-dim)', textDecoration: 'line-through' }}>
+              {t.title}
+            </div>
+            <div style={{ color: 'var(--text-faint)', fontSize: 11, flexShrink: 0 }}>{timeAgo(t.completed_at)}</div>
+            <button
+              onClick={() => onReopen(t.id)}
+              aria-label="Reopen task"
+              title="Reopen task"
+              style={{ flexShrink: 0, width: 22, height: 22, background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-dim)', borderRadius: 6, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M2 6a4 4 0 1 1 1.2 2.85M2 6V3M2 6h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <button
+              onClick={() => onDelete(t.id)}
+              aria-label="Delete task"
+              title="Delete task"
+              style={{ flexShrink: 0, width: 22, height: 22, background: 'transparent', border: 'none', color: 'var(--text-faint)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                <path d="M2.5 3.5H11.5M5.5 3.5V2.2C5.5 1.9 5.7 1.7 6 1.7H8C8.3 1.7 8.5 1.9 8.5 2.2V3.5M5.8 6V10M8.2 6V10M3.3 3.5L3.8 11.3C3.8 11.7 4.2 12 4.6 12H9.4C9.8 12 10.2 11.7 10.2 11.3L10.7 3.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function TasksView({ onOpenDrawer }) {
+  const [view, setView] = useState('board'); // 'board' | 'done'
   const [tasks, setTasks] = useState([]);
+  const [doneTasks, setDoneTasks] = useState([]);
   const [dragOverKey, setDragOverKey] = useState(null);
   const [dragOverTaskId, setDragOverTaskId] = useState(null);
   const [openTaskId, setOpenTaskId] = useState(null);
@@ -257,8 +325,27 @@ export default function TasksView({ onOpenDrawer }) {
     refresh();
   }, []);
 
+  useEffect(() => {
+    if (view === 'done') refreshDone();
+  }, [view]);
+
   async function refresh() {
     setTasks(await listTasks('open'));
+  }
+
+  async function refreshDone() {
+    setDoneTasks(await listTasks('done'));
+  }
+
+  async function handleReopen(id) {
+    setDoneTasks((prev) => prev.filter((t) => t.id !== id));
+    await reopenTask(id);
+    refresh(); // the reopened task needs to show up on the board next time it's viewed
+  }
+
+  async function handleDeleteDone(id) {
+    setDoneTasks((prev) => prev.filter((t) => t.id !== id));
+    await deleteTask(id);
   }
 
   async function handleAddToQuadrant(quadrant, title) {
@@ -338,37 +425,70 @@ export default function TasksView({ onOpenDrawer }) {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      <TopBar title="Tasks" subtitle="drag a card to recategorize or reorder" onOpenDrawer={onOpenDrawer} />
+      <TopBar title="Tasks" subtitle={view === 'board' ? 'drag a card to recategorize or reorder' : 'what actually got done'} onOpenDrawer={onOpenDrawer}>
+        <div style={{ display: 'flex', border: '1px solid var(--border-strong)', borderRadius: 8, overflow: 'hidden' }}>
+          <button
+            onClick={() => setView('board')}
+            style={{
+              padding: '5px 12px',
+              fontSize: 12,
+              fontWeight: 600,
+              background: view === 'board' ? 'rgba(255,255,255,0.08)' : 'transparent',
+              color: view === 'board' ? 'var(--text)' : 'var(--text-faint)',
+              border: 'none',
+            }}
+          >
+            Board
+          </button>
+          <button
+            onClick={() => setView('done')}
+            style={{
+              padding: '5px 12px',
+              fontSize: 12,
+              fontWeight: 600,
+              background: view === 'done' ? 'rgba(255,255,255,0.08)' : 'transparent',
+              color: view === 'done' ? 'var(--text)' : 'var(--text-faint)',
+              border: 'none',
+            }}
+          >
+            Done
+          </button>
+        </div>
+      </TopBar>
 
-      <div style={{ flex: 1, minHeight: 0, padding: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: 16 }}>
-        {QUADRANTS.map((q) => (
-          <QuadrantBox
-            key={q.key}
-            quadrant={q}
-            items={tasks.filter((t) => t.quadrant === q.key).sort((a, b) => a.position - b.position)}
-            isDragOver={dragOverKey === q.key}
-            dragOverTaskId={dragOverTaskId}
-            onDragOver={(e) => {
-              e.preventDefault();
-              if (dragOverKey !== q.key) setDragOverKey(q.key);
-            }}
-            onDragLeave={() => setDragOverKey((k) => (k === q.key ? null : k))}
-            onDrop={(e) => handleDrop(e, q)}
-            onDragStart={handleDragStart}
-            onDragOverRow={(e, taskId) => {
-              e.preventDefault();
-              e.stopPropagation();
-              if (dragOverTaskId !== taskId) setDragOverTaskId(taskId);
-            }}
-            onDragLeaveRow={() => setDragOverTaskId(null)}
-            onDropOnRow={(e, quadrant, targetTask) => handleDropOnTask(e, quadrant, targetTask)}
-            onComplete={handleComplete}
-            onDelete={handleDelete}
-            onAdd={(title) => handleAddToQuadrant(q, title)}
-            onOpen={(task) => setOpenTaskId(task.id)}
-          />
-        ))}
-      </div>
+      {view === 'board' ? (
+        <div style={{ flex: 1, minHeight: 0, padding: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: 16 }}>
+          {QUADRANTS.map((q) => (
+            <QuadrantBox
+              key={q.key}
+              quadrant={q}
+              items={tasks.filter((t) => t.quadrant === q.key).sort((a, b) => a.position - b.position)}
+              isDragOver={dragOverKey === q.key}
+              dragOverTaskId={dragOverTaskId}
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (dragOverKey !== q.key) setDragOverKey(q.key);
+              }}
+              onDragLeave={() => setDragOverKey((k) => (k === q.key ? null : k))}
+              onDrop={(e) => handleDrop(e, q)}
+              onDragStart={handleDragStart}
+              onDragOverRow={(e, taskId) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (dragOverTaskId !== taskId) setDragOverTaskId(taskId);
+              }}
+              onDragLeaveRow={() => setDragOverTaskId(null)}
+              onDropOnRow={(e, quadrant, targetTask) => handleDropOnTask(e, quadrant, targetTask)}
+              onComplete={handleComplete}
+              onDelete={handleDelete}
+              onAdd={(title) => handleAddToQuadrant(q, title)}
+              onOpen={(task) => setOpenTaskId(task.id)}
+            />
+          ))}
+        </div>
+      ) : (
+        <DoneList tasks={doneTasks} onReopen={handleReopen} onDelete={handleDeleteDone} />
+      )}
 
       {openTask && (
         <TaskModal

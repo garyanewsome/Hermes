@@ -55,6 +55,10 @@ export async function completeTask(id) {
   await fetch(`/tasks/${id}/complete`, { method: 'PATCH' });
 }
 
+export async function reopenTask(id) {
+  await fetch(`/tasks/${id}/reopen`, { method: 'PATCH' });
+}
+
 export async function deleteTask(id) {
   await fetch(`/tasks/${id}`, { method: 'DELETE' });
 }

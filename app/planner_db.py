@@ -97,15 +97,23 @@ def create_task(
 
 
 def list_tasks(status: str | None = "open") -> list[dict]:
-    query = "SELECT id, title, notes, quadrant, status, due_date, position FROM tasks"
+    query = "SELECT id, title, notes, quadrant, status, due_date, position, completed_at FROM tasks"
     params: tuple = ()
     if status:
         query += " WHERE status = %s"
         params = (status,)
-    query += " ORDER BY quadrant, position"
+    # Board order (quadrant/position) doesn't mean anything once a task is
+    # done — most-recently-finished-first is what you actually want when
+    # looking back at what got done.
+    query += " ORDER BY completed_at DESC" if status == "done" else " ORDER BY quadrant, position"
     with _connect() as conn:
         rows = conn.execute(query, params).fetchall()
     return [dict(row) for row in rows]
+
+
+def reopen_task(task_id: int) -> None:
+    with _connect() as conn:
+        conn.execute("UPDATE tasks SET status = 'open', completed_at = NULL WHERE id = %s", (task_id,))
 
 
 def find_open_tasks_by_title(title_query: str) -> list[dict]:

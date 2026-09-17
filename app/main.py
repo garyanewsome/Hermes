@@ -179,6 +179,12 @@ def patch_task_complete(task_id: int):
     return {"status": "ok"}
 
 
+@app.patch("/tasks/{task_id}/reopen")
+def patch_task_reopen(task_id: int):
+    planner_db.reopen_task(task_id)
+    return {"status": "ok"}
+
+
 @app.delete("/tasks/{task_id}")
 def remove_task(task_id: int):
     planner_db.delete_task(task_id)
