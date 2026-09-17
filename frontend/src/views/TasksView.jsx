@@ -1,15 +1,65 @@
 import { useEffect, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
-import { completeTask, createTask, listTasks, updateTask } from '../api.js';
+import { completeTask, createTask, deleteTask, listTasks, updateTask } from '../api.js';
 
 const QUADRANTS = [
-  { key: 'do', label: 'Do first', accent: true },
-  { key: 'schedule', label: 'Schedule / plan', accent: false },
-  { key: 'next', label: 'Do next', accent: false },
-  { key: 'backlog', label: 'Backlog', accent: false, dim: true },
+  { key: 'do', label: 'TODO', color: '#3bffa0', glow: 'rgba(59,255,160,0.35)' },
+  { key: 'schedule', label: 'Schedule / plan', color: '#ff9d3b', glow: 'rgba(255,157,59,0.35)' },
+  { key: 'next', label: 'NEXT', color: '#eaff3b', glow: 'rgba(234,255,59,0.35)' },
+  { key: 'backlog', label: 'Backlog', color: '#6a6b70', glow: 'transparent', dim: true },
 ];
 
-function QuadrantBox({ quadrant, items, isDragOver, onDragOver, onDragLeave, onDrop, onDragStart, onComplete, onAdd }) {
+function TaskRow({ task, quadrant, onDragStart, onComplete, onDelete }) {
+  return (
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, task.id)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        background: 'var(--bg)',
+        border: `1px solid ${quadrant.color}`,
+        boxShadow: quadrant.dim ? 'none' : `0 0 6px ${quadrant.glow}`,
+        borderRadius: 8,
+        padding: '8px 10px',
+        fontSize: 13,
+        cursor: 'grab',
+      }}
+    >
+      <button
+        onClick={() => onComplete(task.id)}
+        aria-label="Mark done"
+        title="Mark done"
+        style={{
+          width: 16,
+          height: 16,
+          flexShrink: 0,
+          borderRadius: 4,
+          background: 'transparent',
+          border: `1px solid ${quadrant.color}`,
+          padding: 0,
+        }}
+      />
+      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {task.title}
+        {task.due_date && <span style={{ color: 'var(--text-faint)', fontSize: 11, marginLeft: 8 }}>due {task.due_date}</span>}
+      </div>
+      <button
+        onClick={() => onDelete(task.id)}
+        aria-label="Delete task"
+        title="Delete task"
+        style={{ flexShrink: 0, width: 20, height: 20, background: 'transparent', border: 'none', color: 'var(--text-faint)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M2.5 3.5H11.5M5.5 3.5V2.2C5.5 1.9 5.7 1.7 6 1.7H8C8.3 1.7 8.5 1.9 8.5 2.2V3.5M5.8 6V10M8.2 6V10M3.3 3.5L3.8 11.3C3.8 11.7 4.2 12 4.6 12H9.4C9.8 12 10.2 11.7 10.2 11.3L10.7 3.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+function QuadrantBox({ quadrant, items, isDragOver, onDragOver, onDragLeave, onDrop, onDragStart, onComplete, onDelete, onAdd }) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState('');
 
@@ -27,8 +77,10 @@ function QuadrantBox({ quadrant, items, isDragOver, onDragOver, onDragLeave, onD
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       style={{
-        background: quadrant.accent ? 'var(--accent-wash)' : quadrant.dim ? 'rgba(255,255,255,0.02)' : 'var(--panel)',
-        border: isDragOver ? '1px dashed var(--accent)' : quadrant.accent ? '1px solid var(--accent-glow)' : '1px solid var(--border)',
+        background: 'var(--bg)',
+        border: `1px solid ${isDragOver ? quadrant.color : quadrant.dim ? 'var(--border)' : quadrant.color}`,
+        boxShadow: isDragOver || quadrant.dim ? 'none' : `0 0 10px ${quadrant.glow}`,
+        borderStyle: isDragOver ? 'dashed' : 'solid',
         borderRadius: 12,
         padding: '18px 20px',
         display: 'flex',
@@ -39,7 +91,7 @@ function QuadrantBox({ quadrant, items, isDragOver, onDragOver, onDragLeave, onD
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: quadrant.accent ? 'var(--accent)' : quadrant.dim ? 'var(--text-faint)' : '#c7c8cc', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: quadrant.dim ? 'var(--text-faint)' : quadrant.color, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
           {quadrant.label}
         </div>
         <button
@@ -84,24 +136,7 @@ function QuadrantBox({ quadrant, items, isDragOver, onDragOver, onDragLeave, onD
 
       {items.length === 0 && !adding && <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>Nothing here.</div>}
       {items.map((t) => (
-        <div
-          key={t.id}
-          draggable
-          onDragStart={(e) => onDragStart(e, t.id)}
-          onClick={() => onComplete(t.id)}
-          title="Drag to recategorize, click to mark done"
-          style={{
-            background: 'var(--panel-2)',
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            padding: '10px 12px',
-            fontSize: 13,
-            cursor: 'grab',
-          }}
-        >
-          {t.title}
-          {t.due_date && <span style={{ color: 'var(--text-faint)', fontSize: 11, marginLeft: 8 }}>due {t.due_date}</span>}
-        </div>
+        <TaskRow key={t.id} task={t} quadrant={quadrant} onDragStart={onDragStart} onComplete={onComplete} onDelete={onDelete} />
       ))}
     </div>
   );
@@ -126,6 +161,11 @@ export default function TasksView({ onOpenDrawer }) {
 
   async function handleComplete(id) {
     await completeTask(id);
+    refresh();
+  }
+
+  async function handleDelete(id) {
+    await deleteTask(id);
     refresh();
   }
 
@@ -165,6 +205,7 @@ export default function TasksView({ onOpenDrawer }) {
             onDrop={(e) => handleDrop(e, q)}
             onDragStart={handleDragStart}
             onComplete={handleComplete}
+            onDelete={handleDelete}
             onAdd={(title) => handleAddToQuadrant(q, title)}
           />
         ))}

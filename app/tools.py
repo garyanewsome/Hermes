@@ -90,9 +90,9 @@ def recall_project_memory(query: str) -> str:
 
 
 QUADRANT_LABELS = {
-    "do": "Do first",
+    "do": "TODO",
     "schedule": "Schedule / plan",
-    "next": "Do next",
+    "next": "NEXT",
     "backlog": "Backlog",
 }
 
