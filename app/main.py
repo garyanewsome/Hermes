@@ -1,4 +1,5 @@
 import json
+import logging
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
@@ -18,9 +19,19 @@ from app.db import (
 )
 from app import planner_db
 
+logger = logging.getLogger("hermes")
+
 app = FastAPI(title="Hermes")
 init_db()
-planner_db.init_planner_db()
+
+try:
+    planner_db.init_planner_db()
+except Exception:
+    # The planner Postgres is a separate, optional dependency — chat and
+    # every other tool must keep working even if it's unreachable at
+    # startup. Individual /tasks, /habits, and tool calls will still fail
+    # (and report why) the moment they're actually used.
+    logger.exception("planner_db.init_planner_db() failed — tasks/habits will be unavailable until this is fixed")
 
 
 class ChatRequest(BaseModel):
