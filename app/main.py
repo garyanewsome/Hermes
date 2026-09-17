@@ -16,9 +16,11 @@ from app.db import (
     maybe_set_title,
     rename_conversation,
 )
+from app import planner_db
 
 app = FastAPI(title="Hermes")
 init_db()
+planner_db.init_planner_db()
 
 
 class ChatRequest(BaseModel):
@@ -30,6 +32,18 @@ class ChatRequest(BaseModel):
 
 class RenameRequest(BaseModel):
     title: str
+
+
+class TaskRequest(BaseModel):
+    title: str
+    urgent: bool = False
+    important: bool = False
+    due_date: str | None = None
+    notes: str | None = None
+
+
+class HabitLogRequest(BaseModel):
+    name: str
 
 
 @app.get("/health")
@@ -100,6 +114,45 @@ async def chat(request: ChatRequest):
                 add_message(conversation_id, "assistant", accumulated)
 
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")
+
+
+@app.get("/tasks")
+def get_tasks(status: str | None = "open"):
+    return {"tasks": planner_db.list_tasks(status=status)}
+
+
+@app.post("/tasks")
+def post_task(request: TaskRequest):
+    return planner_db.create_task(
+        request.title,
+        urgent=request.urgent,
+        important=request.important,
+        due_date=request.due_date,
+        notes=request.notes,
+    )
+
+
+@app.patch("/tasks/{task_id}/complete")
+def patch_task_complete(task_id: int):
+    planner_db.complete_task(task_id)
+    return {"status": "ok"}
+
+
+@app.delete("/tasks/{task_id}")
+def remove_task(task_id: int):
+    planner_db.delete_task(task_id)
+    return {"status": "ok"}
+
+
+@app.get("/habits")
+def get_habits():
+    return {"habits": planner_db.list_habits_with_streaks()}
+
+
+@app.post("/habits/log")
+def post_habit_log(request: HabitLogRequest):
+    planner_db.log_habit(request.name)
+    return {"streak": planner_db.habit_streak(request.name)}
 
 
 # Mounted last so it doesn't shadow the API routes above.

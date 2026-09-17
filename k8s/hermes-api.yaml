@@ -28,6 +28,11 @@ spec:
           value: "athenaeum-api"
         - name: DB_PATH
           value: "/data/hermes.db"
+        - name: PLANNER_DB_URL
+          valueFrom:
+            secretKeyRef:
+              name: planner-postgres-secret
+              key: hermes-db-url
         volumeMounts:
         - name: hermes-data
           mountPath: /data

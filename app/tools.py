@@ -8,6 +8,7 @@ and a handler function, not restructuring anything."""
 import httpx
 
 from app.config import ATHENAEUM_HOST_HEADER, ATHENAEUM_URL, HINDSIGHT_BANK_ID, HINDSIGHT_URL, IRIS_URL
+from app import planner_db
 
 
 def search_vault(query: str) -> str:
@@ -86,6 +87,63 @@ def recall_project_memory(query: str) -> str:
     if not results:
         return "No relevant project memory found."
     return "\n\n".join(f"[{r['type']}] {r['text']}" for r in results)
+
+
+def add_task(title: str, urgent: bool = False, important: bool = False, due_date: str | None = None) -> str:
+    task = planner_db.create_task(title, urgent=urgent, important=important, due_date=due_date)
+    label = {
+        (True, True): "urgent and important — do first",
+        (True, False): "urgent but not important — delegate if possible",
+        (False, True): "important but not urgent — schedule time for it",
+        (False, False): "neither urgent nor important",
+    }[(task["urgent"], task["important"])]
+    return f"Added task #{task['id']}: \"{task['title']}\" ({label})."
+
+
+def list_tasks(status: str = "open") -> str:
+    tasks = planner_db.list_tasks(status=status)
+    if not tasks:
+        return f"No {status} tasks."
+    lines = []
+    for task in tasks:
+        flags = []
+        if task["important"]:
+            flags.append("important")
+        if task["urgent"]:
+            flags.append("urgent")
+        flag_str = f" [{', '.join(flags)}]" if flags else ""
+        due = f" (due {task['due_date']})" if task["due_date"] else ""
+        lines.append(f"#{task['id']} {task['title']}{flag_str}{due}")
+    return "\n".join(lines)
+
+
+def complete_task(title: str) -> str:
+    matches = planner_db.find_open_tasks_by_title(title)
+    if not matches:
+        return f"No open task matching \"{title}\" found."
+    if len(matches) > 1:
+        options = "\n".join(f"#{m['id']} {m['title']}" for m in matches)
+        return f"Multiple open tasks match \"{title}\" — which one?\n{options}"
+    planner_db.complete_task(matches[0]["id"])
+    return f"Marked \"{matches[0]['title']}\" done."
+
+
+def log_habit(name: str) -> str:
+    planner_db.log_habit(name)
+    streak = planner_db.habit_streak(name)
+    day = "day" if streak == 1 else "days"
+    return f"Logged \"{name}\" for today. Current streak: {streak} {day}."
+
+
+def habit_status(name: str | None = None) -> str:
+    if name:
+        streak = planner_db.habit_streak(name)
+        day = "day" if streak == 1 else "days"
+        return f"\"{name}\" streak: {streak} {day}."
+    habits = planner_db.list_habits_with_streaks()
+    if not habits:
+        return "No habits being tracked yet."
+    return "\n".join(f"{h['name']}: {h['streak']} day streak" for h in habits)
 
 
 TOOLS = [
@@ -200,6 +258,107 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_task",
+            "description": (
+                "Add a to-do item, classified on the Eisenhower matrix by urgency "
+                "and importance. Use whenever the user asks to add/remember a task "
+                "or to-do. Judge urgent/important from context if the user doesn't "
+                "say explicitly (urgent = time-sensitive soon; important = matters "
+                "for their real goals, not just loud right now)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Short description of the task"},
+                    "urgent": {"type": "boolean", "description": "Does this need attention soon?"},
+                    "important": {"type": "boolean", "description": "Does this matter for real goals?"},
+                    "due_date": {
+                        "type": "string",
+                        "description": "Due date in YYYY-MM-DD format, if the user gave one",
+                    },
+                },
+                "required": ["title"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_tasks",
+            "description": (
+                "List to-do items, most important/urgent first. Use for 'what's on "
+                "my plate', 'what do I need to do', or questions about the "
+                "Eisenhower matrix. Defaults to open tasks only."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": ["open", "done"],
+                        "description": "Which tasks to list (default: open)",
+                    }
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "complete_task",
+            "description": (
+                "Mark a to-do item done, matched by title text (partial match is "
+                "fine). Use when the user says they finished, did, or completed "
+                "something that sounds like a tracked task."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "The task's title, or a fragment of it"}
+                },
+                "required": ["title"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "log_habit",
+            "description": (
+                "Log today's occurrence of a habit and report the current streak. "
+                "Use when the user mentions doing something they track as a habit "
+                "(e.g. 'went for a run today', 'meditated this morning')."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "The habit's name, e.g. 'meditate' or 'run'"}
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "habit_status",
+            "description": (
+                "Report current streak(s) for habits being tracked. Omit `name` "
+                "to list every tracked habit and its streak."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "A specific habit to check, or omit for all"}
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 TOOL_HANDLERS = {
@@ -208,4 +367,9 @@ TOOL_HANDLERS = {
     "generate_image": generate_image,
     "save_project_memory": save_project_memory,
     "recall_project_memory": recall_project_memory,
+    "add_task": add_task,
+    "list_tasks": list_tasks,
+    "complete_task": complete_task,
+    "log_habit": log_habit,
+    "habit_status": habit_status,
 }

@@ -25,6 +25,14 @@ HINDSIGHT_BANK_ID = os.environ.get("HINDSIGHT_BANK_ID", "vst-test")
 
 DB_PATH = os.environ.get("DB_PATH", "./hermes.db")
 
+# Tasks (Eisenhower matrix) and habit tracking — a separate Postgres
+# instance from Hindsight's, deliberately: this is mutable structured
+# state (status flags, streak counts), not semantic memory to recall by
+# similarity, so it doesn't belong in Hindsight's bank.
+PLANNER_DB_URL = os.environ.get(
+    "PLANNER_DB_URL", "postgresql://hermes:hermes@localhost:5432/planner"
+)
+
 SYSTEM_PROMPT = os.environ.get(
     "SYSTEM_PROMPT",
     "You are Hermes, a helpful personal assistant. You have access to tools — "

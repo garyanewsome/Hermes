@@ -1,0 +1,87 @@
+# Standalone Postgres for tasks/habits — deliberately separate from
+# Hindsight's embedded pg0 instance (that one runs inside Hindsight's own
+# container, not exposed as a shared service) and from Hermes' SQLite
+# conversation history. Password lives in a Secret created imperatively,
+# not here — see README's deploy note.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: planner-postgres
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # single ReadWriteOnce volume — a rolling update would deadlock on two pods wanting it at once
+  selector:
+    matchLabels:
+      app: planner-postgres
+  template:
+    metadata:
+      labels:
+        app: planner-postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16-alpine
+        env:
+        - name: POSTGRES_DB
+          value: planner
+        - name: POSTGRES_USER
+          value: hermes
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: planner-postgres-secret
+              key: password
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: planner-data
+          mountPath: /var/lib/postgresql/data
+        readinessProbe:
+          exec:
+            command: ["pg_isready", "-U", "hermes", "-d", "planner"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: planner-data
+        persistentVolumeClaim:
+          claimName: planner-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: planner-postgres
+spec:
+  selector:
+    app: planner-postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: planner-data-pv
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  hostPath:
+    path: /mnt/storage/planner-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: planner-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: manual
+  resources:
+    requests:
+      storage: 2Gi
