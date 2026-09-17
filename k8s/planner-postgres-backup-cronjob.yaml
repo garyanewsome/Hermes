@@ -1,0 +1,79 @@
+# Daily pg_dump of the planner Postgres, keeping only the last 7 — this
+# exists because a bad migration guard once silently dropped the tasks
+# table on a routine deploy with nothing to recover from. Plain SQL dumps
+# (not pg_dump's custom format) deliberately, so a backup is just a
+# readable file you can `psql < file.sql` without needing pg_restore.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: planner-backups-pv
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  hostPath:
+    path: /mnt/storage/planner-backups
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: planner-backups
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: manual
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: planner-postgres-backup
+spec:
+  schedule: "0 3 * * *"
+  # Learned the hard way (see the vault-sync incident): a CronJob without
+  # these can pile up stuck job objects forever if a run ever hangs instead
+  # of failing cleanly. activeDeadlineSeconds force-fails a run that's
+  # taking too long so the history limits have something to actually prune.
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 300
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: backup
+              image: postgres:16-alpine
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: planner-postgres-secret
+                      key: password
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  KEEP=7
+                  TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+                  FILE="/backups/planner-${TIMESTAMP}.sql"
+                  pg_dump -h planner-postgres -U hermes -d planner -f "$FILE"
+                  echo "Backup written: $FILE"
+                  cd /backups
+                  ls -t planner-*.sql 2>/dev/null | tail -n "+$((KEEP + 1))" | xargs -r rm --
+                  echo "Backups kept: $(ls planner-*.sql 2>/dev/null | wc -l)"
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: planner-backups

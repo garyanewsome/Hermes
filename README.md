@@ -62,6 +62,7 @@ Runs in K3s:
 - `k8s/hermes-api.yaml` — Deployment + Service + Ingress (`hermes.home.local`)
 - `k8s/hermes-pv.yaml` — PersistentVolume/Claim for the conversation database
 - `k8s/planner-postgres.yaml` — Deployment + Service + PersistentVolume/Claim for the `planner` Postgres (tasks/habits)
+- `k8s/planner-postgres-backup-cronjob.yaml` — daily `pg_dump` of the planner Postgres to `/mnt/storage/planner-backups`, keeping the last 7 (plain `.sql` files, not `pg_dump`'s custom format — a backup should be a file you can read and `psql <` without needing `pg_restore`). Exists because a bad migration guard once silently dropped the tasks table on a routine deploy with nothing to recover from — see git history on `planner_db.py` if curious. Has explicit `activeDeadlineSeconds` + history limits from the start, learned from the vault-sync incident (a hung CronJob run with neither will pile up stuck job objects forever instead of just failing).
 
 Reaches Athenaeum over in-cluster service DNS (`http://athenaeum-api:8000`) and Iris directly by host IP:port (Iris runs bare-metal, not in K3s — see Iris' own README). Reaches `planner-postgres` over in-cluster DNS too.
 
@@ -71,7 +72,15 @@ kubectl create secret generic planner-postgres-secret \
   --from-literal=password='<pick a password>' \
   --from-literal=hermes-db-url='postgresql://hermes:<same password>@planner-postgres:5432/planner'
 kubectl apply -f k8s/planner-postgres.yaml
+kubectl apply -f k8s/planner-postgres-backup-cronjob.yaml
 ```
+
+**Restoring from a backup:**
+```bash
+kubectl exec -i deploy/planner-postgres -- sh -c \
+  'PGPASSWORD=$POSTGRES_PASSWORD psql -U hermes -d planner' < /mnt/storage/planner-backups/planner-<timestamp>.sql
+```
+`-i` (not `-it`) is deliberate — piping a file into stdin needs no tty, and `-t` fights it. Run from the homelab host, where that path is a real file; `kubectl cp` it out of the CronJob's PV first if running this from elsewhere.
 
 To redeploy after a code change: `./deploy.sh` — builds the image, reimports it into K3s, and restarts the deployment.
 
