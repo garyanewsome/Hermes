@@ -22,7 +22,8 @@ async def _unload_ollama_model(model: str) -> None:
     proceed rather than blocking it on a diagnostic step."""
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            await client.post(f"{OLLAMA_HOST}/api/generate", json={"model": model, "keep_alive": 0})
+            response = await client.post(f"{OLLAMA_HOST}/api/generate", json={"model": model, "keep_alive": 0})
+            response.raise_for_status()
     except Exception:
         logger.exception("Failed to unload Ollama model %s before generate_image", model)
 
@@ -36,7 +37,8 @@ async def _unload_iris() -> None:
     same reasoning as _unload_ollama_model."""
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            await client.post(f"{IRIS_URL}/unload")
+            response = await client.post(f"{IRIS_URL}/unload")
+            response.raise_for_status()
     except Exception:
         logger.exception("Failed to unload Iris pipeline after generate_image")
 
@@ -122,12 +124,23 @@ async def run_chat_stream(
         accumulated_content = ""
         tool_calls = None
 
-        async for event_type, data in _stream_ollama(messages, model, think):
-            if event_type == "content":
-                accumulated_content += data
-                yield data
-            elif event_type == "tool_calls":
-                tool_calls = data
+        try:
+            async for event_type, data in _stream_ollama(messages, model, think):
+                if event_type == "content":
+                    accumulated_content += data
+                    yield data
+                elif event_type == "tool_calls":
+                    tool_calls = data
+        except Exception as exc:
+            # A broken connection to Ollama (GPU OOM on reload, timeout,
+            # restart, ...) must never kill the HTTP stream outright — the
+            # client sees that as an opaque "Error in input stream" with no
+            # way to tell what happened. Surface it in-chat and end the
+            # turn cleanly instead. Whatever content already streamed this
+            # turn is unaffected — it was already yielded above.
+            logger.exception("Ollama stream failed")
+            yield f"\n\n*Lost connection to the model: {exc}*"
+            return
 
         assistant_message = {"role": "assistant", "content": accumulated_content}
         if tool_calls:
