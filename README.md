@@ -19,7 +19,7 @@ When the model decides a tool would help, Hermes executes it and feeds the resul
 **Other endpoints:**
 - `GET /models` — chat-capable models available (filtered to Ollama's `tools`-capability models only)
 - `GET /conversations`, `GET /conversations/{id}`, `PATCH /conversations/{id}` (rename), `DELETE /conversations/{id}`
-- `GET /tasks`, `POST /tasks`, `PATCH /tasks/{id}/complete`, `DELETE /tasks/{id}`
+- `GET /tasks`, `POST /tasks`, `PATCH /tasks/{id}` (update urgent/important), `PATCH /tasks/{id}/complete`, `DELETE /tasks/{id}`
 - `GET /habits`, `POST /habits/log` — same data the tools use, for a future dashboard UI
 - `GET /health`
 
@@ -27,7 +27,7 @@ When the model decides a tool would help, Hermes executes it and feeds the resul
 
 React app in `frontend/`, built to `static/` and served by the same FastAPI app at `/` (`static/` is generated — not committed, see Deployment). Black background with a per-view neon accent (blue for Chat, green for Tasks, pink for Habits), switched via a hamburger menu that opens an overlay nav drawer. Views:
 - **Chat** — bubbles, streaming responses, a model dropdown, a persistent conversation sidebar (right-click to rename/delete, independent of the view-switching drawer), Enter-to-send, and a Stop button that genuinely halts generation server-side. Small dependency-free markdown renderer (bold, italic, code, headers, lists, images).
-- **Tasks** — the four Eisenhower quadrants, computed client-side from each task's `urgent`/`important` flags; add form, click a task to complete it.
+- **Tasks** — a personal variation on the Eisenhower matrix (not the textbook one): **Do first** (urgent+important), **Do next** (urgent, not important — no delegate quadrant since there's no one to delegate to), **Schedule / plan** (important, not urgent), **Backlog** (neither — things that would traditionally be "eliminated" realistically just don't get added at all, so this is a someday/maybe pile instead). Drag a card between quadrants to recategorize it (native HTML5 drag and drop, straight to the REST API — no LLM involved); click a card to mark it done; add form for new tasks.
 - **Habits** — streak per habit with a 7-day dot tracker (the dots currently derive from the streak count, not real per-day history — see Not yet decided); log today, add a new habit.
 
 ## Stack

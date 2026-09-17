@@ -109,6 +109,21 @@ def find_open_tasks_by_title(title_query: str) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def update_task(task_id: int, urgent: bool | None = None, important: bool | None = None) -> None:
+    fields, params = [], []
+    if urgent is not None:
+        fields.append("urgent = %s")
+        params.append(urgent)
+    if important is not None:
+        fields.append("important = %s")
+        params.append(important)
+    if not fields:
+        return
+    params.append(task_id)
+    with _connect() as conn:
+        conn.execute(f"UPDATE tasks SET {', '.join(fields)} WHERE id = %s", params)
+
+
 def complete_task(task_id: int) -> None:
     with _connect() as conn:
         conn.execute(

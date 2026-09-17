@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
-import { completeTask, createTask, listTasks } from '../api.js';
+import { completeTask, createTask, listTasks, updateTask } from '../api.js';
 
 const QUADRANTS = [
-  { key: 'do', label: 'Do first', hint: 'Urgent and important', match: (t) => t.urgent && t.important, accent: true },
-  { key: 'schedule', label: 'Schedule', hint: 'Important, not urgent', match: (t) => !t.urgent && t.important, accent: false },
-  { key: 'delegate', label: 'Delegate', hint: 'Urgent, not important', match: (t) => t.urgent && !t.important, accent: false },
-  { key: 'eliminate', label: 'Eliminate', hint: 'Neither urgent nor important', match: (t) => !t.urgent && !t.important, accent: false, dim: true },
+  { key: 'do', label: 'Do first', hint: 'Urgent and important', urgent: true, important: true, accent: true },
+  { key: 'next', label: 'Do next', hint: 'Urgent, not important', urgent: true, important: false, accent: false },
+  { key: 'schedule', label: 'Schedule / plan', hint: 'Important, not urgent', urgent: false, important: true, accent: false },
+  { key: 'backlog', label: 'Backlog', hint: "Neither — someday, maybe", urgent: false, important: false, accent: false, dim: true },
 ];
+
+function quadrantOf(task) {
+  return QUADRANTS.find((q) => q.urgent === task.urgent && q.important === task.important);
+}
 
 export default function TasksView({ onOpenDrawer }) {
   const [tasks, setTasks] = useState([]);
@@ -16,6 +20,7 @@ export default function TasksView({ onOpenDrawer }) {
   const [urgent, setUrgent] = useState(false);
   const [important, setImportant] = useState(false);
   const [dueDate, setDueDate] = useState('');
+  const [dragOverKey, setDragOverKey] = useState(null);
 
   useEffect(() => {
     refresh();
@@ -42,9 +47,26 @@ export default function TasksView({ onOpenDrawer }) {
     refresh();
   }
 
+  function handleDragStart(e, taskId) {
+    e.dataTransfer.setData('text/plain', String(taskId));
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
+  async function handleDrop(e, quadrant) {
+    e.preventDefault();
+    setDragOverKey(null);
+    const taskId = Number(e.dataTransfer.getData('text/plain'));
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task || (task.urgent === quadrant.urgent && task.important === quadrant.important)) return;
+    // Optimistic move so the card doesn't snap back while the request is in flight.
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, urgent: quadrant.urgent, important: quadrant.important } : t)));
+    await updateTask(taskId, { urgent: quadrant.urgent, important: quadrant.important });
+    refresh();
+  }
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      <TopBar title="Tasks" subtitle="Eisenhower matrix" onOpenDrawer={onOpenDrawer}>
+      <TopBar title="Tasks" subtitle="drag a card to recategorize" onOpenDrawer={onOpenDrawer}>
         <button
           onClick={() => setShowForm((v) => !v)}
           style={{
@@ -91,19 +113,27 @@ export default function TasksView({ onOpenDrawer }) {
 
       <div style={{ flex: 1, minHeight: 0, padding: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: 16 }}>
         {QUADRANTS.map((q) => {
-          const items = tasks.filter(q.match);
+          const items = tasks.filter((t) => quadrantOf(t)?.key === q.key);
+          const isDragOver = dragOverKey === q.key;
           return (
             <div
               key={q.key}
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (dragOverKey !== q.key) setDragOverKey(q.key);
+              }}
+              onDragLeave={() => setDragOverKey((k) => (k === q.key ? null : k))}
+              onDrop={(e) => handleDrop(e, q)}
               style={{
                 background: q.accent ? 'var(--accent-wash)' : q.dim ? 'rgba(255,255,255,0.02)' : 'var(--panel)',
-                border: q.accent ? '1px solid var(--accent-glow)' : '1px solid var(--border)',
+                border: isDragOver ? '1px dashed var(--accent)' : q.accent ? '1px solid var(--accent-glow)' : '1px solid var(--border)',
                 borderRadius: 12,
                 padding: '18px 20px',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 10,
                 overflowY: 'auto',
+                transition: 'border-color 0.1s ease',
               }}
             >
               <div style={{ fontSize: 13, fontWeight: 600, color: q.accent ? 'var(--accent)' : q.dim ? 'var(--text-faint)' : '#c7c8cc', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
@@ -114,15 +144,17 @@ export default function TasksView({ onOpenDrawer }) {
               {items.map((t) => (
                 <div
                   key={t.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, t.id)}
                   onClick={() => handleComplete(t.id)}
-                  title="Click to mark done"
+                  title="Drag to recategorize, click to mark done"
                   style={{
                     background: 'var(--panel-2)',
                     border: '1px solid var(--border)',
                     borderRadius: 8,
                     padding: '10px 12px',
                     fontSize: 13,
-                    cursor: 'pointer',
+                    cursor: 'grab',
                   }}
                 >
                   {t.title}

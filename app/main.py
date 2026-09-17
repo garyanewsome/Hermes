@@ -57,6 +57,11 @@ class HabitLogRequest(BaseModel):
     name: str
 
 
+class TaskUpdateRequest(BaseModel):
+    urgent: bool | None = None
+    important: bool | None = None
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -141,6 +146,12 @@ def post_task(request: TaskRequest):
         due_date=request.due_date,
         notes=request.notes,
     )
+
+
+@app.patch("/tasks/{task_id}")
+def patch_task(task_id: int, request: TaskUpdateRequest):
+    planner_db.update_task(task_id, urgent=request.urgent, important=request.important)
+    return {"status": "ok"}
 
 
 @app.patch("/tasks/{task_id}/complete")

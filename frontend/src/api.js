@@ -43,6 +43,14 @@ export async function createTask({ title, urgent, important, dueDate, notes }) {
   return res.json();
 }
 
+export async function updateTask(id, { urgent, important }) {
+  await fetch(`/tasks/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ urgent, important }),
+  });
+}
+
 export async function completeTask(id) {
   await fetch(`/tasks/${id}/complete`, { method: 'PATCH' });
 }
