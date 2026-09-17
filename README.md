@@ -20,7 +20,7 @@ When the model decides a tool would help, Hermes executes it and feeds the resul
 - `GET /models` — chat-capable models available (filtered to Ollama's `tools`-capability models only)
 - `GET /conversations`, `GET /conversations/{id}`, `PATCH /conversations/{id}` (rename), `DELETE /conversations/{id}`
 - `GET /tasks`, `POST /tasks`, `PATCH /tasks/{id}` (partial update: quadrant/title/notes, any subset), `PATCH /tasks/{id}/complete`, `DELETE /tasks/{id}`
-- `GET /habits`, `POST /habits/log` — same data the tools use, for a future dashboard UI
+- `GET /habits`, `POST /habits/log`, `PATCH /habits/{id}/log` (set/unset a specific day, for the dot tracker's undo) — same data the tools use, for a future dashboard UI
 - `GET /health`
 
 ## UI
@@ -28,7 +28,7 @@ When the model decides a tool would help, Hermes executes it and feeds the resul
 React app in `frontend/`, built to `static/` and served by the same FastAPI app at `/` (`static/` is generated — not committed, see Deployment). Black background with a per-view neon accent (blue for Chat, green for Tasks, pink for Habits), switched via a hamburger menu that opens an overlay nav drawer. Views:
 - **Chat** — bubbles, streaming responses, a model dropdown, a persistent conversation sidebar (right-click to rename/delete, independent of the view-switching drawer), Enter-to-send, and a Stop button that genuinely halts generation server-side. Small dependency-free markdown renderer (bold, italic, code, headers, lists, images).
 - **Tasks** — four quadrants, each just a plain category (**TODO**, **Schedule / plan**, **NEXT**, **Backlog**), each with its own neon color (black card background, colored border/glow) — a task belongs to exactly the quadrant it's filed under, tracked as one `quadrant` field, no urgent/important flags underneath. Each quadrant has its own inline `+` to add a task directly into it; drag a card between quadrants to refile it (native HTML5 drag and drop, straight to the REST API — no LLM involved); a checkbox marks it done, a trash icon deletes it. Cards stay a single line — clicking the title (not the checkbox or trash) opens a modal to edit the title and an optional description (`notes`), which most tasks won't have; a small icon on the card shows when one's set.
-- **Habits** — streak per habit with a 7-day dot tracker (the dots currently derive from the streak count, not real per-day history — see Not yet decided); log today, add a new habit.
+- **Habits** — streak per habit with a 7-day dot tracker backed by real per-day history (each dot is its own logged/not-logged date, not derived from the streak count); click a dot to toggle that specific day — undo an accidental log, or backfill a day you forgot; "Log today" for the common case; add a new habit.
 
 ## Stack
 
@@ -85,6 +85,5 @@ To redeploy after a code change: `./deploy.sh` — builds the image, reimports i
 
 ## Not yet decided / open
 
-- Habit dot tracker shows streak count, not real per-day history — a habit missed 2 days ago then resumed reads identically to one done every day. Needs `habit_logs` exposed per-day via the API to fix properly.
-- Task editing (change urgency/importance/due date after creation) — currently create/list/complete/delete only
+- Due date isn't editable after task creation, and isn't settable at all from the UI (only via the `add_task` tool) — no due-date field anywhere in the Tasks view yet
 - No mobile layout pass yet — drawer and quadrant grid are fixed-ish widths, untested below ~900px

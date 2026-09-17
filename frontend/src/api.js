@@ -73,3 +73,11 @@ export async function logHabit(name) {
   });
   return res.json();
 }
+
+export async function setHabitDay(habitId, date, logged) {
+  await fetch(`/habits/${habitId}/log`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date, logged }),
+  });
+}

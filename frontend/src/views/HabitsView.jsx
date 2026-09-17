@@ -1,17 +1,21 @@
 import { useEffect, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
-import { listHabits, logHabit } from '../api.js';
+import { listHabits, logHabit, setHabitDay } from '../api.js';
 
-function Dot({ filled }) {
+function Dot({ day, onToggle }) {
   return (
-    <div
+    <button
+      onClick={() => onToggle(day.date, !day.logged)}
+      title={`${day.date}${day.logged ? ' — click to undo' : ' — click to log'}`}
       style={{
         width: 16,
         height: 16,
+        padding: 0,
         borderRadius: '50%',
-        background: filled ? 'var(--accent)' : 'transparent',
-        border: filled ? 'none' : '1px solid var(--border-strong)',
-        boxShadow: filled ? '0 0 6px var(--accent-glow)' : 'none',
+        background: day.logged ? 'var(--accent)' : 'transparent',
+        border: day.logged ? 'none' : '1px solid var(--border-strong)',
+        boxShadow: day.logged ? '0 0 6px var(--accent-glow)' : 'none',
+        cursor: 'pointer',
       }}
     />
   );
@@ -32,6 +36,11 @@ export default function HabitsView({ onOpenDrawer }) {
 
   async function handleLog(habitName) {
     await logHabit(habitName);
+    refresh();
+  }
+
+  async function handleToggleDay(habitId, date, logged) {
+    await setHabitDay(habitId, date, logged);
     refresh();
   }
 
@@ -65,9 +74,8 @@ export default function HabitsView({ onOpenDrawer }) {
           >
             <div style={{ width: 140, fontSize: 14, fontWeight: 600, color: h.streak > 0 ? 'var(--text)' : '#c7c8cc' }}>{h.name}</div>
             <div style={{ display: 'flex', gap: 6 }}>
-              {/* Last 7 days aren't tracked per-day by the API yet — showing streak-derived fill as a placeholder until day-level history is exposed. */}
-              {Array.from({ length: 7 }, (_, i) => (
-                <Dot key={i} filled={i < Math.min(h.streak, 7)} />
+              {h.last_7_days.map((day) => (
+                <Dot key={day.date} day={day} onToggle={(date, logged) => handleToggleDay(h.id, date, logged)} />
               ))}
             </div>
             <button

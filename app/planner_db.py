@@ -5,7 +5,7 @@ not a place for structured, constantly-mutating state like task status
 or habit streaks."""
 
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, timedelta
 
 import psycopg
 from psycopg.rows import dict_row
@@ -216,7 +216,49 @@ def habit_streak(name: str) -> int:
     return streak
 
 
+def habit_last_n_days(habit_id: int, days: int = 7) -> list[dict]:
+    """Real per-day history, oldest to newest (last element is today) — not
+    derived from the streak, so a gap earlier in the week shows correctly
+    even if today's log continues an otherwise-broken streak. Each day
+    carries its own date so the UI can toggle a specific day, not just
+    today."""
+    today = date.today()
+    start = today - timedelta(days=days - 1)
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT logged_date FROM habit_logs WHERE habit_id = %s AND logged_date >= %s",
+            (habit_id, start),
+        ).fetchall()
+    logged_dates = {row["logged_date"] for row in rows}
+    return [
+        {"date": (start + timedelta(days=i)).isoformat(), "logged": (start + timedelta(days=i)) in logged_dates}
+        for i in range(days)
+    ]
+
+
+def set_habit_log(habit_id: int, on_date: date, logged: bool) -> None:
+    with _connect() as conn:
+        if logged:
+            conn.execute(
+                "INSERT INTO habit_logs (habit_id, logged_date) VALUES (%s, %s) ON CONFLICT (habit_id, logged_date) DO NOTHING",
+                (habit_id, on_date),
+            )
+        else:
+            conn.execute(
+                "DELETE FROM habit_logs WHERE habit_id = %s AND logged_date = %s",
+                (habit_id, on_date),
+            )
+
+
 def list_habits_with_streaks() -> list[dict]:
     with _connect() as conn:
         rows = conn.execute("SELECT id, name FROM habits ORDER BY name").fetchall()
-    return [{"id": row["id"], "name": row["name"], "streak": habit_streak(row["name"])} for row in rows]
+    return [
+        {
+            "id": row["id"],
+            "name": row["name"],
+            "streak": habit_streak(row["name"]),
+            "last_7_days": habit_last_n_days(row["id"]),
+        }
+        for row in rows
+    ]

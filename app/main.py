@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import date
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException
@@ -58,6 +59,11 @@ class TaskRequest(BaseModel):
 
 class HabitLogRequest(BaseModel):
     name: str
+
+
+class HabitDayRequest(BaseModel):
+    date: str
+    logged: bool
 
 
 class TaskUpdateRequest(BaseModel):
@@ -178,6 +184,12 @@ def get_habits():
 def post_habit_log(request: HabitLogRequest):
     planner_db.log_habit(request.name)
     return {"streak": planner_db.habit_streak(request.name)}
+
+
+@app.patch("/habits/{habit_id}/log")
+def patch_habit_log(habit_id: int, request: HabitDayRequest):
+    planner_db.set_habit_log(habit_id, date.fromisoformat(request.date), request.logged)
+    return {"status": "ok"}
 
 
 # Mounted last so it doesn't shadow the API routes above.
