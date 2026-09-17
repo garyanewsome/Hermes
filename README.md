@@ -11,7 +11,7 @@ When the model decides a tool would help, Hermes executes it and feeds the resul
 **Tools:**
 - `search_vault` — semantic search over the vault (calls Athenaeum's `/search`)
 - `list_notes` — structural folder listing (calls Athenaeum's `/browse`)
-- `generate_image` — image generation (calls Iris's `/generate`)
+- `generate_image` — image generation (calls Iris's `/generate`). Explicitly unloads the chat model from Ollama (`keep_alive: 0`) right before calling Iris, since this fires in the same turn that just used Ollama — with zero idle gap, Iris's own pipeline load was contending for VRAM against a still-resident chat model and OOMing (same class of problem already solved for Selene/images-after-dark, just never applied to this path).
 - `save_project_memory` / `recall_project_memory` — persistent memory for VST/audio plugin development work (calls a self-hosted Hindsight instance). Scoped deliberately narrow via the tool description — most messages should not trigger a save, only durable decisions/facts worth recalling later.
 - `add_task` / `list_tasks` / `complete_task` — to-dos filed directly into one of four quadrants (`do` / `schedule` / `next` / `backlog`), backed by a dedicated `planner` Postgres database (see below).
 - `log_habit` / `habit_status` — daily habit tracking, same `planner` database. `habit_status` returns each of the last 7 days' actual logged/missed dates (not just the streak number), so you can ask Hermes things like "how'd I do this week" or "did I miss Tuesday" and it has real data to answer from.

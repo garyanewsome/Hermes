@@ -1,4 +1,5 @@
 import json
+import logging
 
 import httpx
 
@@ -6,6 +7,24 @@ from app.config import CHAT_MODEL, OLLAMA_HOST, SYSTEM_PROMPT
 from app.tools import TOOL_HANDLERS, TOOLS
 
 MAX_TOOL_ITERATIONS = 5
+
+logger = logging.getLogger("hermes")
+
+
+async def _unload_ollama_model(model: str) -> None:
+    """Force Ollama to free VRAM immediately instead of waiting out its own
+    idle timeout. generate_image fires in the same turn that just used this
+    same model to decide to call it, so there's no idle gap for Ollama's
+    own unload to have kicked in — Iris then contends for VRAM against a
+    still-resident chat model and OOMs trying to load its own pipeline
+    (same class of problem already solved for Selene/images-after-dark).
+    Best-effort: if this fails, still let the generate_image attempt
+    proceed rather than blocking it on a diagnostic step."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.post(f"{OLLAMA_HOST}/api/generate", json={"model": model, "keep_alive": 0})
+    except Exception:
+        logger.exception("Failed to unload Ollama model %s before generate_image", model)
 
 
 async def _stream_ollama(messages: list[dict], model: str, think: bool):
@@ -115,6 +134,7 @@ async def run_chat_stream(
 
             try:
                 if name == "generate_image":
+                    await _unload_ollama_model(model)
                     result = handler(**arguments, conversation_id=conversation_id)
                 else:
                     result = handler(**arguments)
