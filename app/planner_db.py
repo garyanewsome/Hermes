@@ -107,9 +107,27 @@ def find_open_tasks_by_title(title_query: str) -> list[dict]:
     return [dict(row) for row in rows]
 
 
-def update_task(task_id: int, quadrant: str) -> None:
+def update_task(
+    task_id: int,
+    quadrant: str | None = None,
+    title: str | None = None,
+    notes: str | None = None,
+) -> None:
+    fields, params = [], []
+    if quadrant is not None:
+        fields.append("quadrant = %s")
+        params.append(quadrant)
+    if title is not None:
+        fields.append("title = %s")
+        params.append(title)
+    if notes is not None:
+        fields.append("notes = %s")
+        params.append(notes)
+    if not fields:
+        return
+    params.append(task_id)
     with _connect() as conn:
-        conn.execute("UPDATE tasks SET quadrant = %s WHERE id = %s", (quadrant, task_id))
+        conn.execute(f"UPDATE tasks SET {', '.join(fields)} WHERE id = %s", params)
 
 
 def complete_task(task_id: int) -> None:

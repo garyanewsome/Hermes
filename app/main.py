@@ -61,7 +61,9 @@ class HabitLogRequest(BaseModel):
 
 
 class TaskUpdateRequest(BaseModel):
-    quadrant: Quadrant
+    quadrant: Quadrant | None = None
+    title: str | None = None
+    notes: str | None = None
 
 
 @app.get("/health")
@@ -151,7 +153,7 @@ def post_task(request: TaskRequest):
 
 @app.patch("/tasks/{task_id}")
 def patch_task(task_id: int, request: TaskUpdateRequest):
-    planner_db.update_task(task_id, quadrant=request.quadrant)
+    planner_db.update_task(task_id, quadrant=request.quadrant, title=request.title, notes=request.notes)
     return {"status": "ok"}
 
 

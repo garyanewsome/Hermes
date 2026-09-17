@@ -43,11 +43,11 @@ export async function createTask({ title, quadrant, dueDate, notes }) {
   return res.json();
 }
 
-export async function updateTask(id, quadrant) {
+export async function updateTask(id, updates) {
   await fetch(`/tasks/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ quadrant }),
+    body: JSON.stringify(updates),
   });
 }
 
