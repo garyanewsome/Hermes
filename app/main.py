@@ -1,5 +1,6 @@
 import json
 import logging
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
@@ -45,10 +46,12 @@ class RenameRequest(BaseModel):
     title: str
 
 
+Quadrant = Literal["do", "schedule", "next", "backlog"]
+
+
 class TaskRequest(BaseModel):
     title: str
-    urgent: bool = False
-    important: bool = False
+    quadrant: Quadrant
     due_date: str | None = None
     notes: str | None = None
 
@@ -58,8 +61,7 @@ class HabitLogRequest(BaseModel):
 
 
 class TaskUpdateRequest(BaseModel):
-    urgent: bool | None = None
-    important: bool | None = None
+    quadrant: Quadrant
 
 
 @app.get("/health")
@@ -141,8 +143,7 @@ def get_tasks(status: str | None = "open"):
 def post_task(request: TaskRequest):
     return planner_db.create_task(
         request.title,
-        urgent=request.urgent,
-        important=request.important,
+        quadrant=request.quadrant,
         due_date=request.due_date,
         notes=request.notes,
     )
@@ -150,7 +151,7 @@ def post_task(request: TaskRequest):
 
 @app.patch("/tasks/{task_id}")
 def patch_task(task_id: int, request: TaskUpdateRequest):
-    planner_db.update_task(task_id, urgent=request.urgent, important=request.important)
+    planner_db.update_task(task_id, quadrant=request.quadrant)
     return {"status": "ok"}
 
 

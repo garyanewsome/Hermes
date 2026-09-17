@@ -34,20 +34,20 @@ export async function listTasks(status = 'open') {
   return data.tasks;
 }
 
-export async function createTask({ title, urgent, important, dueDate, notes }) {
+export async function createTask({ title, quadrant, dueDate, notes }) {
   const res = await fetch('/tasks', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, urgent, important, due_date: dueDate || null, notes: notes || null }),
+    body: JSON.stringify({ title, quadrant, due_date: dueDate || null, notes: notes || null }),
   });
   return res.json();
 }
 
-export async function updateTask(id, { urgent, important }) {
+export async function updateTask(id, quadrant) {
   await fetch(`/tasks/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ urgent, important }),
+    body: JSON.stringify({ quadrant }),
   });
 }
 

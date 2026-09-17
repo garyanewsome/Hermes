@@ -1,4 +1,4 @@
-"""Tasks (urgency x importance quadrants) and habit tracking — a separate Postgres
+"""Tasks (tracked by which quadrant they're filed under) and habit tracking — a separate Postgres
 database from the SQLite conversation history in db.py. Kept out of
 Hindsight deliberately: Hindsight is semantic recall over durable facts,
 not a place for structured, constantly-mutating state like task status
@@ -31,8 +31,7 @@ def init_planner_db() -> None:
                 id SERIAL PRIMARY KEY,
                 title TEXT NOT NULL,
                 notes TEXT,
-                urgent BOOLEAN NOT NULL DEFAULT false,
-                important BOOLEAN NOT NULL DEFAULT false,
+                quadrant TEXT NOT NULL CHECK (quadrant IN ('do', 'schedule', 'next', 'backlog')),
                 status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'done')),
                 due_date DATE,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -66,30 +65,29 @@ def init_planner_db() -> None:
 
 def create_task(
     title: str,
-    urgent: bool = False,
-    important: bool = False,
+    quadrant: str,
     due_date: str | None = None,
     notes: str | None = None,
 ) -> dict:
     with _connect() as conn:
         row = conn.execute(
             """
-            INSERT INTO tasks (title, notes, urgent, important, due_date)
-            VALUES (%s, %s, %s, %s, %s)
-            RETURNING id, title, notes, urgent, important, status, due_date
+            INSERT INTO tasks (title, notes, quadrant, due_date)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id, title, notes, quadrant, status, due_date
             """,
-            (title, notes, urgent, important, due_date),
+            (title, notes, quadrant, due_date),
         ).fetchone()
     return dict(row)
 
 
 def list_tasks(status: str | None = "open") -> list[dict]:
-    query = "SELECT id, title, notes, urgent, important, status, due_date FROM tasks"
+    query = "SELECT id, title, notes, quadrant, status, due_date FROM tasks"
     params: tuple = ()
     if status:
         query += " WHERE status = %s"
         params = (status,)
-    query += " ORDER BY important DESC, urgent DESC, due_date NULLS LAST, created_at"
+    query += " ORDER BY due_date NULLS LAST, created_at"
     with _connect() as conn:
         rows = conn.execute(query, params).fetchall()
     return [dict(row) for row in rows]
@@ -99,7 +97,7 @@ def find_open_tasks_by_title(title_query: str) -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
             """
-            SELECT id, title, notes, urgent, important, status, due_date
+            SELECT id, title, notes, quadrant, status, due_date
             FROM tasks
             WHERE status = 'open' AND title ILIKE %s
             ORDER BY created_at DESC
@@ -109,19 +107,9 @@ def find_open_tasks_by_title(title_query: str) -> list[dict]:
     return [dict(row) for row in rows]
 
 
-def update_task(task_id: int, urgent: bool | None = None, important: bool | None = None) -> None:
-    fields, params = [], []
-    if urgent is not None:
-        fields.append("urgent = %s")
-        params.append(urgent)
-    if important is not None:
-        fields.append("important = %s")
-        params.append(important)
-    if not fields:
-        return
-    params.append(task_id)
+def update_task(task_id: int, quadrant: str) -> None:
     with _connect() as conn:
-        conn.execute(f"UPDATE tasks SET {', '.join(fields)} WHERE id = %s", params)
+        conn.execute("UPDATE tasks SET quadrant = %s WHERE id = %s", (quadrant, task_id))
 
 
 def complete_task(task_id: int) -> None:

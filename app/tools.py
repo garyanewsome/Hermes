@@ -89,15 +89,17 @@ def recall_project_memory(query: str) -> str:
     return "\n\n".join(f"[{r['type']}] {r['text']}" for r in results)
 
 
-def add_task(title: str, urgent: bool = False, important: bool = False, due_date: str | None = None) -> str:
-    task = planner_db.create_task(title, urgent=urgent, important=important, due_date=due_date)
-    label = {
-        (True, True): "urgent and important — do first",
-        (True, False): "urgent but not important — delegate if possible",
-        (False, True): "important but not urgent — schedule time for it",
-        (False, False): "neither urgent nor important",
-    }[(task["urgent"], task["important"])]
-    return f"Added task #{task['id']}: \"{task['title']}\" ({label})."
+QUADRANT_LABELS = {
+    "do": "Do first",
+    "schedule": "Schedule / plan",
+    "next": "Do next",
+    "backlog": "Backlog",
+}
+
+
+def add_task(title: str, quadrant: str, due_date: str | None = None) -> str:
+    task = planner_db.create_task(title, quadrant=quadrant, due_date=due_date)
+    return f"Added task #{task['id']}: \"{task['title']}\" ({QUADRANT_LABELS[task['quadrant']]})."
 
 
 def list_tasks(status: str = "open") -> str:
@@ -106,14 +108,8 @@ def list_tasks(status: str = "open") -> str:
         return f"No {status} tasks."
     lines = []
     for task in tasks:
-        flags = []
-        if task["important"]:
-            flags.append("important")
-        if task["urgent"]:
-            flags.append("urgent")
-        flag_str = f" [{', '.join(flags)}]" if flags else ""
         due = f" (due {task['due_date']})" if task["due_date"] else ""
-        lines.append(f"#{task['id']} {task['title']}{flag_str}{due}")
+        lines.append(f"#{task['id']} {task['title']} [{QUADRANT_LABELS[task['quadrant']]}]{due}")
     return "\n".join(lines)
 
 
@@ -263,25 +259,30 @@ TOOLS = [
         "function": {
             "name": "add_task",
             "description": (
-                "Add a to-do item, classified by urgency and importance into one "
-                "of four quadrants (do first / schedule-plan / do next / backlog). "
-                "Use whenever the user asks to add/remember a task "
-                "or to-do. Judge urgent/important from context if the user doesn't "
-                "say explicitly (urgent = time-sensitive soon; important = matters "
-                "for their real goals, not just loud right now)."
+                "Add a to-do item to one of four quadrants. Use whenever the user "
+                "asks to add/remember a task or to-do, picking the quadrant that "
+                "best fits from context if the user doesn't say explicitly."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "title": {"type": "string", "description": "Short description of the task"},
-                    "urgent": {"type": "boolean", "description": "Does this need attention soon?"},
-                    "important": {"type": "boolean", "description": "Does this matter for real goals?"},
+                    "quadrant": {
+                        "type": "string",
+                        "enum": ["do", "schedule", "next", "backlog"],
+                        "description": (
+                            "'do' = do first, time-sensitive and matters now. "
+                            "'schedule' = matters but isn't urgent, plan time for it. "
+                            "'next' = urgent but low-stakes, a quick thing to knock out. "
+                            "'backlog' = neither urgent nor important, someday/maybe."
+                        ),
+                    },
                     "due_date": {
                         "type": "string",
                         "description": "Due date in YYYY-MM-DD format, if the user gave one",
                     },
                 },
-                "required": ["title"],
+                "required": ["title", "quadrant"],
             },
         },
     },
@@ -290,8 +291,8 @@ TOOLS = [
         "function": {
             "name": "list_tasks",
             "description": (
-                "List to-do items, most important/urgent first. Use for 'what's on "
-                "my plate', 'what do I need to do', or questions about the "
+                "List to-do items, with which quadrant each is in. Use for 'what's "
+                "on my plate', 'what do I need to do', or questions about the "
                 "quadrant board. Defaults to open tasks only."
             ),
             "parameters": {

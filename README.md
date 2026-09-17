@@ -13,13 +13,13 @@ When the model decides a tool would help, Hermes executes it and feeds the resul
 - `list_notes` — structural folder listing (calls Athenaeum's `/browse`)
 - `generate_image` — image generation (calls Iris's `/generate`)
 - `save_project_memory` / `recall_project_memory` — persistent memory for VST/audio plugin development work (calls a self-hosted Hindsight instance). Scoped deliberately narrow via the tool description — most messages should not trigger a save, only durable decisions/facts worth recalling later.
-- `add_task` / `list_tasks` / `complete_task` — to-dos classified by urgency × importance into four quadrants, backed by a dedicated `planner` Postgres database (see below).
+- `add_task` / `list_tasks` / `complete_task` — to-dos filed directly into one of four quadrants (`do` / `schedule` / `next` / `backlog`), backed by a dedicated `planner` Postgres database (see below).
 - `log_habit` / `habit_status` — daily habit tracking with streak counting, same `planner` database.
 
 **Other endpoints:**
 - `GET /models` — chat-capable models available (filtered to Ollama's `tools`-capability models only)
 - `GET /conversations`, `GET /conversations/{id}`, `PATCH /conversations/{id}` (rename), `DELETE /conversations/{id}`
-- `GET /tasks`, `POST /tasks`, `PATCH /tasks/{id}` (update urgent/important), `PATCH /tasks/{id}/complete`, `DELETE /tasks/{id}`
+- `GET /tasks`, `POST /tasks`, `PATCH /tasks/{id}` (move to a different quadrant), `PATCH /tasks/{id}/complete`, `DELETE /tasks/{id}`
 - `GET /habits`, `POST /habits/log` — same data the tools use, for a future dashboard UI
 - `GET /health`
 
@@ -27,7 +27,7 @@ When the model decides a tool would help, Hermes executes it and feeds the resul
 
 React app in `frontend/`, built to `static/` and served by the same FastAPI app at `/` (`static/` is generated — not committed, see Deployment). Black background with a per-view neon accent (blue for Chat, green for Tasks, pink for Habits), switched via a hamburger menu that opens an overlay nav drawer. Views:
 - **Chat** — bubbles, streaming responses, a model dropdown, a persistent conversation sidebar (right-click to rename/delete, independent of the view-switching drawer), Enter-to-send, and a Stop button that genuinely halts generation server-side. Small dependency-free markdown renderer (bold, italic, code, headers, lists, images).
-- **Tasks** — four quadrants by urgency × importance, unlabeled beyond their own names (no urgent/important subtext): **Do first** (urgent+important), **Schedule / plan** (important, not urgent), **Do next** (urgent, not important), **Backlog** (neither — a someday/maybe pile). Each quadrant has its own inline `+` to add a task directly into it (urgent/important preset by which box it's in, no checkboxes); drag a card between quadrants to recategorize it (native HTML5 drag and drop, straight to the REST API — no LLM involved); click a card to mark it done.
+- **Tasks** — four quadrants, each just a plain category (**Do first**, **Schedule / plan**, **Do next**, **Backlog**) — a task belongs to exactly the quadrant it's filed under, tracked as one `quadrant` field, no urgent/important flags underneath. Each quadrant has its own inline `+` to add a task directly into it; drag a card between quadrants to refile it (native HTML5 drag and drop, straight to the REST API — no LLM involved); click a card to mark it done.
 - **Habits** — streak per habit with a 7-day dot tracker (the dots currently derive from the streak count, not real per-day history — see Not yet decided); log today, add a new habit.
 
 ## Stack
@@ -79,7 +79,7 @@ To redeploy after a code change: `./deploy.sh` — builds the image, reimports i
 - [x] Streaming chat with real mid-generation cancellation
 - [x] Tool-calling: `search_vault`, `list_notes`, `generate_image`, `save_project_memory`/`recall_project_memory`
 - [x] Server-side conversation history with rename/delete
-- [x] Tasks (four-quadrant urgency/importance board) and habit tracking, backed by a dedicated `planner` Postgres
+- [x] Tasks (four-quadrant board, tracked by which quadrant a task is filed under) and habit tracking, backed by a dedicated `planner` Postgres
 - [x] React UI: black + per-view neon theme, hamburger view switcher, Chat/Tasks/Habits — verified end to end locally (real Ollama model, real Postgres) before this landed
 - [x] Deployed, verified against real live services (not mocks)
 

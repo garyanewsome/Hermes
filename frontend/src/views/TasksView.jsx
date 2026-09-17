@@ -3,15 +3,11 @@ import TopBar from '../components/TopBar.jsx';
 import { completeTask, createTask, listTasks, updateTask } from '../api.js';
 
 const QUADRANTS = [
-  { key: 'do', label: 'Do first', urgent: true, important: true, accent: true },
-  { key: 'schedule', label: 'Schedule / plan', urgent: false, important: true, accent: false },
-  { key: 'next', label: 'Do next', urgent: true, important: false, accent: false },
-  { key: 'backlog', label: 'Backlog', urgent: false, important: false, accent: false, dim: true },
+  { key: 'do', label: 'Do first', accent: true },
+  { key: 'schedule', label: 'Schedule / plan', accent: false },
+  { key: 'next', label: 'Do next', accent: false },
+  { key: 'backlog', label: 'Backlog', accent: false, dim: true },
 ];
-
-function quadrantOf(task) {
-  return QUADRANTS.find((q) => q.urgent === task.urgent && q.important === task.important);
-}
 
 function QuadrantBox({ quadrant, items, isDragOver, onDragOver, onDragLeave, onDrop, onDragStart, onComplete, onAdd }) {
   const [adding, setAdding] = useState(false);
@@ -124,7 +120,7 @@ export default function TasksView({ onOpenDrawer }) {
   }
 
   async function handleAddToQuadrant(quadrant, title) {
-    await createTask({ title, urgent: quadrant.urgent, important: quadrant.important });
+    await createTask({ title, quadrant: quadrant.key });
     refresh();
   }
 
@@ -143,10 +139,10 @@ export default function TasksView({ onOpenDrawer }) {
     setDragOverKey(null);
     const taskId = Number(e.dataTransfer.getData('text/plain'));
     const task = tasks.find((t) => t.id === taskId);
-    if (!task || (task.urgent === quadrant.urgent && task.important === quadrant.important)) return;
+    if (!task || task.quadrant === quadrant.key) return;
     // Optimistic move so the card doesn't snap back while the request is in flight.
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, urgent: quadrant.urgent, important: quadrant.important } : t)));
-    await updateTask(taskId, { urgent: quadrant.urgent, important: quadrant.important });
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, quadrant: quadrant.key } : t)));
+    await updateTask(taskId, quadrant.key);
     refresh();
   }
 
@@ -159,7 +155,7 @@ export default function TasksView({ onOpenDrawer }) {
           <QuadrantBox
             key={q.key}
             quadrant={q}
-            items={tasks.filter((t) => quadrantOf(t)?.key === q.key)}
+            items={tasks.filter((t) => t.quadrant === q.key)}
             isDragOver={dragOverKey === q.key}
             onDragOver={(e) => {
               e.preventDefault();
