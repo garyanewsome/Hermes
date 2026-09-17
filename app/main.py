@@ -70,6 +70,7 @@ class TaskUpdateRequest(BaseModel):
     quadrant: Quadrant | None = None
     title: str | None = None
     notes: str | None = None
+    position: float | None = None
 
 
 @app.get("/health")
@@ -166,7 +167,9 @@ def post_task(request: TaskRequest):
 
 @app.patch("/tasks/{task_id}")
 def patch_task(task_id: int, request: TaskUpdateRequest):
-    planner_db.update_task(task_id, quadrant=request.quadrant, title=request.title, notes=request.notes)
+    planner_db.update_task(
+        task_id, quadrant=request.quadrant, title=request.title, notes=request.notes, position=request.position
+    )
     return {"status": "ok"}
 
 

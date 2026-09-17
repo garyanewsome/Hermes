@@ -5,6 +5,7 @@ export default function ConversationSidebar({ conversations, currentId, onSelect
   const [menu, setMenu] = useState(null); // { x, y, conv }
   const [renamingId, setRenamingId] = useState(null);
   const [renameValue, setRenameValue] = useState('');
+  const [confirmingDelete, setConfirmingDelete] = useState(null); // conv, or null
 
   useEffect(() => {
     const hide = () => setMenu(null);
@@ -25,8 +26,9 @@ export default function ConversationSidebar({ conversations, currentId, onSelect
     }
   }
 
-  async function handleDelete(conv) {
-    if (!confirm("Delete this conversation? This can't be undone.")) return;
+  async function confirmDelete() {
+    const conv = confirmingDelete;
+    setConfirmingDelete(null);
     await deleteConversation(conv.id);
     onChanged();
   }
@@ -140,13 +142,60 @@ export default function ConversationSidebar({ conversations, currentId, onSelect
           </div>
           <div
             onClick={() => {
-              handleDelete(menu.conv);
+              setConfirmingDelete(menu.conv);
               setMenu(null);
             }}
             style={{ padding: '7px 12px', borderRadius: 5, fontSize: 13, cursor: 'pointer', color: '#ff6b6b' }}
           >
             Delete
           </div>
+        </div>
+      )}
+
+      {confirmingDelete && (
+        <div
+          onClick={() => setConfirmingDelete(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}
+        >
+          <form
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => {
+              e.preventDefault();
+              confirmDelete();
+            }}
+            style={{
+              width: 320,
+              maxWidth: '90vw',
+              background: 'var(--bg)',
+              border: '1px solid var(--accent)',
+              boxShadow: '0 0 20px var(--accent-glow)',
+              borderRadius: 12,
+              padding: 20,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 14,
+            }}
+          >
+            <div style={{ fontSize: 14, color: 'var(--text)' }}>
+              Delete "{confirmingDelete.title}"? This can't be undone.
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(null)}
+                style={{ background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-dim)', borderRadius: 8, padding: '7px 14px', fontSize: 13 }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                autoFocus
+                style={{ background: '#ff6b6b', border: 'none', color: '#2b0808', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 600 }}
+              >
+                Delete
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

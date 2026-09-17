@@ -9,11 +9,14 @@ const QUADRANTS = [
   { key: 'backlog', label: 'Backlog', color: '#6a6b70', glow: 'transparent', dim: true },
 ];
 
-function TaskRow({ task, quadrant, onDragStart, onComplete, onDelete, onOpen }) {
+function TaskRow({ task, quadrant, isDragOver, onDragStart, onDragOverRow, onDragLeaveRow, onDropOnRow, onComplete, onDelete, onOpen }) {
   return (
     <div
       draggable
       onDragStart={(e) => onDragStart(e, task.id)}
+      onDragOver={onDragOverRow}
+      onDragLeave={onDragLeaveRow}
+      onDrop={onDropOnRow}
       onClick={() => onOpen(task)}
       style={{
         display: 'flex',
@@ -21,6 +24,7 @@ function TaskRow({ task, quadrant, onDragStart, onComplete, onDelete, onOpen }) 
         gap: 8,
         background: 'var(--bg)',
         border: `1px solid ${quadrant.color}`,
+        borderTop: isDragOver ? `2px solid ${quadrant.color}` : `1px solid ${quadrant.color}`,
         boxShadow: quadrant.dim ? 'none' : `0 0 6px ${quadrant.glow}`,
         borderRadius: 8,
         padding: '8px 10px',
@@ -131,16 +135,33 @@ function TaskModal({ task, quadrant, onClose, onSave }) {
   );
 }
 
-function QuadrantBox({ quadrant, items, isDragOver, onDragOver, onDragLeave, onDrop, onDragStart, onComplete, onDelete, onAdd, onOpen }) {
+function QuadrantBox({
+  quadrant,
+  items,
+  isDragOver,
+  dragOverTaskId,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragStart,
+  onDragOverRow,
+  onDragLeaveRow,
+  onDropOnRow,
+  onComplete,
+  onDelete,
+  onAdd,
+  onOpen,
+}) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState('');
 
   async function submit(e) {
     e.preventDefault();
     if (!title.trim()) return;
-    await onAdd(title.trim());
+    const value = title.trim();
     setTitle('');
     setAdding(false);
+    await onAdd(value);
   }
 
   return (
@@ -208,7 +229,19 @@ function QuadrantBox({ quadrant, items, isDragOver, onDragOver, onDragLeave, onD
 
       {items.length === 0 && !adding && <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>Nothing here.</div>}
       {items.map((t) => (
-        <TaskRow key={t.id} task={t} quadrant={quadrant} onDragStart={onDragStart} onComplete={onComplete} onDelete={onDelete} onOpen={onOpen} />
+        <TaskRow
+          key={t.id}
+          task={t}
+          quadrant={quadrant}
+          isDragOver={dragOverTaskId === t.id}
+          onDragStart={onDragStart}
+          onDragOverRow={(e) => onDragOverRow(e, t.id)}
+          onDragLeaveRow={onDragLeaveRow}
+          onDropOnRow={(e) => onDropOnRow(e, quadrant, t)}
+          onComplete={onComplete}
+          onDelete={onDelete}
+          onOpen={onOpen}
+        />
       ))}
     </div>
   );
@@ -217,6 +250,7 @@ function QuadrantBox({ quadrant, items, isDragOver, onDragOver, onDragLeave, onD
 export default function TasksView({ onOpenDrawer }) {
   const [tasks, setTasks] = useState([]);
   const [dragOverKey, setDragOverKey] = useState(null);
+  const [dragOverTaskId, setDragOverTaskId] = useState(null);
   const [openTaskId, setOpenTaskId] = useState(null);
 
   useEffect(() => {
@@ -228,23 +262,33 @@ export default function TasksView({ onOpenDrawer }) {
   }
 
   async function handleAddToQuadrant(quadrant, title) {
-    await createTask({ title, quadrant: quadrant.key });
-    refresh();
+    // Optimistic: show it immediately at the end of the box instead of
+    // waiting on a create + full refetch round trip before it appears at
+    // all — that gap is what made it look like it "entered at the top,
+    // then populated at the bottom" (the input sits above the list while
+    // adding; the round trip was the delay before anything replaced it).
+    const tempId = `temp-${Date.now()}`;
+    const siblings = tasks.filter((t) => t.quadrant === quadrant.key);
+    const maxPosition = siblings.reduce((m, t) => Math.max(m, t.position ?? 0), -1);
+    const optimistic = { id: tempId, title, quadrant: quadrant.key, notes: null, due_date: null, status: 'open', position: maxPosition + 1 };
+    setTasks((prev) => [...prev, optimistic]);
+    const real = await createTask({ title, quadrant: quadrant.key });
+    setTasks((prev) => prev.map((t) => (t.id === tempId ? real : t)));
   }
 
   async function handleComplete(id) {
+    setTasks((prev) => prev.filter((t) => t.id !== id));
     await completeTask(id);
-    refresh();
   }
 
   async function handleDelete(id) {
+    setTasks((prev) => prev.filter((t) => t.id !== id));
     await deleteTask(id);
-    refresh();
   }
 
   async function handleSaveTask(id, updates) {
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
     await updateTask(id, updates);
-    refresh();
   }
 
   function handleDragStart(e, taskId) {
@@ -258,10 +302,35 @@ export default function TasksView({ onOpenDrawer }) {
     const taskId = Number(e.dataTransfer.getData('text/plain'));
     const task = tasks.find((t) => t.id === taskId);
     if (!task || task.quadrant === quadrant.key) return;
-    // Optimistic move so the card doesn't snap back while the request is in flight.
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, quadrant: quadrant.key } : t)));
-    await updateTask(taskId, { quadrant: quadrant.key });
-    refresh();
+    // Dropped on empty space in the box (not on a specific card) — append
+    // to the end of this quadrant's order.
+    const siblings = tasks.filter((t) => t.quadrant === quadrant.key);
+    const maxPosition = siblings.reduce((m, t) => Math.max(m, t.position ?? 0), -1);
+    const newPosition = maxPosition + 1;
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, quadrant: quadrant.key, position: newPosition } : t)));
+    await updateTask(taskId, { quadrant: quadrant.key, position: newPosition });
+  }
+
+  async function handleDropOnTask(e, quadrant, targetTask) {
+    e.preventDefault();
+    e.stopPropagation(); // don't also fire the box-level onDrop for this same drop
+    setDragOverKey(null);
+    setDragOverTaskId(null);
+    const taskId = Number(e.dataTransfer.getData('text/plain'));
+    if (taskId === targetTask.id) return;
+
+    // Insert immediately before the target card, wherever it came from —
+    // fractional position between it and its current previous sibling, so
+    // nothing else in the box needs renumbering.
+    const siblings = tasks
+      .filter((t) => t.quadrant === quadrant.key && t.id !== taskId)
+      .sort((a, b) => a.position - b.position);
+    const targetIndex = siblings.findIndex((t) => t.id === targetTask.id);
+    const prevSibling = siblings[targetIndex - 1];
+    const newPosition = prevSibling ? (prevSibling.position + targetTask.position) / 2 : targetTask.position - 1;
+
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, quadrant: quadrant.key, position: newPosition } : t)));
+    await updateTask(taskId, { quadrant: quadrant.key, position: newPosition });
   }
 
   const openTask = tasks.find((t) => t.id === openTaskId);
@@ -269,15 +338,16 @@ export default function TasksView({ onOpenDrawer }) {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      <TopBar title="Tasks" subtitle="drag a card to recategorize" onOpenDrawer={onOpenDrawer} />
+      <TopBar title="Tasks" subtitle="drag a card to recategorize or reorder" onOpenDrawer={onOpenDrawer} />
 
       <div style={{ flex: 1, minHeight: 0, padding: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: 16 }}>
         {QUADRANTS.map((q) => (
           <QuadrantBox
             key={q.key}
             quadrant={q}
-            items={tasks.filter((t) => t.quadrant === q.key)}
+            items={tasks.filter((t) => t.quadrant === q.key).sort((a, b) => a.position - b.position)}
             isDragOver={dragOverKey === q.key}
+            dragOverTaskId={dragOverTaskId}
             onDragOver={(e) => {
               e.preventDefault();
               if (dragOverKey !== q.key) setDragOverKey(q.key);
@@ -285,6 +355,13 @@ export default function TasksView({ onOpenDrawer }) {
             onDragLeave={() => setDragOverKey((k) => (k === q.key ? null : k))}
             onDrop={(e) => handleDrop(e, q)}
             onDragStart={handleDragStart}
+            onDragOverRow={(e, taskId) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (dragOverTaskId !== taskId) setDragOverTaskId(taskId);
+            }}
+            onDragLeaveRow={() => setDragOverTaskId(null)}
+            onDropOnRow={(e, quadrant, targetTask) => handleDropOnTask(e, quadrant, targetTask)}
             onComplete={handleComplete}
             onDelete={handleDelete}
             onAdd={(title) => handleAddToQuadrant(q, title)}

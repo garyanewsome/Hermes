@@ -36,10 +36,10 @@ def init_planner_db() -> None:
         has_table = conn.execute(
             "SELECT 1 FROM information_schema.tables WHERE table_name = 'tasks'"
         ).fetchone()
-        has_quadrant = conn.execute(
-            "SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'quadrant'"
+        has_current_columns = conn.execute(
+            "SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'position'"
         ).fetchone()
-        if has_table and not has_quadrant:
+        if has_table and not has_current_columns:
             conn.execute("DROP TABLE tasks")
 
         conn.execute(
@@ -51,6 +51,7 @@ def init_planner_db() -> None:
                 quadrant TEXT NOT NULL CHECK (quadrant IN ('do', 'schedule', 'next', 'backlog')),
                 status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'done')),
                 due_date DATE,
+                position DOUBLE PRECISION NOT NULL DEFAULT 0,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 completed_at TIMESTAMPTZ
             )
@@ -87,24 +88,27 @@ def create_task(
     notes: str | None = None,
 ) -> dict:
     with _connect() as conn:
+        # Append to the end of this quadrant's own order — the position
+        # space is per-quadrant, not global, so moving a task to a
+        # different quadrant never has to renumber anything there.
         row = conn.execute(
             """
-            INSERT INTO tasks (title, notes, quadrant, due_date)
-            VALUES (%s, %s, %s, %s)
-            RETURNING id, title, notes, quadrant, status, due_date
+            INSERT INTO tasks (title, notes, quadrant, due_date, position)
+            VALUES (%s, %s, %s, %s, COALESCE((SELECT MAX(position) + 1 FROM tasks WHERE quadrant = %s), 0))
+            RETURNING id, title, notes, quadrant, status, due_date, position
             """,
-            (title, notes, quadrant, due_date),
+            (title, notes, quadrant, due_date, quadrant),
         ).fetchone()
     return dict(row)
 
 
 def list_tasks(status: str | None = "open") -> list[dict]:
-    query = "SELECT id, title, notes, quadrant, status, due_date FROM tasks"
+    query = "SELECT id, title, notes, quadrant, status, due_date, position FROM tasks"
     params: tuple = ()
     if status:
         query += " WHERE status = %s"
         params = (status,)
-    query += " ORDER BY due_date NULLS LAST, created_at"
+    query += " ORDER BY quadrant, position"
     with _connect() as conn:
         rows = conn.execute(query, params).fetchall()
     return [dict(row) for row in rows]
@@ -114,7 +118,7 @@ def find_open_tasks_by_title(title_query: str) -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
             """
-            SELECT id, title, notes, quadrant, status, due_date
+            SELECT id, title, notes, quadrant, status, due_date, position
             FROM tasks
             WHERE status = 'open' AND title ILIKE %s
             ORDER BY created_at DESC
@@ -129,6 +133,7 @@ def update_task(
     quadrant: str | None = None,
     title: str | None = None,
     notes: str | None = None,
+    position: float | None = None,
 ) -> None:
     fields, params = [], []
     if quadrant is not None:
@@ -140,6 +145,9 @@ def update_task(
     if notes is not None:
         fields.append("notes = %s")
         params.append(notes)
+    if position is not None:
+        fields.append("position = %s")
+        params.append(position)
     if not fields:
         return
     params.append(task_id)
