@@ -18,7 +18,12 @@ export default function ChatView({ onOpenDrawer }) {
   const messagesRef = useRef(null);
 
   useEffect(() => {
-    getModels().then(setModels).catch(() => setModels([]));
+    getModels()
+      .then((list) => {
+        setModels(list);
+        if (list.includes('qwen3:14b')) setModel('qwen3:14b');
+      })
+      .catch(() => setModels([]));
     refreshConversations();
   }, []);
 
@@ -164,6 +169,7 @@ export default function ChatView({ onOpenDrawer }) {
           {messages.map((m, i) => (
             <div
               key={i}
+              className="msg-bubble"
               style={{
                 maxWidth: '70%',
                 alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
