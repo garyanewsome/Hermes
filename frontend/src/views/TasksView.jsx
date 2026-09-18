@@ -93,10 +93,11 @@ function TaskRow({ task, quadrant, isDragOver, onDragStart, onDragOverRow, onDra
 function TaskModal({ task, quadrant, onClose, onSave }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes || '');
+  const [dueDate, setDueDate] = useState(task.due_date || '');
 
   async function handleSave() {
     if (!title.trim()) return;
-    await onSave(task.id, { title: title.trim(), notes });
+    await onSave(task.id, { title: title.trim(), notes, due_date: dueDate });
     onClose();
   }
 
@@ -136,6 +137,24 @@ function TaskModal({ task, quadrant, onClose, onSave }) {
           rows={5}
           style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 8, padding: '10px 12px', fontSize: 13, resize: 'vertical', fontFamily: 'inherit' }}
         />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <label style={{ fontSize: 12, color: 'var(--text-dim)' }}>Due</label>
+          <input
+            type="date"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+            style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 6, padding: '5px 8px', fontSize: 13 }}
+          />
+          {dueDate && (
+            <button
+              type="button"
+              onClick={() => setDueDate('')}
+              style={{ background: 'transparent', border: 'none', color: 'var(--text-faint)', fontSize: 12, textDecoration: 'underline', padding: 0 }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button onClick={onClose} style={{ background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-dim)', borderRadius: 8, padding: '7px 14px', fontSize: 13 }}>
             Cancel

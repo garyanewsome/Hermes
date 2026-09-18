@@ -136,6 +136,7 @@ def update_task(
     title: str | None = None,
     notes: str | None = None,
     position: float | None = None,
+    due_date: str | None = None,
 ) -> None:
     fields, params = [], []
     if quadrant is not None:
@@ -150,6 +151,11 @@ def update_task(
     if position is not None:
         fields.append("position = %s")
         params.append(position)
+    if due_date is not None:
+        # "" (present but empty) means clear it — a real NULL, not the
+        # literal string "" — vs None meaning the field was never sent.
+        fields.append("due_date = %s")
+        params.append(due_date or None)
     if not fields:
         return
     params.append(task_id)
@@ -171,6 +177,13 @@ def delete_task(task_id: int) -> None:
 
 
 # ---- Habits ------------------------------------------------------------
+
+
+def delete_habit(habit_id: int) -> None:
+    # habit_logs has ON DELETE CASCADE on its habit_id foreign key, so its
+    # rows for this habit go with it — no separate cleanup needed.
+    with _connect() as conn:
+        conn.execute("DELETE FROM habits WHERE id = %s", (habit_id,))
 
 
 def get_or_create_habit(name: str) -> dict:

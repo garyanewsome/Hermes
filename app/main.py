@@ -71,6 +71,11 @@ class TaskUpdateRequest(BaseModel):
     title: str | None = None
     notes: str | None = None
     position: float | None = None
+    # Distinguishing "omitted" (None, don't touch) from "clear it" needs a
+    # value that isn't None but also isn't a real date — "" means clear,
+    # matching how title/notes already treat an empty-but-present string as
+    # a real value, not "field not sent". See update_task's due_date arg.
+    due_date: str | None = None
 
 
 @app.get("/health")
@@ -168,7 +173,12 @@ def post_task(request: TaskRequest):
 @app.patch("/tasks/{task_id}")
 def patch_task(task_id: int, request: TaskUpdateRequest):
     planner_db.update_task(
-        task_id, quadrant=request.quadrant, title=request.title, notes=request.notes, position=request.position
+        task_id,
+        quadrant=request.quadrant,
+        title=request.title,
+        notes=request.notes,
+        position=request.position,
+        due_date=request.due_date,
     )
     return {"status": "ok"}
 
@@ -205,6 +215,12 @@ def post_habit_log(request: HabitLogRequest):
 @app.patch("/habits/{habit_id}/log")
 def patch_habit_log(habit_id: int, request: HabitDayRequest):
     planner_db.set_habit_log(habit_id, date.fromisoformat(request.date), request.logged)
+    return {"status": "ok"}
+
+
+@app.delete("/habits/{habit_id}")
+def remove_habit(habit_id: int):
+    planner_db.delete_habit(habit_id)
     return {"status": "ok"}
 
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
-import { listHabits, logHabit, setHabitDay } from '../api.js';
+import { deleteHabit, listHabits, logHabit, setHabitDay } from '../api.js';
 
 function Dot({ day, onToggle }) {
   return (
@@ -21,10 +21,52 @@ function Dot({ day, onToggle }) {
   );
 }
 
+function ConfirmDeleteHabit({ habit, onCancel, onConfirm }) {
+  return (
+    <div
+      onClick={onCancel}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}
+    >
+      <form
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => {
+          e.preventDefault();
+          onConfirm();
+        }}
+        style={{
+          width: 340,
+          maxWidth: '90vw',
+          background: 'var(--bg)',
+          border: '1px solid var(--accent)',
+          boxShadow: '0 0 20px var(--accent-glow)',
+          borderRadius: 12,
+          padding: 20,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 14,
+        }}
+      >
+        <div style={{ fontSize: 14, color: 'var(--text)' }}>
+          Delete "{habit.name}"? Its whole log history goes with it — this can't be undone.
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button type="button" onClick={onCancel} style={{ background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-dim)', borderRadius: 8, padding: '7px 14px', fontSize: 13 }}>
+            Cancel
+          </button>
+          <button type="submit" autoFocus style={{ background: '#ff6b6b', border: 'none', color: '#2b0808', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 600 }}>
+            Delete
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export default function HabitsView({ onOpenDrawer }) {
   const [habits, setHabits] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
+  const [confirmingDelete, setConfirmingDelete] = useState(null); // habit, or null
 
   useEffect(() => {
     refresh();
@@ -52,6 +94,13 @@ export default function HabitsView({ onOpenDrawer }) {
     setShowForm(false);
     await logHabit(trimmed);
     refresh();
+  }
+
+  async function handleConfirmDelete() {
+    const habit = confirmingDelete;
+    setConfirmingDelete(null);
+    setHabits((prev) => prev.filter((h) => h.id !== habit.id));
+    await deleteHabit(habit.id);
   }
 
   return (
@@ -97,6 +146,16 @@ export default function HabitsView({ onOpenDrawer }) {
             <div style={{ fontSize: 13, color: h.streak > 0 ? 'var(--accent)' : 'var(--text-faint)', fontWeight: 600, minWidth: 90, textAlign: 'right' }}>
               {h.streak > 0 ? `${h.streak} day streak` : 'no streak yet'}
             </div>
+            <button
+              onClick={() => setConfirmingDelete(h)}
+              aria-label="Delete habit"
+              title="Delete habit"
+              style={{ flexShrink: 0, width: 22, height: 22, background: 'transparent', border: 'none', color: 'var(--text-faint)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M2.5 3.5H11.5M5.5 3.5V2.2C5.5 1.9 5.7 1.7 6 1.7H8C8.3 1.7 8.5 1.9 8.5 2.2V3.5M5.8 6V10M8.2 6V10M3.3 3.5L3.8 11.3C3.8 11.7 4.2 12 4.6 12H9.4C9.8 12 10.2 11.7 10.2 11.3L10.7 3.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
           </div>
         ))}
 
@@ -133,6 +192,10 @@ export default function HabitsView({ onOpenDrawer }) {
           </button>
         )}
       </div>
+
+      {confirmingDelete && (
+        <ConfirmDeleteHabit habit={confirmingDelete} onCancel={() => setConfirmingDelete(null)} onConfirm={handleConfirmDelete} />
+      )}
     </div>
   );
 }

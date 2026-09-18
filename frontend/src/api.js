@@ -85,3 +85,7 @@ export async function setHabitDay(habitId, date, logged) {
     body: JSON.stringify({ date, logged }),
   });
 }
+
+export async function deleteHabit(habitId) {
+  await fetch(`/habits/${habitId}`, { method: 'DELETE' });
+}
