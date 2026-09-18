@@ -10,9 +10,23 @@ export default function App() {
 
   return (
     <div data-view={view} style={{ height: '100%', display: 'flex', background: 'var(--bg)', color: 'var(--text)' }}>
-      {view === 'chat' && <ChatView onOpenDrawer={() => setDrawerOpen(true)} />}
-      {view === 'tasks' && <TasksView onOpenDrawer={() => setDrawerOpen(true)} />}
-      {view === 'habits' && <HabitsView onOpenDrawer={() => setDrawerOpen(true)} />}
+      {/* All three views stay mounted always — conditionally rendering them
+          (view === 'chat' && <ChatView/>) unmounts whichever one you leave,
+          destroying its local state (which conversation was open and its
+          messages, loaded tasks, ...). display:none removes it from layout
+          with zero visual/interaction footprint but keeps the component
+          (and its state) alive; display:contents on the active one makes
+          this wrapper invisible to the outer flex layout, so the view's own
+          flex:1 root behaves exactly as if it were a direct child. */}
+      <div style={{ display: view === 'chat' ? 'contents' : 'none' }}>
+        <ChatView onOpenDrawer={() => setDrawerOpen(true)} />
+      </div>
+      <div style={{ display: view === 'tasks' ? 'contents' : 'none' }}>
+        <TasksView onOpenDrawer={() => setDrawerOpen(true)} />
+      </div>
+      <div style={{ display: view === 'habits' ? 'contents' : 'none' }}>
+        <HabitsView onOpenDrawer={() => setDrawerOpen(true)} />
+      </div>
 
       <NavDrawer open={drawerOpen} activeView={view} onNavigate={setView} onClose={() => setDrawerOpen(false)} />
     </div>
