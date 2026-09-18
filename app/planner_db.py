@@ -70,6 +70,30 @@ def init_planner_db() -> None:
             )
             """
         )
+        # Deliberately separate from `tasks` — a plain everyday checklist
+        # (groceries, errands), kept simple on purpose so it never grows
+        # the quadrant/notes/due-date machinery that makes sense for the
+        # music-production/dev task board but would just be friction here.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS todo_lists (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS todo_items (
+                id SERIAL PRIMARY KEY,
+                list_id INTEGER NOT NULL REFERENCES todo_lists(id) ON DELETE CASCADE,
+                text TEXT NOT NULL,
+                done BOOLEAN NOT NULL DEFAULT false,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
 
 
 # ---- Tasks -----------------------------------------------------------
@@ -285,3 +309,78 @@ def list_habits_with_streaks() -> list[dict]:
         }
         for row in rows
     ]
+
+
+# ---- Todo lists ----------------------------------------------------------
+
+
+def list_todo_lists() -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT l.id, l.name,
+                   count(i.id) FILTER (WHERE NOT i.done) AS open_count
+            FROM todo_lists l
+            LEFT JOIN todo_items i ON i.list_id = l.id
+            GROUP BY l.id, l.name
+            ORDER BY l.created_at
+            """
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def create_todo_list(name: str) -> dict:
+    with _connect() as conn:
+        row = conn.execute(
+            "INSERT INTO todo_lists (name) VALUES (%s) RETURNING id, name",
+            (name,),
+        ).fetchone()
+    return {**dict(row), "open_count": 0}
+
+
+def rename_todo_list(list_id: int, name: str) -> None:
+    with _connect() as conn:
+        conn.execute("UPDATE todo_lists SET name = %s WHERE id = %s", (name, list_id))
+
+
+def delete_todo_list(list_id: int) -> None:
+    # todo_items has ON DELETE CASCADE on its list_id foreign key, so its
+    # rows for this list go with it — no separate cleanup needed.
+    with _connect() as conn:
+        conn.execute("DELETE FROM todo_lists WHERE id = %s", (list_id,))
+
+
+def list_todo_items(list_id: int) -> list[dict]:
+    # Open items first (in the order they were added), done items below —
+    # the common shape for a simple checklist, so finishing something
+    # doesn't reshuffle what you're still working through.
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, list_id, text, done, created_at
+            FROM todo_items
+            WHERE list_id = %s
+            ORDER BY done, created_at
+            """,
+            (list_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def create_todo_item(list_id: int, text: str) -> dict:
+    with _connect() as conn:
+        row = conn.execute(
+            "INSERT INTO todo_items (list_id, text) VALUES (%s, %s) RETURNING id, list_id, text, done, created_at",
+            (list_id, text),
+        ).fetchone()
+    return dict(row)
+
+
+def set_todo_item_done(item_id: int, done: bool) -> None:
+    with _connect() as conn:
+        conn.execute("UPDATE todo_items SET done = %s WHERE id = %s", (done, item_id))
+
+
+def delete_todo_item(item_id: int) -> None:
+    with _connect() as conn:
+        conn.execute("DELETE FROM todo_items WHERE id = %s", (item_id,))

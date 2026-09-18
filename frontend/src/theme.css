@@ -33,6 +33,13 @@
   --accent-wash: rgba(255, 79, 192, 0.1);
 }
 
+[data-view="todo"] {
+  --accent: #b46bff;
+  --accent-text: #23103a;
+  --accent-glow: rgba(180, 107, 255, 0.35);
+  --accent-wash: rgba(180, 107, 255, 0.1);
+}
+
 html, body, #root {
   height: 100%;
   margin: 0;

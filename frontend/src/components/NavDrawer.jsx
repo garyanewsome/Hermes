@@ -34,6 +34,19 @@ const ITEMS = [
       </svg>
     ),
   },
+  {
+    key: 'todo',
+    label: 'Todo',
+    icon: (color) => (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="2" y="2.5" width="3.5" height="3.5" rx="1" stroke={color} strokeWidth="1.2" />
+        <path d="M2.9 4.2l0.7 0.7 1.3-1.3" stroke={color} strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M7.5 4.2H14" stroke={color} strokeWidth="1.3" strokeLinecap="round" />
+        <rect x="2" y="10" width="3.5" height="3.5" rx="1" stroke={color} strokeWidth="1.2" />
+        <path d="M7.5 11.7H14" stroke={color} strokeWidth="1.3" strokeLinecap="round" />
+      </svg>
+    ),
+  },
 ];
 
 export default function NavDrawer({ open, activeView, onNavigate, onClose }) {

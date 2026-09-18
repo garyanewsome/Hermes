@@ -119,3 +119,57 @@ export async function setHabitDay(habitId, date, logged) {
 export async function deleteHabit(habitId) {
   await apiFetch(`/habits/${habitId}`, { method: 'DELETE' });
 }
+
+export async function listTodoLists() {
+  const res = await apiFetch('/todo-lists');
+  const data = await res.json();
+  return data.lists;
+}
+
+export async function createTodoList(name) {
+  const res = await apiFetch('/todo-lists', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  return res.json();
+}
+
+export async function renameTodoList(listId, name) {
+  await apiFetch(`/todo-lists/${listId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function deleteTodoList(listId) {
+  await apiFetch(`/todo-lists/${listId}`, { method: 'DELETE' });
+}
+
+export async function listTodoItems(listId) {
+  const res = await apiFetch(`/todo-lists/${listId}/items`);
+  const data = await res.json();
+  return data.items;
+}
+
+export async function createTodoItem(listId, text) {
+  const res = await apiFetch(`/todo-lists/${listId}/items`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+  return res.json();
+}
+
+export async function setTodoItemDone(itemId, done) {
+  await apiFetch(`/todo-items/${itemId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ done }),
+  });
+}
+
+export async function deleteTodoItem(itemId) {
+  await apiFetch(`/todo-items/${itemId}`, { method: 'DELETE' });
+}

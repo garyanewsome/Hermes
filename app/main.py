@@ -83,22 +83,39 @@ class LoginRequest(BaseModel):
     password: str
 
 
-# Everything under these prefixes needs a valid session cookie — /login,
-# /logout, /health, and the static SPA shell (served at "/") stay public.
-# The shell itself is harmless without a session: it's just JS/CSS, the
-# login screen is part of it, and it can't fetch anything real without
-# logging in first. Enforced as one middleware (not per-route Depends) so a
-# new route can't accidentally ship unprotected by omission.
-_PUBLIC_PATHS = {"/login", "/logout", "/health"}
-_PROTECTED_PREFIXES = ("/chat", "/models", "/conversations", "/tasks", "/habits", "/auth")
+class TodoListRequest(BaseModel):
+    name: str
+
+
+class TodoItemRequest(BaseModel):
+    text: str
+
+
+class TodoItemUpdateRequest(BaseModel):
+    done: bool
+
+
+# Deny-by-default: every request needs a valid session cookie UNLESS it's
+# explicitly public. /login, /logout, /health, and the static SPA shell
+# (index.html, the JS/CSS bundle, icons, the manifest) stay public — the
+# shell itself is harmless without a session, it's just code, and the login
+# screen is part of it. Everything else — including any future API route —
+# is protected automatically just by not being on this list. An earlier
+# version of this did the opposite (an allow-list of PROTECTED prefixes),
+# which meant a new route was unprotected by default unless someone
+# remembered to add it — exactly backwards for a security check, and the
+# kind of gap that's invisible until something new ships through it.
+_PUBLIC_PATHS = {"/login", "/logout", "/health", "/", "/manifest.webmanifest"}
+_PUBLIC_PREFIXES = ("/assets/", "/icons/")
 
 
 @app.middleware("http")
 async def require_auth(request: Request, call_next):
     path = request.url.path
-    if path not in _PUBLIC_PATHS and path.startswith(_PROTECTED_PREFIXES):
-        if not auth.verify_session_token(request.cookies.get(auth.COOKIE_NAME)):
-            return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+    if path in _PUBLIC_PATHS or path.startswith(_PUBLIC_PREFIXES):
+        return await call_next(request)
+    if not auth.verify_session_token(request.cookies.get(auth.COOKIE_NAME)):
+        return JSONResponse({"detail": "Not authenticated"}, status_code=401)
     return await call_next(request)
 
 
@@ -274,6 +291,50 @@ def patch_habit_log(habit_id: int, request: HabitDayRequest):
 @app.delete("/habits/{habit_id}")
 def remove_habit(habit_id: int):
     planner_db.delete_habit(habit_id)
+    return {"status": "ok"}
+
+
+@app.get("/todo-lists")
+def get_todo_lists():
+    return {"lists": planner_db.list_todo_lists()}
+
+
+@app.post("/todo-lists")
+def post_todo_list(request: TodoListRequest):
+    return planner_db.create_todo_list(request.name)
+
+
+@app.patch("/todo-lists/{list_id}")
+def patch_todo_list(list_id: int, request: TodoListRequest):
+    planner_db.rename_todo_list(list_id, request.name)
+    return {"status": "ok"}
+
+
+@app.delete("/todo-lists/{list_id}")
+def remove_todo_list(list_id: int):
+    planner_db.delete_todo_list(list_id)
+    return {"status": "ok"}
+
+
+@app.get("/todo-lists/{list_id}/items")
+def get_todo_items(list_id: int):
+    return {"items": planner_db.list_todo_items(list_id)}
+
+
+@app.post("/todo-lists/{list_id}/items")
+def post_todo_item(list_id: int, request: TodoItemRequest):
+    return planner_db.create_todo_item(list_id, request.text)
+
+
+@app.patch("/todo-items/{item_id}")
+def patch_todo_item(item_id: int, request: TodoItemUpdateRequest):
+    planner_db.set_todo_item_done(item_id, request.done)
+    return {"status": "ok"}
+
+
+@app.delete("/todo-items/{item_id}")
+def remove_todo_item(item_id: int):
+    planner_db.delete_todo_item(item_id)
     return {"status": "ok"}
 
 

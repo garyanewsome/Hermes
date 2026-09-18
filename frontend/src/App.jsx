@@ -4,6 +4,7 @@ import LoginScreen from './components/LoginScreen.jsx';
 import ChatView from './views/ChatView.jsx';
 import TasksView from './views/TasksView.jsx';
 import HabitsView from './views/HabitsView.jsx';
+import TodoView from './views/TodoView.jsx';
 import { checkAuth } from './api.js';
 
 export default function App() {
@@ -49,6 +50,9 @@ export default function App() {
       </div>
       <div style={{ display: view === 'habits' ? 'contents' : 'none' }}>
         <HabitsView onOpenDrawer={() => setDrawerOpen(true)} />
+      </div>
+      <div style={{ display: view === 'todo' ? 'contents' : 'none' }}>
+        <TodoView onOpenDrawer={() => setDrawerOpen(true)} />
       </div>
 
       <NavDrawer open={drawerOpen} activeView={view} onNavigate={setView} onClose={() => setDrawerOpen(false)} />
