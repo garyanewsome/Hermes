@@ -17,6 +17,9 @@ export default defineConfig({
       '/tasks': BACKEND,
       '/habits': BACKEND,
       '/health': BACKEND,
+      '/login': BACKEND,
+      '/logout': BACKEND,
+      '/auth': BACKEND,
     },
   },
 });

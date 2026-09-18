@@ -33,6 +33,18 @@ PLANNER_DB_URL = os.environ.get(
     "PLANNER_DB_URL", "postgresql://hermes:hermes@localhost:5432/planner"
 )
 
+# Single shared password gating the whole app — appropriate for a personal,
+# single-user tool, not a multi-account system. Required because Hermes is
+# now reachable via a NodePort (see k8s/hermes-api.yaml) as well as the
+# hostname-based Ingress, and a NodePort bypasses Traefik entirely, so any
+# auth enforced at the ingress/reverse-proxy layer wouldn't cover it. Auth
+# lives in the app itself so both paths are covered by the same check.
+AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "hermes")
+# Signs the session cookie issued after a successful login. Must be set to a
+# real random value in production (K8s secret) — the dev default is fine
+# locally but would let anyone forge a valid session if used in deployment.
+SESSION_SECRET = os.environ.get("SESSION_SECRET", "dev-only-insecure-secret")
+
 SYSTEM_PROMPT = os.environ.get(
     "SYSTEM_PROMPT",
     "You are Hermes, a helpful personal assistant. You have access to tools — "

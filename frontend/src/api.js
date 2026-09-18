@@ -1,23 +1,53 @@
+// Thin wrapper around fetch so every API call reacts the same way to a
+// 401 (session cookie missing or expired) — dispatching an event App.jsx
+// listens for to drop back to the login screen, instead of each call site
+// having to check for it individually.
+async function apiFetch(url, opts) {
+  const res = await fetch(url, opts);
+  if (res.status === 401) {
+    window.dispatchEvent(new Event('hermes:unauthorized'));
+  }
+  return res;
+}
+
+export async function login(password) {
+  const res = await fetch('/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+  return res.ok;
+}
+
+export async function logout() {
+  await fetch('/logout', { method: 'POST' });
+}
+
+export async function checkAuth() {
+  const res = await fetch('/auth/check');
+  return res.ok;
+}
+
 export async function getModels() {
-  const res = await fetch('/models');
+  const res = await apiFetch('/models');
   const data = await res.json();
   return data.models;
 }
 
 export async function listConversations() {
-  const res = await fetch('/conversations');
+  const res = await apiFetch('/conversations');
   const data = await res.json();
   return data.conversations;
 }
 
 export async function getConversation(id) {
-  const res = await fetch('/conversations/' + id);
+  const res = await apiFetch('/conversations/' + id);
   if (!res.ok) return null;
   return res.json();
 }
 
 export async function renameConversation(id, title) {
-  await fetch('/conversations/' + id, {
+  await apiFetch('/conversations/' + id, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title }),
@@ -25,17 +55,17 @@ export async function renameConversation(id, title) {
 }
 
 export async function deleteConversation(id) {
-  await fetch('/conversations/' + id, { method: 'DELETE' });
+  await apiFetch('/conversations/' + id, { method: 'DELETE' });
 }
 
 export async function listTasks(status = 'open') {
-  const res = await fetch('/tasks?status=' + status);
+  const res = await apiFetch('/tasks?status=' + status);
   const data = await res.json();
   return data.tasks;
 }
 
 export async function createTask({ title, quadrant, dueDate, notes }) {
-  const res = await fetch('/tasks', {
+  const res = await apiFetch('/tasks', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title, quadrant, due_date: dueDate || null, notes: notes || null }),
@@ -44,7 +74,7 @@ export async function createTask({ title, quadrant, dueDate, notes }) {
 }
 
 export async function updateTask(id, updates) {
-  await fetch(`/tasks/${id}`, {
+  await apiFetch(`/tasks/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(updates),
@@ -52,25 +82,25 @@ export async function updateTask(id, updates) {
 }
 
 export async function completeTask(id) {
-  await fetch(`/tasks/${id}/complete`, { method: 'PATCH' });
+  await apiFetch(`/tasks/${id}/complete`, { method: 'PATCH' });
 }
 
 export async function reopenTask(id) {
-  await fetch(`/tasks/${id}/reopen`, { method: 'PATCH' });
+  await apiFetch(`/tasks/${id}/reopen`, { method: 'PATCH' });
 }
 
 export async function deleteTask(id) {
-  await fetch(`/tasks/${id}`, { method: 'DELETE' });
+  await apiFetch(`/tasks/${id}`, { method: 'DELETE' });
 }
 
 export async function listHabits() {
-  const res = await fetch('/habits');
+  const res = await apiFetch('/habits');
   const data = await res.json();
   return data.habits;
 }
 
 export async function logHabit(name) {
-  const res = await fetch('/habits/log', {
+  const res = await apiFetch('/habits/log', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name }),
@@ -79,7 +109,7 @@ export async function logHabit(name) {
 }
 
 export async function setHabitDay(habitId, date, logged) {
-  await fetch(`/habits/${habitId}/log`, {
+  await apiFetch(`/habits/${habitId}/log`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ date, logged }),
@@ -87,5 +117,5 @@ export async function setHabitDay(habitId, date, logged) {
 }
 
 export async function deleteHabit(habitId) {
-  await fetch(`/habits/${habitId}`, { method: 'DELETE' });
+  await apiFetch(`/habits/${habitId}`, { method: 'DELETE' });
 }

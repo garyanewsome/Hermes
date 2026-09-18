@@ -79,6 +79,10 @@ export default function ChatView({ onOpenDrawer }) {
         body: JSON.stringify({ message: text, conversation_id: currentId, model: model || null, think }),
         signal: controller.signal,
       });
+      if (response.status === 401) {
+        window.dispatchEvent(new Event('hermes:unauthorized'));
+        throw new Error('Not logged in');
+      }
       if (!response.ok) throw new Error('Request failed: ' + response.status);
 
       const reader = response.body.getReader();

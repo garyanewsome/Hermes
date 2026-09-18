@@ -1,12 +1,35 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import NavDrawer from './components/NavDrawer.jsx';
+import LoginScreen from './components/LoginScreen.jsx';
 import ChatView from './views/ChatView.jsx';
 import TasksView from './views/TasksView.jsx';
 import HabitsView from './views/HabitsView.jsx';
+import { checkAuth } from './api.js';
 
 export default function App() {
   const [view, setView] = useState('chat');
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // null = still checking, so we don't flash the login screen on a normal
+  // page load before the /auth/check round trip lands.
+  const [authenticated, setAuthenticated] = useState(null);
+
+  useEffect(() => {
+    checkAuth().then(setAuthenticated);
+    // Any API call anywhere in the app can hit this if the session cookie
+    // expires mid-use — drop back to the login screen instead of leaving
+    // views stuck silently failing every request.
+    const onUnauthorized = () => setAuthenticated(false);
+    window.addEventListener('hermes:unauthorized', onUnauthorized);
+    return () => window.removeEventListener('hermes:unauthorized', onUnauthorized);
+  }, []);
+
+  if (authenticated === null) {
+    return <div style={{ height: '100%', background: 'var(--bg)' }} />;
+  }
+
+  if (!authenticated) {
+    return <LoginScreen onSuccess={() => setAuthenticated(true)} />;
+  }
 
   return (
     <div data-view={view} style={{ height: '100%', display: 'flex', background: 'var(--bg)', color: 'var(--text)' }}>

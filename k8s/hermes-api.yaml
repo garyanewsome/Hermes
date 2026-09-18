@@ -33,6 +33,16 @@ spec:
             secretKeyRef:
               name: planner-postgres-secret
               key: hermes-db-url
+        - name: AUTH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: hermes-auth-secret
+              key: auth-password
+        - name: SESSION_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: hermes-auth-secret
+              key: session-secret
         volumeMounts:
         - name: hermes-data
           mountPath: /data
@@ -51,6 +61,27 @@ spec:
   ports:
   - port: 8000
     targetPort: 8000
+---
+# Direct-access NodePort — reachable as http://<any-cluster-node-ip>:30080
+# from anything on the LAN with zero client-side setup: no DNS, no
+# /etc/hosts, no SSH keys. This is what makes Hermes usable from phones and
+# tablets, which have no practical way to do the per-device hosts-file
+# editing the hermes.home.local Ingress route relies on. A NodePort routes
+# straight to the pod, bypassing Traefik entirely — that's why the app has
+# its own login gate (app/auth.py) instead of relying on ingress-level auth,
+# which would only ever cover the hostname path below.
+apiVersion: v1
+kind: Service
+metadata:
+  name: hermes-api-nodeport
+spec:
+  type: NodePort
+  selector:
+    app: hermes-api
+  ports:
+  - port: 8000
+    targetPort: 8000
+    nodePort: 30080
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress

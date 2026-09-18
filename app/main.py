@@ -3,11 +3,12 @@ import logging
 from datetime import date
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from app import auth
 from app.chat import list_models, run_chat_stream
 from app.db import (
     add_message,
@@ -76,6 +77,58 @@ class TaskUpdateRequest(BaseModel):
     # matching how title/notes already treat an empty-but-present string as
     # a real value, not "field not sent". See update_task's due_date arg.
     due_date: str | None = None
+
+
+class LoginRequest(BaseModel):
+    password: str
+
+
+# Everything under these prefixes needs a valid session cookie — /login,
+# /logout, /health, and the static SPA shell (served at "/") stay public.
+# The shell itself is harmless without a session: it's just JS/CSS, the
+# login screen is part of it, and it can't fetch anything real without
+# logging in first. Enforced as one middleware (not per-route Depends) so a
+# new route can't accidentally ship unprotected by omission.
+_PUBLIC_PATHS = {"/login", "/logout", "/health"}
+_PROTECTED_PREFIXES = ("/chat", "/models", "/conversations", "/tasks", "/habits", "/auth")
+
+
+@app.middleware("http")
+async def require_auth(request: Request, call_next):
+    path = request.url.path
+    if path not in _PUBLIC_PATHS and path.startswith(_PROTECTED_PREFIXES):
+        if not auth.verify_session_token(request.cookies.get(auth.COOKIE_NAME)):
+            return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+    return await call_next(request)
+
+
+@app.post("/login")
+def login(request: LoginRequest):
+    if not auth.check_password(request.password):
+        raise HTTPException(status_code=401, detail="Incorrect password")
+    response = JSONResponse({"status": "ok"})
+    response.set_cookie(
+        auth.COOKIE_NAME,
+        auth.create_session_token(),
+        max_age=auth.SESSION_LIFETIME_SECONDS,
+        httponly=True,
+        samesite="lax",
+    )
+    return response
+
+
+@app.post("/logout")
+def logout():
+    response = JSONResponse({"status": "ok"})
+    response.delete_cookie(auth.COOKIE_NAME)
+    return response
+
+
+@app.get("/auth/check")
+def auth_check():
+    # Reaching this handler at all means the middleware already validated
+    # the session cookie, so there's nothing left to check.
+    return {"authenticated": True}
 
 
 @app.get("/health")
