@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
 import { completeTask, createTask, deleteTask, listTasks, reopenTask, updateTask } from '../api.js';
+import useIsMobile from '../hooks/useIsMobile.js';
 
 const QUADRANTS = [
   { key: 'do', label: 'TODO', color: '#3bffa0', glow: 'rgba(59,255,160,0.35)' },
@@ -90,7 +91,7 @@ function TaskRow({ task, quadrant, isDragOver, onDragStart, onDragOverRow, onDra
   );
 }
 
-function TaskModal({ task, quadrant, onClose, onSave }) {
+function TaskModal({ task, quadrant, onClose, onSave, onMove }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes || '');
   const [dueDate, setDueDate] = useState(task.due_date || '');
@@ -155,6 +156,24 @@ function TaskModal({ task, quadrant, onClose, onSave }) {
             </button>
           )}
         </div>
+        <div>
+          {/* Dragging cards between quadrants uses the HTML5 drag API,
+              which doesn't fire from touch input at all — this is the
+              only way to recategorize a task on a phone/tablet. */}
+          <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 6 }}>Move to</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {QUADRANTS.filter((q) => q.key !== task.quadrant).map((q) => (
+              <button
+                key={q.key}
+                type="button"
+                onClick={() => onMove(q.key)}
+                style={{ fontSize: 11, padding: '5px 10px', borderRadius: 6, background: 'transparent', border: `1px solid ${q.color}`, color: q.color }}
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button onClick={onClose} style={{ background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-dim)', borderRadius: 8, padding: '7px 14px', fontSize: 13 }}>
             Cancel
@@ -184,6 +203,7 @@ function QuadrantBox({
   onDelete,
   onAdd,
   onOpen,
+  isMobile,
 }) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState('');
@@ -208,11 +228,12 @@ function QuadrantBox({
         boxShadow: isDragOver || quadrant.dim ? 'none' : `0 0 10px ${quadrant.glow}`,
         borderStyle: isDragOver ? 'dashed' : 'solid',
         borderRadius: 12,
-        padding: '18px 20px',
+        padding: isMobile ? '14px 14px' : '18px 20px',
         display: 'flex',
         flexDirection: 'column',
         gap: 10,
         overflowY: 'auto',
+        maxHeight: isMobile ? '42vh' : 'none',
         transition: 'border-color 0.1s ease',
       }}
     >
@@ -339,6 +360,7 @@ export default function TasksView({ onOpenDrawer }) {
   const [dragOverKey, setDragOverKey] = useState(null);
   const [dragOverTaskId, setDragOverTaskId] = useState(null);
   const [openTaskId, setOpenTaskId] = useState(null);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     refresh();
@@ -402,19 +424,22 @@ export default function TasksView({ onOpenDrawer }) {
     e.dataTransfer.effectAllowed = 'move';
   }
 
+  async function moveTaskToQuadrant(taskId, quadrantKey) {
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task || task.quadrant === quadrantKey) return;
+    // Append to the end of the target quadrant's own order.
+    const siblings = tasks.filter((t) => t.quadrant === quadrantKey);
+    const maxPosition = siblings.reduce((m, t) => Math.max(m, t.position ?? 0), -1);
+    const newPosition = maxPosition + 1;
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, quadrant: quadrantKey, position: newPosition } : t)));
+    await updateTask(taskId, { quadrant: quadrantKey, position: newPosition });
+  }
+
   async function handleDrop(e, quadrant) {
     e.preventDefault();
     setDragOverKey(null);
     const taskId = Number(e.dataTransfer.getData('text/plain'));
-    const task = tasks.find((t) => t.id === taskId);
-    if (!task || task.quadrant === quadrant.key) return;
-    // Dropped on empty space in the box (not on a specific card) — append
-    // to the end of this quadrant's order.
-    const siblings = tasks.filter((t) => t.quadrant === quadrant.key);
-    const maxPosition = siblings.reduce((m, t) => Math.max(m, t.position ?? 0), -1);
-    const newPosition = maxPosition + 1;
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, quadrant: quadrant.key, position: newPosition } : t)));
-    await updateTask(taskId, { quadrant: quadrant.key, position: newPosition });
+    await moveTaskToQuadrant(taskId, quadrant.key);
   }
 
   async function handleDropOnTask(e, quadrant, targetTask) {
@@ -476,7 +501,13 @@ export default function TasksView({ onOpenDrawer }) {
       </TopBar>
 
       {view === 'board' ? (
-        <div style={{ flex: 1, minHeight: 0, padding: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: 16 }}>
+        <div
+          style={
+            isMobile
+              ? { flex: 1, minHeight: 0, padding: 12, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }
+              : { flex: 1, minHeight: 0, padding: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: 16 }
+          }
+        >
           {QUADRANTS.map((q) => (
             <QuadrantBox
               key={q.key}
@@ -484,6 +515,7 @@ export default function TasksView({ onOpenDrawer }) {
               items={tasks.filter((t) => t.quadrant === q.key).sort((a, b) => a.position - b.position)}
               isDragOver={dragOverKey === q.key}
               dragOverTaskId={dragOverTaskId}
+              isMobile={isMobile}
               onDragOver={(e) => {
                 e.preventDefault();
                 if (dragOverKey !== q.key) setDragOverKey(q.key);
@@ -515,6 +547,10 @@ export default function TasksView({ onOpenDrawer }) {
           quadrant={openTaskQuadrant}
           onClose={() => setOpenTaskId(null)}
           onSave={handleSaveTask}
+          onMove={(quadrantKey) => {
+            moveTaskToQuadrant(openTask.id, quadrantKey);
+            setOpenTaskId(null);
+          }}
         />
       )}
     </div>

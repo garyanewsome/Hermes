@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
 import { deleteHabit, listHabits, logHabit, setHabitDay } from '../api.js';
+import useIsMobile from '../hooks/useIsMobile.js';
 
 function Dot({ day, onToggle }) {
   return (
@@ -67,6 +68,7 @@ export default function HabitsView({ onOpenDrawer }) {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(null); // habit, or null
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     refresh();
@@ -107,7 +109,7 @@ export default function HabitsView({ onOpenDrawer }) {
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <TopBar title="Habits" subtitle="last 7 days" onOpenDrawer={onOpenDrawer} />
 
-      <div style={{ flex: 1, minHeight: 0, padding: 24, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
+      <div style={{ flex: 1, minHeight: 0, padding: isMobile ? 14 : 24, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
         {habits.map((h) => (
           <div
             key={h.id}
@@ -115,13 +117,14 @@ export default function HabitsView({ onOpenDrawer }) {
               background: h.streak > 0 ? 'var(--accent-wash)' : 'var(--panel)',
               border: h.streak > 0 ? '1px solid var(--accent-glow)' : '1px solid var(--border)',
               borderRadius: 12,
-              padding: '16px 20px',
+              padding: isMobile ? '14px 16px' : '16px 20px',
               display: 'flex',
+              flexWrap: isMobile ? 'wrap' : 'nowrap',
               alignItems: 'center',
-              gap: 16,
+              gap: isMobile ? 10 : 16,
             }}
           >
-            <div style={{ width: 140, fontSize: 14, fontWeight: 600, color: h.streak > 0 ? 'var(--text)' : '#c7c8cc' }}>{h.name}</div>
+            <div style={{ width: isMobile ? '100%' : 140, fontSize: 14, fontWeight: 600, color: h.streak > 0 ? 'var(--text)' : '#c7c8cc' }}>{h.name}</div>
             <div style={{ display: 'flex', gap: 6 }}>
               {h.last_7_days.map((day) => (
                 <Dot key={day.date} day={day} onToggle={(date, logged) => handleToggleDay(h.id, date, logged)} />
@@ -130,7 +133,7 @@ export default function HabitsView({ onOpenDrawer }) {
             <button
               onClick={() => handleLog(h.name)}
               style={{
-                marginLeft: 'auto',
+                marginLeft: isMobile ? 0 : 'auto',
                 height: 30,
                 padding: '0 12px',
                 borderRadius: 8,
@@ -143,7 +146,7 @@ export default function HabitsView({ onOpenDrawer }) {
             >
               Log today
             </button>
-            <div style={{ fontSize: 13, color: h.streak > 0 ? 'var(--accent)' : 'var(--text-faint)', fontWeight: 600, minWidth: 90, textAlign: 'right' }}>
+            <div style={{ fontSize: 13, color: h.streak > 0 ? 'var(--accent)' : 'var(--text-faint)', fontWeight: 600, minWidth: isMobile ? 0 : 90, marginLeft: isMobile ? 'auto' : 0, textAlign: 'right' }}>
               {h.streak > 0 ? `${h.streak} day streak` : 'no streak yet'}
             </div>
             <button

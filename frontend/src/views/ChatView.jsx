@@ -3,6 +3,7 @@ import TopBar from '../components/TopBar.jsx';
 import ConversationSidebar from './ConversationSidebar.jsx';
 import { getConversation, getModels, listConversations } from '../api.js';
 import { renderMarkdown } from '../lib/markdown.js';
+import useIsMobile from '../hooks/useIsMobile.js';
 
 export default function ChatView({ onOpenDrawer }) {
   const [conversations, setConversations] = useState([]);
@@ -13,6 +14,8 @@ export default function ChatView({ onOpenDrawer }) {
   const [think, setThink] = useState(false);
   const [input, setInput] = useState('');
   const [generating, setGenerating] = useState(false);
+  const [convSidebarOpen, setConvSidebarOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   const abortRef = useRef(null);
   const messagesRef = useRef(null);
@@ -160,15 +163,37 @@ export default function ChatView({ onOpenDrawer }) {
               <option key={m} value={m}>{m}</option>
             ))}
           </select>
+          {isMobile && (
+            <button
+              onClick={() => setConvSidebarOpen(true)}
+              aria-label="Open conversations"
+              style={{
+                marginLeft: 'auto',
+                width: 34,
+                height: 34,
+                flexShrink: 0,
+                borderRadius: 8,
+                background: 'transparent',
+                border: '1px solid var(--accent-glow)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M2 3h12v8H6l-3 3v-3H2z" stroke="var(--accent)" strokeWidth="1.4" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
         </TopBar>
 
-        <div ref={messagesRef} style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div ref={messagesRef} style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '14px 12px' : 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
           {messages.map((m, i) => (
             <div
               key={i}
               className="msg-bubble"
               style={{
-                maxWidth: '70%',
+                maxWidth: isMobile ? '88%' : '70%',
                 alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
                 padding: '10px 14px',
                 borderRadius: 14,
@@ -190,7 +215,13 @@ export default function ChatView({ onOpenDrawer }) {
 
         <form
           onSubmit={handleSubmit}
-          style={{ display: 'flex', gap: 10, padding: '16px 20px', borderTop: '1px solid var(--border)', background: 'var(--panel)' }}
+          style={{
+            display: 'flex',
+            gap: 10,
+            padding: `16px ${isMobile ? 12 : 20}px calc(16px + env(safe-area-inset-bottom))`,
+            borderTop: '1px solid var(--border)',
+            background: 'var(--panel)',
+          }}
         >
           <textarea
             rows={1}
@@ -237,6 +268,8 @@ export default function ChatView({ onOpenDrawer }) {
         onSelect={selectConversation}
         onNewChat={newChat}
         onChanged={refreshConversations}
+        mobileOpen={convSidebarOpen}
+        onMobileClose={() => setConvSidebarOpen(false)}
       />
     </div>
   );

@@ -39,6 +39,7 @@ export default function LoginScreen({ onSuccess }) {
           flexDirection: 'column',
           gap: 16,
           width: 280,
+          maxWidth: '85vw',
           padding: 28,
           borderRadius: 14,
           background: '#0a0a0a',

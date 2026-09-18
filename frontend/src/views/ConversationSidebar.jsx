@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { deleteConversation, renameConversation } from '../api.js';
+import useIsMobile from '../hooks/useIsMobile.js';
 
-export default function ConversationSidebar({ conversations, currentId, onSelect, onNewChat, onChanged }) {
+export default function ConversationSidebar({ conversations, currentId, onSelect, onNewChat, onChanged, mobileOpen, onMobileClose }) {
   const [menu, setMenu] = useState(null); // { x, y, conv }
   const [renamingId, setRenamingId] = useState(null);
   const [renameValue, setRenameValue] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(null); // conv, or null
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const hide = () => setMenu(null);
@@ -16,6 +18,12 @@ export default function ConversationSidebar({ conversations, currentId, onSelect
       document.removeEventListener('scroll', hide, true);
     };
   }, []);
+
+  // On a phone, the sidebar is an off-canvas overlay (same pattern as
+  // NavDrawer) instead of a permanent 240px column, which would otherwise
+  // leave almost nothing for the chat itself. Not rendering it at all when
+  // closed keeps it out of layout/tab order entirely.
+  if (isMobile && !mobileOpen) return null;
 
   async function commitRename(conv) {
     const title = renameValue.trim();
@@ -34,18 +42,44 @@ export default function ConversationSidebar({ conversations, currentId, onSelect
   }
 
   return (
-    <div
-      style={{
-        width: 240,
-        flexShrink: 0,
-        background: 'var(--panel)',
-        borderLeft: '1px solid var(--border)',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
+    <>
+      {isMobile && (
+        <div
+          onClick={onMobileClose}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 40 }}
+        />
+      )}
+      <div
+        style={
+          isMobile
+            ? {
+                position: 'fixed',
+                top: 0,
+                right: 0,
+                bottom: 0,
+                width: 'min(280px, 85vw)',
+                background: 'var(--panel)',
+                borderLeft: '1px solid var(--border)',
+                display: 'flex',
+                flexDirection: 'column',
+                zIndex: 41,
+                paddingTop: 'env(safe-area-inset-top)',
+              }
+            : {
+                width: 240,
+                flexShrink: 0,
+                background: 'var(--panel)',
+                borderLeft: '1px solid var(--border)',
+                display: 'flex',
+                flexDirection: 'column',
+              }
+        }
+      >
       <button
-        onClick={onNewChat}
+        onClick={() => {
+          onNewChat();
+          if (isMobile) onMobileClose();
+        }}
         style={{
           margin: 12,
           padding: '9px 12px',
@@ -89,7 +123,10 @@ export default function ConversationSidebar({ conversations, currentId, onSelect
               />
             ) : (
               <div
-                onClick={() => onSelect(conv.id)}
+                onClick={() => {
+                  onSelect(conv.id);
+                  if (isMobile) onMobileClose();
+                }}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   setMenu({ x: e.clientX, y: e.clientY, conv });
@@ -198,6 +235,7 @@ export default function ConversationSidebar({ conversations, currentId, onSelect
           </form>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

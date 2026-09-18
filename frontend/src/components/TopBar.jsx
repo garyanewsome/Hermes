@@ -1,13 +1,18 @@
+import useIsMobile from '../hooks/useIsMobile.js';
+
 export default function TopBar({ title, subtitle, onOpenDrawer, children }) {
+  const isMobile = useIsMobile();
   return (
     <div
       style={{
-        height: 56,
+        minHeight: 56,
         flexShrink: 0,
         display: 'flex',
+        flexWrap: isMobile ? 'wrap' : 'nowrap',
         alignItems: 'center',
-        gap: 16,
-        padding: '0 20px',
+        rowGap: 8,
+        columnGap: isMobile ? 10 : 16,
+        padding: `max(10px, env(safe-area-inset-top)) ${isMobile ? 14 : 20}px 10px`,
         borderBottom: '1px solid var(--border)',
       }}
     >
@@ -17,6 +22,7 @@ export default function TopBar({ title, subtitle, onOpenDrawer, children }) {
         style={{
           width: 40,
           height: 40,
+          flexShrink: 0,
           borderRadius: 8,
           background: 'transparent',
           border: '1px solid var(--accent-glow)',
@@ -40,8 +46,10 @@ export default function TopBar({ title, subtitle, onOpenDrawer, children }) {
       >
         {title}
       </div>
-      {subtitle && <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{subtitle}</div>}
-      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>{children}</div>
+      {subtitle && !isMobile && <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{subtitle}</div>}
+      <div style={{ marginLeft: isMobile ? 0 : 'auto', width: isMobile ? '100%' : 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+        {children}
+      </div>
     </div>
   );
 }
