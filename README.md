@@ -16,6 +16,8 @@ When the model decides a tool would help, Hermes executes it and feeds the resul
 - `save_project_memory` / `recall_project_memory` — persistent memory for VST/audio plugin development work (calls a self-hosted Hindsight instance). Scoped deliberately narrow via the tool description — most messages should not trigger a save, only durable decisions/facts worth recalling later.
 - `add_task` / `list_tasks` / `complete_task` — to-dos filed directly into one of four quadrants (`do` / `schedule` / `next` / `backlog`), backed by a dedicated `planner` Postgres database (see below).
 - `log_habit` / `habit_status` — daily habit tracking, same `planner` database. `habit_status` returns each of the last 7 days' actual logged/missed dates (not just the streak number), so you can ask Hermes things like "how'd I do this week" or "did I miss Tuesday" and it has real data to answer from.
+- `add_todo_item` / `list_todo_items` / `complete_todo_item` — the plain everyday Todo lists (see UI section), deliberately a separate tool set from `add_task`/etc. so the model doesn't conflate "add milk to my grocery list" with the music-production/dev Tasks board. Naming a list that doesn't exist yet creates it (same as `log_habit`); omitting one uses/creates "General". Fuzzy-matched by name/text throughout, and `complete_todo_item` returns a disambiguation prompt instead of guessing when more than one item matches.
+- `add_scratch_note` / `search_scratch_notes` / `list_recent_scratch_notes` — the Notes scratchpad (see UI section). Named with a `scratch_note`/`scratch_notes` prefix specifically to avoid colliding with the existing `list_notes` tool, which is Athenaeum's vault folder browser — an unrelated feature that happens to share the word "notes". Deliberately looser-firing than `save_project_memory`: this is meant to catch anything the user explicitly asks to jot down, not just durable VST/audio decisions.
 
 **Other endpoints:**
 - `GET /models` — chat-capable models available (filtered to Ollama's `tools`-capability models only)
@@ -126,6 +128,7 @@ To redeploy after a code change: `./deploy.sh` — builds the image, reimports i
 - [x] Remote access via Tailscale (the homelab and phone/tablet are on the same tailnet) — reaches Hermes from anywhere, not just the home LAN, with no port-forwarding and no public exposure; set up on the homelab side (`sudo tailscale up`), not tracked in this repo
 - [x] Notes view — Simplenote-style plain-text scratchpad with debounced autosave, meant to feed ideas into Obsidian later (see UI section)
 - [x] Sketch view — freehand drawing with real stylus pressure support, stored as vector strokes (JSONB, not a raster blob), with PNG/SVG export (see UI section)
+- [x] Chat tool access for Todo (`add_todo_item`/`list_todo_items`/`complete_todo_item`) and Notes (`add_scratch_note`/`search_scratch_notes`/`list_recent_scratch_notes`) — verified end to end through the real chat tool-call pipeline (fake-Ollama-driven, not just direct handler calls), not just the REST API. Sketch deliberately has no chat tools — no clear value in a model calling a drawing canvas.
 
 ## Not yet decided / open
 

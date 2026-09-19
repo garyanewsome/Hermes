@@ -150,6 +150,77 @@ def habit_status(name: str | None = None) -> str:
     )
 
 
+def add_todo_item(text: str, list_name: str | None = None) -> str:
+    todo_list = planner_db.get_or_create_todo_list(list_name or "General")
+    item = planner_db.create_todo_item(todo_list["id"], text)
+    return f"Added \"{item['text']}\" to \"{todo_list['name']}\"."
+
+
+def _format_todo_item(item: dict, with_list: bool) -> str:
+    due = f" (due {item['due_date']})" if item.get("due_date") else ""
+    prefix = f"[{item['list_name']}] " if with_list else ""
+    return f"{prefix}{item['text']}{due}"
+
+
+def list_todo_items(list_name: str | None = None) -> str:
+    if list_name:
+        todo_list = planner_db.find_todo_list_by_name(list_name)
+        if not todo_list:
+            return f"No todo list matching \"{list_name}\" found."
+        items = [i for i in planner_db.list_todo_items(todo_list["id"]) if not i["done"]]
+        if not items:
+            return f"Nothing open on \"{todo_list['name']}\"."
+        lines = [_format_todo_item({**i, "list_name": todo_list["name"]}, with_list=False) for i in items]
+        return f"\"{todo_list['name']}\":\n" + "\n".join(f"- {line}" for line in lines)
+
+    items = planner_db.list_all_open_todo_items()
+    if not items:
+        return "Nothing on any todo list."
+    return "\n".join(f"- {_format_todo_item(i, with_list=True)}" for i in items)
+
+
+def complete_todo_item(text: str, list_name: str | None = None) -> str:
+    list_id = None
+    if list_name:
+        todo_list = planner_db.find_todo_list_by_name(list_name)
+        if not todo_list:
+            return f"No todo list matching \"{list_name}\" found."
+        list_id = todo_list["id"]
+
+    matches = planner_db.find_open_todo_items_by_text(text, list_id=list_id)
+    if not matches:
+        return f"No open item matching \"{text}\" found."
+    if len(matches) > 1:
+        options = "\n".join(f"- {m['text']} [{m['list_name']}]" for m in matches)
+        return f"Multiple items match \"{text}\" — which one?\n{options}"
+    planner_db.update_todo_item(matches[0]["id"], done=True)
+    return f"Checked off \"{matches[0]['text']}\" on \"{matches[0]['list_name']}\"."
+
+
+def _note_title(content: str) -> str:
+    first_line = next((line.strip() for line in content.split("\n") if line.strip()), "")
+    return first_line or "Untitled note"
+
+
+def add_scratch_note(content: str) -> str:
+    planner_db.create_note_with_content(content)
+    return f"Saved note: \"{_note_title(content)}\"."
+
+
+def search_scratch_notes(query: str) -> str:
+    matches = planner_db.search_notes_content(query)
+    if not matches:
+        return "No matching notes found."
+    return "\n".join(f"- {_note_title(m['content'])}" for m in matches)
+
+
+def list_recent_scratch_notes() -> str:
+    notes = planner_db.list_recent_notes(limit=10)
+    if not notes:
+        return "No notes yet."
+    return "\n".join(f"- {_note_title(n['content'])}" for n in notes)
+
+
 TOOLS = [
     {
         "type": "function",
@@ -372,6 +443,114 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_todo_item",
+            "description": (
+                "Add an item to a plain everyday to-do list (groceries, errands, "
+                "life stuff) — a different thing from add_task, which is for the "
+                "music-production/dev task board. Use this one for casual "
+                "'add X to my list' requests that aren't project work. If the "
+                "named list doesn't exist yet it's created; if the user doesn't "
+                "name a list, it goes on \"General\"."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "The item to add"},
+                    "list_name": {
+                        "type": "string",
+                        "description": "Which list, e.g. 'groceries' or 'errands' (fuzzy match; omit for the general list)",
+                    },
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_todo_items",
+            "description": (
+                "List open (not checked off) items from the everyday to-do lists. "
+                "Use for 'what's on my todo/grocery/errands list' — not for the "
+                "Tasks board, use list_tasks for that. Omit list_name to see "
+                "everything across all lists."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "list_name": {"type": "string", "description": "A specific list to check (fuzzy match), or omit for all"}
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "complete_todo_item",
+            "description": (
+                "Check an item off an everyday to-do list, matched by its text "
+                "(partial match is fine). Use when the user says they picked up, "
+                "did, or finished something that sounds like a todo-list item, "
+                "not the Tasks board — use complete_task for that instead."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "The item's text, or a fragment of it"},
+                    "list_name": {"type": "string", "description": "Which list to look in (fuzzy match), if known — helps disambiguate"},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_scratch_note",
+            "description": (
+                "Save a quick freeform note to the user's Notes scratchpad — for "
+                "when the user explicitly asks to jot something down, write that "
+                "down, or save a note. This is a lightweight, unfiltered capture "
+                "spot meant to be copied into Obsidian later, NOT the curated "
+                "save_project_memory (which is specifically for durable VST/audio "
+                "project decisions) — use whichever the user's request actually "
+                "matches."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "content": {"type": "string", "description": "The note's text, exactly as the user wants it captured"}
+                },
+                "required": ["content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_scratch_notes",
+            "description": "Search the user's Notes scratchpad by content. Use for 'did I write anything down about X' or similar.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "What to search for in the user's notes"}
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_recent_scratch_notes",
+            "description": "List the user's most recently edited notes from the Notes scratchpad, most recent first. Use for 'what have I jotted down lately'.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
 ]
 
 TOOL_HANDLERS = {
@@ -385,4 +564,10 @@ TOOL_HANDLERS = {
     "complete_task": complete_task,
     "log_habit": log_habit,
     "habit_status": habit_status,
+    "add_todo_item": add_todo_item,
+    "list_todo_items": list_todo_items,
+    "complete_todo_item": complete_todo_item,
+    "add_scratch_note": add_scratch_note,
+    "search_scratch_notes": search_scratch_notes,
+    "list_recent_scratch_notes": list_recent_scratch_notes,
 }

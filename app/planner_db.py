@@ -388,6 +388,56 @@ def delete_todo_list(list_id: int) -> None:
         conn.execute("DELETE FROM todo_lists WHERE id = %s", (list_id,))
 
 
+def find_todo_list_by_name(name: str) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT id, name FROM todo_lists WHERE name ILIKE %s ORDER BY created_at LIMIT 1",
+            (f"%{name}%",),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def get_or_create_todo_list(name: str) -> dict:
+    # Chat's add_todo_item tool: naming a list that doesn't exist yet should
+    # just create it (same reasoning as habits' get_or_create_habit), not
+    # error — "add X to my errands list" is a perfectly normal way to start
+    # a new list, not a typo to reject.
+    existing = find_todo_list_by_name(name)
+    if existing:
+        return existing
+    return create_todo_list(name)
+
+
+def list_all_open_todo_items() -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT i.id, i.text, i.due_date, l.name AS list_name
+            FROM todo_items i
+            JOIN todo_lists l ON l.id = i.list_id
+            WHERE NOT i.done
+            ORDER BY l.name, i.created_at
+            """
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def find_open_todo_items_by_text(text: str, list_id: int | None = None) -> list[dict]:
+    query = """
+        SELECT i.id, i.text, i.due_date, l.name AS list_name
+        FROM todo_items i JOIN todo_lists l ON l.id = i.list_id
+        WHERE NOT i.done AND i.text ILIKE %s
+    """
+    params: list = [f"%{text}%"]
+    if list_id is not None:
+        query += " AND i.list_id = %s"
+        params.append(list_id)
+    query += " ORDER BY i.created_at DESC"
+    with _connect() as conn:
+        rows = conn.execute(query, params).fetchall()
+    return [dict(row) for row in rows]
+
+
 def list_todo_items(list_id: int) -> list[dict]:
     # Open items first (in the order they were added), done items below —
     # the common shape for a simple checklist, so finishing something
@@ -461,6 +511,37 @@ def create_note() -> dict:
             "INSERT INTO notes DEFAULT VALUES RETURNING id, content, created_at, updated_at"
         ).fetchone()
     return dict(row)
+
+
+def create_note_with_content(content: str) -> dict:
+    # Separate from create_note() (always blank, for the "+ New note" UI
+    # flow that then autosaves as you type) — the add_scratch_note chat
+    # tool has the content up front, so it should land in one insert, not
+    # a blank note immediately followed by an update.
+    with _connect() as conn:
+        row = conn.execute(
+            "INSERT INTO notes (content) VALUES (%s) RETURNING id, content, created_at, updated_at",
+            (content,),
+        ).fetchone()
+    return dict(row)
+
+
+def search_notes_content(query: str, limit: int = 5) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT id, content, updated_at FROM notes WHERE content ILIKE %s ORDER BY updated_at DESC LIMIT %s",
+            (f"%{query}%", limit),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def list_recent_notes(limit: int = 10) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT id, content, updated_at FROM notes ORDER BY updated_at DESC LIMIT %s",
+            (limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def update_note(note_id: int, content: str) -> None:
