@@ -101,6 +101,16 @@ class NoteUpdateRequest(BaseModel):
     content: str
 
 
+class SketchCreateRequest(BaseModel):
+    width: int
+    height: int
+
+
+class SketchUpdateRequest(BaseModel):
+    strokes: list | None = None
+    title: str | None = None
+
+
 # Deny-by-default: every request needs a valid session cookie UNLESS it's
 # explicitly public. /login, /logout, /health, and the static SPA shell
 # (index.html, the JS/CSS bundle, icons, the manifest) stay public — the
@@ -363,6 +373,28 @@ def patch_note(note_id: int, request: NoteUpdateRequest):
 @app.delete("/notes/{note_id}")
 def remove_note(note_id: int):
     planner_db.delete_note(note_id)
+    return {"status": "ok"}
+
+
+@app.get("/sketches")
+def get_sketches():
+    return {"sketches": planner_db.list_sketches()}
+
+
+@app.post("/sketches")
+def post_sketch(request: SketchCreateRequest):
+    return planner_db.create_sketch(request.width, request.height)
+
+
+@app.patch("/sketches/{sketch_id}")
+def patch_sketch(sketch_id: int, request: SketchUpdateRequest):
+    planner_db.update_sketch(sketch_id, strokes=request.strokes, title=request.title)
+    return {"status": "ok"}
+
+
+@app.delete("/sketches/{sketch_id}")
+def remove_sketch(sketch_id: int):
+    planner_db.delete_sketch(sketch_id)
     return {"status": "ok"}
 
 

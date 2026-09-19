@@ -9,6 +9,7 @@ from datetime import date, timedelta
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
 from app.config import PLANNER_DB_URL
 
@@ -105,6 +106,27 @@ def init_planner_db() -> None:
             CREATE TABLE IF NOT EXISTS notes (
                 id SERIAL PRIMARY KEY,
                 content TEXT NOT NULL DEFAULT '',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
+        # A fixed logical canvas size (width/height, independent of whatever
+        # device you're drawing on) so a sketch's coordinate space — and its
+        # exports — stay consistent whether it was started on the tablet or
+        # opened later on a phone. `strokes` is a JSON array of
+        # {tool, color, width, points: [{x, y, pressure}, ...]} — vector,
+        # not a raster snapshot, so it can be re-rendered at any size and
+        # exported as SVG or PNG on demand instead of only ever being a flat
+        # image.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sketches (
+                id SERIAL PRIMARY KEY,
+                title TEXT,
+                width INTEGER NOT NULL,
+                height INTEGER NOT NULL,
+                strokes JSONB NOT NULL DEFAULT '[]',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )
@@ -452,3 +474,47 @@ def update_note(note_id: int, content: str) -> None:
 def delete_note(note_id: int) -> None:
     with _connect() as conn:
         conn.execute("DELETE FROM notes WHERE id = %s", (note_id,))
+
+
+# ---- Sketches ---------------------------------------------------------------
+
+
+def list_sketches() -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT id, title, width, height, strokes, created_at, updated_at FROM sketches ORDER BY updated_at DESC"
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def create_sketch(width: int, height: int) -> dict:
+    with _connect() as conn:
+        row = conn.execute(
+            """
+            INSERT INTO sketches (width, height) VALUES (%s, %s)
+            RETURNING id, title, width, height, strokes, created_at, updated_at
+            """,
+            (width, height),
+        ).fetchone()
+    return dict(row)
+
+
+def update_sketch(sketch_id: int, strokes: list | None = None, title: str | None = None) -> None:
+    fields, params = [], []
+    if strokes is not None:
+        fields.append("strokes = %s")
+        params.append(Jsonb(strokes))
+    if title is not None:
+        fields.append("title = %s")
+        params.append(title or None)
+    if not fields:
+        return
+    fields.append("updated_at = now()")
+    params.append(sketch_id)
+    with _connect() as conn:
+        conn.execute(f"UPDATE sketches SET {', '.join(fields)} WHERE id = %s", params)
+
+
+def delete_sketch(sketch_id: int) -> None:
+    with _connect() as conn:
+        conn.execute("DELETE FROM sketches WHERE id = %s", (sketch_id,))

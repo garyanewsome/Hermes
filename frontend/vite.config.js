@@ -19,6 +19,7 @@ export default defineConfig({
       '/todo-lists': BACKEND,
       '/todo-items': BACKEND,
       '/notes': BACKEND,
+      '/sketches': BACKEND,
       '/health': BACKEND,
       '/login': BACKEND,
       '/logout': BACKEND,

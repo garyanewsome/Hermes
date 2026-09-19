@@ -57,6 +57,16 @@ const ITEMS = [
       </svg>
     ),
   },
+  {
+    key: 'sketch',
+    label: 'Sketch',
+    icon: (color) => (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M3 11.5l1-3.2 6-6a1.4 1.4 0 0 1 2 2l-6 6-3.2 1z" stroke={color} strokeWidth="1.2" strokeLinejoin="round" />
+        <path d="M2.5 13.5h11" stroke={color} strokeWidth="1.2" strokeLinecap="round" />
+      </svg>
+    ),
+  },
 ];
 
 export default function NavDrawer({ open, activeView, onNavigate, onClose }) {

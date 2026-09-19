@@ -6,6 +6,7 @@ import TasksView from './views/TasksView.jsx';
 import HabitsView from './views/HabitsView.jsx';
 import TodoView from './views/TodoView.jsx';
 import NotesView from './views/NotesView.jsx';
+import SketchView from './views/SketchView.jsx';
 import { checkAuth } from './api.js';
 
 export default function App() {
@@ -57,6 +58,9 @@ export default function App() {
       </div>
       <div style={{ display: view === 'notes' ? 'contents' : 'none' }}>
         <NotesView onOpenDrawer={() => setDrawerOpen(true)} />
+      </div>
+      <div style={{ display: view === 'sketch' ? 'contents' : 'none' }}>
+        <SketchView onOpenDrawer={() => setDrawerOpen(true)} />
       </div>
 
       <NavDrawer open={drawerOpen} activeView={view} onNavigate={setView} onClose={() => setDrawerOpen(false)} />

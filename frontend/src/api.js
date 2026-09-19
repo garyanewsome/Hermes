@@ -196,3 +196,30 @@ export async function updateNote(noteId, content) {
 export async function deleteNote(noteId) {
   await apiFetch(`/notes/${noteId}`, { method: 'DELETE' });
 }
+
+export async function listSketches() {
+  const res = await apiFetch('/sketches');
+  const data = await res.json();
+  return data.sketches;
+}
+
+export async function createSketch(width, height) {
+  const res = await apiFetch('/sketches', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ width, height }),
+  });
+  return res.json();
+}
+
+export async function updateSketch(sketchId, updates) {
+  await apiFetch(`/sketches/${sketchId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function deleteSketch(sketchId) {
+  await apiFetch(`/sketches/${sketchId}`, { method: 'DELETE' });
+}

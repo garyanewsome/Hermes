@@ -47,6 +47,13 @@
   --accent-wash: rgba(57, 255, 20, 0.1);
 }
 
+[data-view="sketch"] {
+  --accent: #ff8a1f;
+  --accent-text: #331700;
+  --accent-glow: rgba(255, 138, 31, 0.35);
+  --accent-wash: rgba(255, 138, 31, 0.1);
+}
+
 html, body, #root {
   height: 100%;
   margin: 0;
