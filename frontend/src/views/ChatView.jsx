@@ -75,6 +75,27 @@ export default function ChatView({ onOpenDrawer }) {
     let gotFirstToken = false;
     let conversationId = currentId;
 
+    // A stalled connection here — no bytes at all, for any reason (a dead
+    // keep-alive connection from a long-idle tab, the backend pod
+    // mid-restart, a genuinely hung Ollama call) — otherwise hangs
+    // forever with "thinking..." on screen and no recovery but a manual
+    // refresh, since a streaming response never resolves on its own the
+    // way a normal fetch does. Reset on every chunk received, so an
+    // actively-streaming (just slow) reply is never cut off.
+    const STALL_TIMEOUT_MS = 45000;
+    let timedOut = false;
+    let stallTimer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, STALL_TIMEOUT_MS);
+    function resetStallTimer() {
+      clearTimeout(stallTimer);
+      stallTimer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, STALL_TIMEOUT_MS);
+    }
+
     try {
       const response = await fetch('/chat', {
         method: 'POST',
@@ -82,6 +103,7 @@ export default function ChatView({ onOpenDrawer }) {
         body: JSON.stringify({ message: text, conversation_id: currentId, model: model || null, think }),
         signal: controller.signal,
       });
+      resetStallTimer();
       if (response.status === 401) {
         window.dispatchEvent(new Event('hermes:unauthorized'));
         throw new Error('Not logged in');
@@ -94,6 +116,7 @@ export default function ChatView({ onOpenDrawer }) {
 
       while (true) {
         const { done, value } = await reader.read();
+        resetStallTimer();
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
@@ -128,9 +151,10 @@ export default function ChatView({ onOpenDrawer }) {
       refreshConversations();
     } catch (err) {
       if (err.name === 'AbortError') {
+        const suffix = timedOut ? '\n\n*(connection stalled — try again)*' : '\n\n*(stopped)*';
         setMessages((prev) => {
           const next = [...prev];
-          next[next.length - 1] = { role: 'assistant', content: fullText + '\n\n*(stopped)*', pending: false };
+          next[next.length - 1] = { role: 'assistant', content: fullText + suffix, pending: false };
           return next;
         });
       } else {
@@ -141,6 +165,7 @@ export default function ChatView({ onOpenDrawer }) {
         });
       }
     } finally {
+      clearTimeout(stallTimer);
       setGenerating(false);
       abortRef.current = null;
     }

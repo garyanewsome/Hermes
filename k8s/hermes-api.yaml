@@ -46,6 +46,28 @@ spec:
         volumeMounts:
         - name: hermes-data
           mountPath: /data
+        # Without these, a rolling restart has no way to know the new pod
+        # is actually ready to serve (it just assumes "container started" =
+        # "ready", so traffic can hit it mid-startup, before init_db()/
+        # init_planner_db() and Uvicorn are actually listening), and a
+        # genuinely wedged app (hung event loop, exhausted connection pool)
+        # never gets detected or auto-restarted — it just sits broken until
+        # someone notices and manually restarts it. /health is already
+        # public and unauthenticated (see app/main.py's auth middleware).
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 2
+          periodSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          failureThreshold: 3
       volumes:
       - name: hermes-data
         persistentVolumeClaim:

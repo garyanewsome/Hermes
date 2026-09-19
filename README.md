@@ -111,6 +111,16 @@ kubectl exec -i deploy/planner-postgres -- sh -c \
 
 To redeploy after a code change: `./deploy.sh` — builds the image, reimports it into K3s, and restarts the deployment.
 
+## Reliability
+
+Reported live: "every page... if idle too long or sometimes on a restart it just seems stuck," fixed with two changes on either side of the connection:
+
+- **`k8s/hermes-api.yaml`** now has a `readinessProbe`/`livenessProbe` against `/health`. Without them, a rolling restart had no way to know the new pod could actually serve traffic yet — Kubernetes' default is to treat "container process started" as "ready," so requests could land on a pod mid-`init_planner_db()`, before Uvicorn was even listening. A genuinely wedged app (hung event loop, exhausted connection pool) also had no way to get detected or auto-restarted — it would just sit broken until someone noticed and manually restarted it.
+- **`frontend/src/api.js`** — no fetch anywhere had a timeout, so a stale connection (a browser-cached keep-alive left over from a long-idle tab, or the backend pod mid-restart) just hung forever with no recovery short of a manual page refresh. Every regular API call now times out at 15s and retries once automatically on a fresh connection — a hang is essentially always a dead connection, not a slow server, so the retry succeeds silently rather than surfacing an error. `checkAuth()` gets the same treatment despite bypassing the shared `apiFetch` wrapper (it runs before login, so it can't dispatch the same "session expired" event) — and `App.jsx` now catches a `checkAuth()` that fails even after the retry, falling to the login screen instead of leaving the blank "still checking" state up forever, which is exactly what an uncaught rejection there used to do.
+- **`ChatView.jsx`**'s streaming `/chat` fetch gets its own stall-timeout (45s of receiving nothing at all, reset on every chunk so an actively-streaming reply is never cut short) — a normal request timeout doesn't apply to a stream that's supposed to stay open, so this needed its own mechanism rather than reusing `apiFetch`.
+
+Verified live: simulated a completely hung backend (a fake server that never responds) and confirmed the app times out, retries once, and falls back to a working state (the login screen) instead of hanging indefinitely — then confirmed a real backend afterward recovers cleanly with no lingering broken state from the failed attempt.
+
 ## Status
 
 - [x] Streaming chat with real mid-generation cancellation
@@ -130,6 +140,7 @@ To redeploy after a code change: `./deploy.sh` — builds the image, reimports i
 - [x] Sketch view — freehand drawing with real stylus pressure support, stored as vector strokes (JSONB, not a raster blob), with PNG/SVG export (see UI section)
 - [x] Chat tool access for Todo (`add_todo_item`/`list_todo_items`/`complete_todo_item`) and Notes (`add_scratch_note`/`search_scratch_notes`/`list_recent_scratch_notes`) — verified end to end through the real chat tool-call pipeline (fake-Ollama-driven, not just direct handler calls), not just the REST API. Sketch deliberately has no chat tools — no clear value in a model calling a drawing canvas.
 - [x] Habit "today" fixed to use `APP_TIMEZONE` instead of the pod's UTC system clock — was rolling over to the next day hours before it actually was tomorrow locally (see Tools section)
+- [x] Fixed the whole app hanging indefinitely on a stale connection (long-idle tab, or a pod restart) with no recovery but a manual refresh — request timeouts + one automatic retry everywhere, plus K8s readiness/liveness probes so a restart can't route traffic to a not-yet-ready pod (see Reliability section)
 
 ## Not yet decided / open
 

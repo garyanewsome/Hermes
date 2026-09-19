@@ -17,7 +17,14 @@ export default function App() {
   const [authenticated, setAuthenticated] = useState(null);
 
   useEffect(() => {
-    checkAuth().then(setAuthenticated);
+    // .catch, not just .then: checkAuth still throws if both the request
+    // and its one retry fail (see api.js) — without this, that becomes an
+    // unhandled rejection and `authenticated` never leaves null, leaving
+    // the app on the blank "still checking" screen forever with no way
+    // out but a manual refresh. Falling to the login screen at least gives
+    // something clickable; a real network problem will show up there too
+    // when login's own request fails the same way.
+    checkAuth().then(setAuthenticated).catch(() => setAuthenticated(false));
     // Any API call anywhere in the app can hit this if the session cookie
     // expires mid-use — drop back to the login screen instead of leaving
     // views stuck silently failing every request.

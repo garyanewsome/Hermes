@@ -1,17 +1,61 @@
+const REQUEST_TIMEOUT_MS = 15000;
+
 // Thin wrapper around fetch so every API call reacts the same way to a
 // 401 (session cookie missing or expired) — dispatching an event App.jsx
 // listens for to drop back to the login screen, instead of each call site
 // having to check for it individually.
-async function apiFetch(url, opts) {
-  const res = await fetch(url, opts);
-  if (res.status === 401) {
-    window.dispatchEvent(new Event('hermes:unauthorized'));
+//
+// Also times out and retries once. Without this, a stale connection —
+// browser-cached keep-alive left over from a long-idle tab, or the pod
+// mid-restart during a deploy — just hangs forever with zero recovery
+// short of a manual page refresh (reported live: "every page... if idle
+// too long or sometimes on a restart it just seems stuck"). A timed-out
+// attempt is essentially always a dead connection, not a slow server, so
+// one retry on a fresh connection is the right response, not an error.
+async function apiFetch(url, opts, _attempt = 1) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { ...opts, signal: controller.signal });
+    if (res.status === 401) {
+      window.dispatchEvent(new Event('hermes:unauthorized'));
+    }
+    return res;
+  } catch (err) {
+    if (err.name === 'AbortError' && _attempt === 1) {
+      return apiFetch(url, opts, 2);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
-  return res;
+}
+
+// login/logout/checkAuth deliberately don't go through apiFetch — a wrong
+// password legitimately 401s and shouldn't fire the same
+// "session expired, show login" event apiFetch dispatches for everything
+// else. Same timeout+retry-once protection though: checkAuth in particular
+// runs on every page load before anything else, so a hung connection here
+// would otherwise show the "still checking" blank screen forever — the
+// exact "every page... on idle or a restart it just seems stuck" report
+// this fix addresses.
+async function fetchWithTimeout(url, opts, _attempt = 1) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...opts, signal: controller.signal });
+  } catch (err) {
+    if (err.name === 'AbortError' && _attempt === 1) {
+      return fetchWithTimeout(url, opts, 2);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function login(password) {
-  const res = await fetch('/login', {
+  const res = await fetchWithTimeout('/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ password }),
@@ -20,11 +64,11 @@ export async function login(password) {
 }
 
 export async function logout() {
-  await fetch('/logout', { method: 'POST' });
+  await fetchWithTimeout('/logout', { method: 'POST' });
 }
 
 export async function checkAuth() {
-  const res = await fetch('/auth/check');
+  const res = await fetchWithTimeout('/auth/check');
   return res.ok;
 }
 
