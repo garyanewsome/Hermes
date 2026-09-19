@@ -25,6 +25,14 @@ HINDSIGHT_BANK_ID = os.environ.get("HINDSIGHT_BANK_ID", "vst-test")
 
 DB_PATH = os.environ.get("DB_PATH", "./hermes.db")
 
+# What "today" means for habit logging/streaks. Deliberately explicit rather
+# than trusting the pod's system clock — K3s containers default to UTC
+# regardless of the host machine's own local timezone, so date.today() in
+# the pod silently rolls over to tomorrow hours before it actually is
+# tomorrow for the user (confirmed live: still showing "today" as done at
+# 7:39pm Eastern, because UTC had already ticked into the next day).
+APP_TIMEZONE = os.environ.get("APP_TIMEZONE", "America/New_York")
+
 # Tasks (urgency x importance quadrants) and habit tracking — a separate Postgres
 # instance from Hindsight's, deliberately: this is mutable structured
 # state (status flags, streak counts), not semantic memory to recall by

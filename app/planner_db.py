@@ -5,13 +5,23 @@ not a place for structured, constantly-mutating state like task status
 or habit streaks."""
 
 from contextlib import contextmanager
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from app.config import PLANNER_DB_URL
+from app.config import APP_TIMEZONE, PLANNER_DB_URL
+
+_TZ = ZoneInfo(APP_TIMEZONE)
+
+
+def _today() -> date:
+    # Never date.today() here — see APP_TIMEZONE's comment in config.py.
+    # That's naive to the system clock's timezone, which is UTC in the pod
+    # regardless of the host's actual local time.
+    return datetime.now(_TZ).date()
 
 
 @contextmanager
@@ -262,7 +272,7 @@ def get_or_create_habit(name: str) -> dict:
 
 
 def log_habit(name: str, on_date: date | None = None) -> dict:
-    on_date = on_date or date.today()
+    on_date = on_date or _today()
     habit = get_or_create_habit(name)
     with _connect() as conn:
         conn.execute(
@@ -292,7 +302,7 @@ def habit_streak(name: str) -> int:
     if not logged_dates:
         return 0
 
-    today = date.today()
+    today = _today()
     cursor = today if today in logged_dates else today.fromordinal(today.toordinal() - 1)
     streak = 0
     while cursor in logged_dates:
@@ -307,7 +317,7 @@ def habit_last_n_days(habit_id: int, days: int = 7) -> list[dict]:
     even if today's log continues an otherwise-broken streak. Each day
     carries its own date so the UI can toggle a specific day, not just
     today."""
-    today = date.today()
+    today = _today()
     start = today - timedelta(days=days - 1)
     with _connect() as conn:
         rows = conn.execute(
