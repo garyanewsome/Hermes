@@ -8,7 +8,7 @@ import {
   deleteTodoList,
   listTodoItems,
   createTodoItem,
-  setTodoItemDone,
+  updateTodoItem,
   deleteTodoItem,
 } from '../api.js';
 
@@ -249,11 +249,22 @@ function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onDelete, i
   );
 }
 
-function TodoItemRow({ item, onToggle, onDelete }) {
+function TodoItemRow({ item, onToggle, onUpdate, onDelete }) {
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState(item.text);
+  const [pickingDate, setPickingDate] = useState(false);
+
+  function commitEdit() {
+    const trimmed = editValue.trim();
+    setEditing(false);
+    if (trimmed && trimmed !== item.text) onUpdate(item.id, { text: trimmed });
+  }
+
   return (
     <div
       style={{
         display: 'flex',
+        flexWrap: 'wrap',
         alignItems: 'center',
         gap: 10,
         background: 'var(--bg)',
@@ -277,17 +288,88 @@ function TodoItemRow({ item, onToggle, onDelete }) {
           padding: 0,
         }}
       />
-      <div
-        style={{
-          flex: 1,
-          minWidth: 0,
-          overflowWrap: 'break-word',
-          color: item.done ? 'var(--text-faint)' : 'var(--text)',
-          textDecoration: item.done ? 'line-through' : 'none',
-        }}
-      >
-        {item.text}
-      </div>
+      {editing ? (
+        <input
+          autoFocus
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={commitEdit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commitEdit(); }
+            if (e.key === 'Escape') { e.preventDefault(); setEditValue(item.text); setEditing(false); }
+          }}
+          style={{
+            flex: 1,
+            minWidth: 120,
+            background: 'var(--panel-2)',
+            border: '1px solid var(--accent)',
+            color: 'var(--text)',
+            borderRadius: 5,
+            padding: '4px 6px',
+            fontSize: 14,
+            fontFamily: 'inherit',
+            outline: 'none',
+          }}
+        />
+      ) : (
+        <div
+          onClick={() => { setEditValue(item.text); setEditing(true); }}
+          style={{
+            flex: 1,
+            minWidth: 120,
+            overflowWrap: 'break-word',
+            cursor: 'text',
+            color: item.done ? 'var(--text-faint)' : 'var(--text)',
+            textDecoration: item.done ? 'line-through' : 'none',
+          }}
+        >
+          {item.text}
+        </div>
+      )}
+
+      {pickingDate ? (
+        <input
+          type="date"
+          autoFocus
+          defaultValue={item.due_date || ''}
+          onChange={(e) => {
+            onUpdate(item.id, { due_date: e.target.value });
+            setPickingDate(false);
+          }}
+          onBlur={() => setPickingDate(false)}
+          style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 6, padding: '4px 6px', fontSize: 12 }}
+        />
+      ) : item.due_date ? (
+        <button
+          onClick={() => setPickingDate(true)}
+          style={{ flexShrink: 0, background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-faint)', borderRadius: 6, padding: '3px 8px', fontSize: 11 }}
+        >
+          due {item.due_date}
+        </button>
+      ) : (
+        <button
+          onClick={() => setPickingDate(true)}
+          aria-label="Set due date"
+          title="Set due date"
+          style={{ flexShrink: 0, width: 22, height: 22, background: 'transparent', border: 'none', color: 'var(--text-faint)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <rect x="1.5" y="2.5" width="11" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.1" />
+            <path d="M1.5 5.5h11M4 1.3v2M10 1.3v2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+          </svg>
+        </button>
+      )}
+      {item.due_date && !pickingDate && (
+        <button
+          onClick={() => onUpdate(item.id, { due_date: '' })}
+          aria-label="Clear due date"
+          title="Clear due date"
+          style={{ flexShrink: 0, background: 'transparent', border: 'none', color: 'var(--text-faint)', fontSize: 12, padding: 0 }}
+        >
+          ×
+        </button>
+      )}
+
       <button
         onClick={() => onDelete(item.id)}
         aria-label="Delete item"
@@ -369,7 +451,12 @@ export default function TodoView({ onOpenDrawer }) {
       return [...next.filter((i) => !i.done), ...next.filter((i) => i.done)];
     });
     setLists((prev) => prev.map((l) => (l.id === activeId ? { ...l, open_count: (l.open_count || 0) + (done ? -1 : 1) } : l)));
-    await setTodoItemDone(itemId, done);
+    await updateTodoItem(itemId, { done });
+  }
+
+  async function handleUpdateItem(itemId, updates) {
+    setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, ...updates } : i)));
+    await updateTodoItem(itemId, updates);
   }
 
   async function handleDeleteItem(itemId) {
@@ -434,7 +521,7 @@ export default function TodoView({ onOpenDrawer }) {
 
             {items.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>Nothing on this list yet.</div>}
             {items.map((item) => (
-              <TodoItemRow key={item.id} item={item} onToggle={handleToggle} onDelete={handleDeleteItem} />
+              <TodoItemRow key={item.id} item={item} onToggle={handleToggle} onUpdate={handleUpdateItem} onDelete={handleDeleteItem} />
             ))}
           </div>
         )}

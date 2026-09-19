@@ -162,11 +162,11 @@ export async function createTodoItem(listId, text) {
   return res.json();
 }
 
-export async function setTodoItemDone(itemId, done) {
+export async function updateTodoItem(itemId, updates) {
   await apiFetch(`/todo-items/${itemId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ done }),
+    body: JSON.stringify(updates),
   });
 }
 

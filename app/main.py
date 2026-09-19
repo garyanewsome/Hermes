@@ -92,7 +92,9 @@ class TodoItemRequest(BaseModel):
 
 
 class TodoItemUpdateRequest(BaseModel):
-    done: bool
+    text: str | None = None
+    done: bool | None = None
+    due_date: str | None = None
 
 
 # Deny-by-default: every request needs a valid session cookie UNLESS it's
@@ -328,7 +330,7 @@ def post_todo_item(list_id: int, request: TodoItemRequest):
 
 @app.patch("/todo-items/{item_id}")
 def patch_todo_item(item_id: int, request: TodoItemUpdateRequest):
-    planner_db.set_todo_item_done(item_id, request.done)
+    planner_db.update_todo_item(item_id, text=request.text, done=request.done, due_date=request.due_date)
     return {"status": "ok"}
 
 

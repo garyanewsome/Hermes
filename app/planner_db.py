@@ -90,10 +90,12 @@ def init_planner_db() -> None:
                 list_id INTEGER NOT NULL REFERENCES todo_lists(id) ON DELETE CASCADE,
                 text TEXT NOT NULL,
                 done BOOLEAN NOT NULL DEFAULT false,
+                due_date DATE,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )
             """
         )
+        conn.execute("ALTER TABLE todo_items ADD COLUMN IF NOT EXISTS due_date DATE")
 
 
 # ---- Tasks -----------------------------------------------------------
@@ -357,7 +359,7 @@ def list_todo_items(list_id: int) -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
             """
-            SELECT id, list_id, text, done, created_at
+            SELECT id, list_id, text, done, due_date, created_at
             FROM todo_items
             WHERE list_id = %s
             ORDER BY done, created_at
@@ -370,15 +372,35 @@ def list_todo_items(list_id: int) -> list[dict]:
 def create_todo_item(list_id: int, text: str) -> dict:
     with _connect() as conn:
         row = conn.execute(
-            "INSERT INTO todo_items (list_id, text) VALUES (%s, %s) RETURNING id, list_id, text, done, created_at",
+            "INSERT INTO todo_items (list_id, text) VALUES (%s, %s) RETURNING id, list_id, text, done, due_date, created_at",
             (list_id, text),
         ).fetchone()
     return dict(row)
 
 
-def set_todo_item_done(item_id: int, done: bool) -> None:
+def update_todo_item(
+    item_id: int,
+    text: str | None = None,
+    done: bool | None = None,
+    due_date: str | None = None,
+) -> None:
+    fields, params = [], []
+    if text is not None:
+        fields.append("text = %s")
+        params.append(text)
+    if done is not None:
+        fields.append("done = %s")
+        params.append(done)
+    if due_date is not None:
+        # "" (present but empty) means clear it — same convention as
+        # update_task's due_date arg.
+        fields.append("due_date = %s")
+        params.append(due_date or None)
+    if not fields:
+        return
+    params.append(item_id)
     with _connect() as conn:
-        conn.execute("UPDATE todo_items SET done = %s WHERE id = %s", (done, item_id))
+        conn.execute(f"UPDATE todo_items SET {', '.join(fields)} WHERE id = %s", params)
 
 
 def delete_todo_item(item_id: int) -> None:
