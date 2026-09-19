@@ -323,7 +323,7 @@ export default function NotesView({ onOpenDrawer }) {
               flex: 1,
               background: 'var(--bg)',
               border: 'none',
-              color: 'var(--text)',
+              color: 'var(--accent)',
               padding: isMobile ? 16 : 28,
               fontSize: 15,
               lineHeight: 1.6,
