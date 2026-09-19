@@ -47,6 +47,16 @@ const ITEMS = [
       </svg>
     ),
   },
+  {
+    key: 'notes',
+    label: 'Notes',
+    icon: (color) => (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="2" y="2" width="12" height="12" rx="2" stroke={color} strokeWidth="1.3" />
+        <path d="M4.7 5.8h6.6M4.7 8h6.6M4.7 10.2h4" stroke={color} strokeWidth="1.1" strokeLinecap="round" />
+      </svg>
+    ),
+  },
 ];
 
 export default function NavDrawer({ open, activeView, onNavigate, onClose }) {

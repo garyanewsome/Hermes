@@ -173,3 +173,26 @@ export async function updateTodoItem(itemId, updates) {
 export async function deleteTodoItem(itemId) {
   await apiFetch(`/todo-items/${itemId}`, { method: 'DELETE' });
 }
+
+export async function listNotes() {
+  const res = await apiFetch('/notes');
+  const data = await res.json();
+  return data.notes;
+}
+
+export async function createNote() {
+  const res = await apiFetch('/notes', { method: 'POST' });
+  return res.json();
+}
+
+export async function updateNote(noteId, content) {
+  await apiFetch(`/notes/${noteId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+}
+
+export async function deleteNote(noteId) {
+  await apiFetch(`/notes/${noteId}`, { method: 'DELETE' });
+}

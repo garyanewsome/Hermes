@@ -96,6 +96,20 @@ def init_planner_db() -> None:
             """
         )
         conn.execute("ALTER TABLE todo_items ADD COLUMN IF NOT EXISTS due_date DATE")
+        # Simplenote-style scratchpad — no title field, the first line of
+        # `content` serves as the title in the list. A quick-capture spot
+        # for ideas on the go, meant to get copied into Obsidian later, not
+        # to replace it.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS notes (
+                id SERIAL PRIMARY KEY,
+                content TEXT NOT NULL DEFAULT '',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
 
 
 # ---- Tasks -----------------------------------------------------------
@@ -406,3 +420,35 @@ def update_todo_item(
 def delete_todo_item(item_id: int) -> None:
     with _connect() as conn:
         conn.execute("DELETE FROM todo_items WHERE id = %s", (item_id,))
+
+
+# ---- Notes ----------------------------------------------------------------
+
+
+def list_notes() -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT id, content, created_at, updated_at FROM notes ORDER BY updated_at DESC"
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def create_note() -> dict:
+    with _connect() as conn:
+        row = conn.execute(
+            "INSERT INTO notes DEFAULT VALUES RETURNING id, content, created_at, updated_at"
+        ).fetchone()
+    return dict(row)
+
+
+def update_note(note_id: int, content: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE notes SET content = %s, updated_at = now() WHERE id = %s",
+            (content, note_id),
+        )
+
+
+def delete_note(note_id: int) -> None:
+    with _connect() as conn:
+        conn.execute("DELETE FROM notes WHERE id = %s", (note_id,))

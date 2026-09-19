@@ -40,6 +40,13 @@
   --accent-wash: rgba(180, 107, 255, 0.1);
 }
 
+[data-view="notes"] {
+  --accent: #39ff14;
+  --accent-text: #032b00;
+  --accent-glow: rgba(57, 255, 20, 0.35);
+  --accent-wash: rgba(57, 255, 20, 0.1);
+}
+
 html, body, #root {
   height: 100%;
   margin: 0;

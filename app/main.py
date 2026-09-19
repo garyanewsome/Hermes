@@ -97,6 +97,10 @@ class TodoItemUpdateRequest(BaseModel):
     due_date: str | None = None
 
 
+class NoteUpdateRequest(BaseModel):
+    content: str
+
+
 # Deny-by-default: every request needs a valid session cookie UNLESS it's
 # explicitly public. /login, /logout, /health, and the static SPA shell
 # (index.html, the JS/CSS bundle, icons, the manifest) stay public — the
@@ -337,6 +341,28 @@ def patch_todo_item(item_id: int, request: TodoItemUpdateRequest):
 @app.delete("/todo-items/{item_id}")
 def remove_todo_item(item_id: int):
     planner_db.delete_todo_item(item_id)
+    return {"status": "ok"}
+
+
+@app.get("/notes")
+def get_notes():
+    return {"notes": planner_db.list_notes()}
+
+
+@app.post("/notes")
+def post_note():
+    return planner_db.create_note()
+
+
+@app.patch("/notes/{note_id}")
+def patch_note(note_id: int, request: NoteUpdateRequest):
+    planner_db.update_note(note_id, request.content)
+    return {"status": "ok"}
+
+
+@app.delete("/notes/{note_id}")
+def remove_note(note_id: int):
+    planner_db.delete_note(note_id)
     return {"status": "ok"}
 
 
