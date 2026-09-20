@@ -110,7 +110,10 @@ export default function HabitsView({ onOpenDrawer }) {
       <TopBar title="Habits" subtitle="last 7 days" onOpenDrawer={onOpenDrawer} />
 
       <div style={{ flex: 1, minHeight: 0, padding: isMobile ? 14 : 24, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
-        {habits.map((h) => (
+        {habits.map((h) => {
+          const todayEntry = h.last_7_days[h.last_7_days.length - 1];
+          const loggedToday = !!todayEntry?.logged;
+          return (
           <div
             key={h.id}
             style={{
@@ -131,20 +134,20 @@ export default function HabitsView({ onOpenDrawer }) {
               ))}
             </div>
             <button
-              onClick={() => handleLog(h.name)}
+              onClick={() => (loggedToday ? handleToggleDay(h.id, todayEntry.date, false) : handleLog(h.name))}
               style={{
                 marginLeft: isMobile ? 0 : 'auto',
                 height: 30,
                 padding: '0 12px',
                 borderRadius: 8,
                 background: 'transparent',
-                border: '1px solid var(--accent-glow)',
-                color: 'var(--accent)',
+                border: `1px solid ${loggedToday ? 'color-mix(in srgb, var(--accent) 55%, var(--text-faint) 45%)' : 'var(--accent-glow)'}`,
+                color: loggedToday ? 'color-mix(in srgb, var(--accent) 55%, var(--text-faint) 45%)' : 'var(--accent)',
                 fontSize: 12,
                 fontWeight: 600,
               }}
             >
-              Log today
+              {loggedToday ? 'Undo today' : 'Log today'}
             </button>
             <div style={{ fontSize: 13, color: h.streak > 0 ? 'var(--accent)' : 'var(--text-faint)', fontWeight: 600, minWidth: isMobile ? 0 : 90, marginLeft: isMobile ? 'auto' : 0, textAlign: 'right' }}>
               {h.streak > 0 ? `${h.streak} day streak` : 'no streak yet'}
@@ -160,7 +163,8 @@ export default function HabitsView({ onOpenDrawer }) {
               </svg>
             </button>
           </div>
-        ))}
+          );
+        })}
 
         {showForm ? (
           <form onSubmit={handleAdd} style={{ display: 'flex', gap: 10 }}>

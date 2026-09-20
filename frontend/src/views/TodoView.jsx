@@ -282,12 +282,20 @@ function TodoItemRow({ item, onToggle, onUpdate, onDelete }) {
           height: 18,
           flexShrink: 0,
           borderRadius: 5,
-          background: item.done ? 'var(--accent)' : 'transparent',
-          border: item.done ? 'none' : '1px solid var(--border-strong)',
-          boxShadow: item.done ? '0 0 6px var(--accent-glow)' : 'none',
+          background: 'transparent',
+          border: `1px solid ${item.done ? 'var(--accent)' : 'var(--border-strong)'}`,
           padding: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
-      />
+      >
+        {item.done && (
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+            <path d="M2.3 6.2l2.3 2.3 4.7-5" stroke="var(--accent)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </button>
       {editing ? (
         <input
           autoFocus
@@ -390,6 +398,7 @@ export default function TodoView({ onOpenDrawer }) {
   const [items, setItems] = useState([]);
   const [newItemText, setNewItemText] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [hideDone, setHideDone] = useState(false);
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -519,8 +528,15 @@ export default function TodoView({ onOpenDrawer }) {
               </button>
             </form>
 
+            {items.some((i) => i.done) && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-dim)', alignSelf: 'flex-start' }}>
+                <input type="checkbox" checked={hideDone} onChange={(e) => setHideDone(e.target.checked)} />
+                Hide done
+              </label>
+            )}
+
             {items.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>Nothing on this list yet.</div>}
-            {items.map((item) => (
+            {(hideDone ? items.filter((i) => !i.done) : items).map((item) => (
               <TodoItemRow key={item.id} item={item} onToggle={handleToggle} onUpdate={handleUpdateItem} onDelete={handleDeleteItem} />
             ))}
           </div>
