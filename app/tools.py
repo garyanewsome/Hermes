@@ -244,17 +244,24 @@ def research_repo(repo: str, question: str | None = None) -> str:
 
     lines = [f"Indexed {repo} at commit {data['commit'][:8]}."]
     hits = data.get("hits") or []
-    if question:
-        if hits:
-            lines.append(f"Found {len(hits)} relevant snippet(s) for \"{question}\":")
-            for hit in hits[:3]:
-                lines.append(f"- {hit['file_path']}")
-        else:
-            lines.append(f"No snippets matched \"{question}\".")
+    is_overview = data.get("is_overview", not question)
+    if hits:
+        # Actual content, not just file paths — otherwise there's nothing
+        # here for the model to summarize or answer from, and it can only
+        # say "I found some files" instead of describing what's in them.
+        # Confirmed live: without this, a no-question research_repo call
+        # produced no summary at all, just "indexed, note written."
+        label = "Representative snippets for a general overview:" if is_overview else f"Relevant snippets for \"{question}\":"
+        lines.append(label)
+        for hit in hits[:5]:
+            content = hit["content"][:800]
+            lines.append(f"\n--- {hit['file_path']} ---\n{content}")
+    elif question:
+        lines.append(f"No snippets matched \"{question}\".")
     if data.get("note_path"):
-        lines.append(f"Findings written to the vault at: {data['note_path']}")
+        lines.append(f"\nFindings written to the vault at: {data['note_path']}")
     elif data.get("note_error"):
-        lines.append(f"(Couldn't write the findings note: {data['note_error']})")
+        lines.append(f"\n(Couldn't write the findings note: {data['note_error']})")
     return "\n".join(lines)
 
 
