@@ -102,6 +102,14 @@ export async function deleteConversation(id) {
   await apiFetch('/conversations/' + id, { method: 'DELETE' });
 }
 
+export async function deleteMessage(conversationId, messageId) {
+  await apiFetch(`/conversations/${conversationId}/messages/${messageId}`, { method: 'DELETE' });
+}
+
+// resendMessage isn't here — like /chat, it's a streaming response, so
+// ChatView.jsx calls it directly via fetch+reader rather than through this
+// file's JSON-returning apiFetch wrapper.
+
 export async function listTasks(status = 'open') {
   const res = await apiFetch('/tasks?status=' + status);
   const data = await res.json();

@@ -80,3 +80,35 @@ a { color: inherit; }
   border-radius: 8px;
   margin: 4px 0;
 }
+
+.msg-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+/* Hover-only on desktop (a mouse can hover); always visible on mobile,
+   where there's no hover state to reveal them with. */
+.msg-row:hover .msg-actions,
+.msg-actions.always-visible {
+  opacity: 1;
+}
+
+.msg-action-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.msg-action-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent) !important;
+}

@@ -14,11 +14,15 @@ from app.db import (
     add_message,
     create_conversation,
     delete_conversation,
+    delete_message,
+    delete_messages_from,
+    get_message,
     get_messages,
     init_db,
     list_conversations,
     maybe_set_title,
     rename_conversation,
+    update_message_content,
 )
 from app import planner_db
 
@@ -46,6 +50,15 @@ class ChatRequest(BaseModel):
 
 class RenameRequest(BaseModel):
     title: str
+
+
+class ResendRequest(BaseModel):
+    # Present + non-empty to edit a user message before resending;
+    # omitted/None to resend as-is (a plain "regenerate" when targeting
+    # the last assistant message, or "retry this exact message" for a user one).
+    content: str | None = None
+    model: str | None = None
+    think: bool = False
 
 
 Quadrant = Literal["do", "schedule", "next", "backlog"]
@@ -202,26 +215,20 @@ def remove_conversation(conversation_id: str):
     return {"status": "ok"}
 
 
-@app.post("/chat")
-async def chat(request: ChatRequest):
-    conversation_id = request.conversation_id
-    is_new = conversation_id is None
-    if is_new:
-        conversation_id = create_conversation()
-
-    history = get_messages(conversation_id)
-    history.append({"role": "user", "content": request.message})
-
-    add_message(conversation_id, "user", request.message)
-    if is_new:
-        maybe_set_title(conversation_id, request.message)
+def _stream_and_persist(conversation_id: str, history: list[dict], model: str | None, think: bool):
+    # Shared by /chat and /resend — both send an initial history to Ollama,
+    # stream the reply back as ndjson, and persist it the same way on
+    # completion or client abort. run_chat_stream gets id-free {role,
+    # content} pairs — the message id is our own bookkeeping, not
+    # something to hand to Ollama's API.
+    clean_history = [{"role": m["role"], "content": m["content"]} for m in history]
 
     async def event_stream():
         accumulated = ""
         yield json.dumps({"type": "conversation_id", "conversation_id": conversation_id}) + "\n"
         try:
             async for kind, chunk in run_chat_stream(
-                history, model=request.model, conversation_id=conversation_id, think=request.think
+                clean_history, model=model, conversation_id=conversation_id, think=think
             ):
                 # "image" chunks (the raw generate_image markdown/URL) are
                 # sent to the client like any other chunk, but deliberately
@@ -239,6 +246,64 @@ async def chat(request: ChatRequest):
                 add_message(conversation_id, "assistant", accumulated)
 
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")
+
+
+@app.post("/chat")
+async def chat(request: ChatRequest):
+    conversation_id = request.conversation_id
+    is_new = conversation_id is None
+    if is_new:
+        conversation_id = create_conversation()
+
+    history = get_messages(conversation_id)
+    history.append({"role": "user", "content": request.message})
+
+    add_message(conversation_id, "user", request.message)
+    if is_new:
+        maybe_set_title(conversation_id, request.message)
+
+    return _stream_and_persist(conversation_id, history, request.model, request.think)
+
+
+@app.delete("/conversations/{conversation_id}/messages/{message_id}")
+def remove_message(conversation_id: str, message_id: int):
+    message = get_message(message_id)
+    if message is None or message["conversation_id"] != conversation_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+    delete_message(message_id)
+    return {"status": "ok"}
+
+
+@app.post("/conversations/{conversation_id}/messages/{message_id}/resend")
+def resend(conversation_id: str, message_id: int, request: ResendRequest):
+    message = get_message(message_id)
+    if message is None or message["conversation_id"] != conversation_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    if message["role"] == "user":
+        # Edit-and-resend (content given) or plain retry of this exact
+        # message (content omitted) — either way, the old reply (and
+        # anything after it) is stale and gets dropped.
+        if request.content is not None:
+            content = request.content.strip()
+            if not content:
+                raise HTTPException(status_code=400, detail="content can't be empty")
+            update_message_content(message_id, content)
+        delete_messages_from(conversation_id, message_id + 1)
+    elif message["role"] == "assistant":
+        # Regenerate: content doesn't apply to an assistant message here —
+        # editing the model's own words isn't what this endpoint is for.
+        if request.content is not None:
+            raise HTTPException(status_code=400, detail="content only applies when resending a user message")
+        delete_messages_from(conversation_id, message_id)
+    else:
+        raise HTTPException(status_code=400, detail=f"Can't resend a '{message['role']}' message")
+
+    history = get_messages(conversation_id)
+    if not history:
+        raise HTTPException(status_code=400, detail="Nothing left to resend after truncation")
+
+    return _stream_and_persist(conversation_id, history, request.model, request.think)
 
 
 @app.get("/tasks")

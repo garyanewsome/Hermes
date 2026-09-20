@@ -1,24 +1,66 @@
 import { useEffect, useRef, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
 import ConversationSidebar from './ConversationSidebar.jsx';
-import { getConversation, getModels, listConversations } from '../api.js';
+import { deleteMessage, getConversation, getModels, listConversations } from '../api.js';
 import { renderMarkdown } from '../lib/markdown.js';
 import useIsMobile from '../hooks/useIsMobile.js';
+
+function TrashIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+      <path d="M2.5 3.5h7M4.5 3.5V2.5a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1M4 3.5l.4 6a1 1 0 0 0 1 .9h1.2a1 1 0 0 0 1-.9l.4-6" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function EditIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+      <path d="M8.3 1.7l2 2L4 10H2v-2l6.3-6.3z" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function RetryIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+      <path d="M9.8 5.5A3.8 3.8 0 1 1 8.6 2.9M9.8 1.7v2.6H7.2" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function MsgActionButton({ onClick, label, children }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="msg-action-btn"
+      style={{ color: 'var(--text-dim)' }}
+    >
+      {children}
+    </button>
+  );
+}
 
 export default function ChatView({ onOpenDrawer }) {
   const [conversations, setConversations] = useState([]);
   const [currentId, setCurrentId] = useState(null);
-  const [messages, setMessages] = useState([]); // { role, content, pending }
+  const [messages, setMessages] = useState([]); // { id, role, content, pending }
   const [models, setModels] = useState([]);
   const [model, setModel] = useState('');
   const [think, setThink] = useState(false);
   const [input, setInput] = useState('');
   const [generating, setGenerating] = useState(false);
   const [convSidebarOpen, setConvSidebarOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState('');
   const isMobile = useIsMobile();
 
   const abortRef = useRef(null);
   const messagesRef = useRef(null);
+  const currentIdRef = useRef(null);
+  currentIdRef.current = currentId;
 
   useEffect(() => {
     getModels()
@@ -54,26 +96,19 @@ export default function ChatView({ onOpenDrawer }) {
     refreshConversations();
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-
-    if (generating) {
-      abortRef.current?.abort();
-      return;
-    }
-
-    const text = input.trim();
-    if (!text) return;
-    setInput('');
+  // The shared core behind sending a new message, regenerating, and
+  // edit-and-resend — all three POST to a streaming ndjson endpoint and
+  // want identical handling: stall/abort recovery, incremental token
+  // rendering into the last message slot, and final persistence. Assumes
+  // the caller already appended a pending assistant placeholder as the
+  // last element of `messages` before calling this.
+  async function runStream(url, body) {
     setGenerating(true);
-
-    setMessages((prev) => [...prev, { role: 'user', content: text }, { role: 'assistant', content: 'thinking...', pending: true }]);
 
     const controller = new AbortController();
     abortRef.current = controller;
     let fullText = '';
-    let gotFirstToken = false;
-    let conversationId = currentId;
+    let conversationId = currentIdRef.current;
 
     // A stalled connection here — no bytes at all, for any reason (a dead
     // keep-alive connection from a long-idle tab, the backend pod
@@ -97,10 +132,10 @@ export default function ChatView({ onOpenDrawer }) {
     }
 
     try {
-      const response = await fetch('/chat', {
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, conversation_id: currentId, model: model || null, think }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       });
       resetStallTimer();
@@ -131,12 +166,11 @@ export default function ChatView({ onOpenDrawer }) {
             conversationId = event.conversation_id;
             setCurrentId(event.conversation_id);
           } else if (event.type === 'token') {
-            gotFirstToken = true;
             fullText += event.content;
             const snapshot = fullText;
             setMessages((prev) => {
               const next = [...prev];
-              next[next.length - 1] = { role: 'assistant', content: snapshot, pending: false };
+              next[next.length - 1] = { ...next[next.length - 1], role: 'assistant', content: snapshot, pending: false };
               return next;
             });
           }
@@ -145,22 +179,31 @@ export default function ChatView({ onOpenDrawer }) {
 
       setMessages((prev) => {
         const next = [...prev];
-        next[next.length - 1] = { role: 'assistant', content: fullText, pending: false };
+        next[next.length - 1] = { ...next[next.length - 1], role: 'assistant', content: fullText, pending: false };
         return next;
       });
       refreshConversations();
+      // The placeholder in `messages` has no real id (the streaming
+      // protocol only ever confirms conversation_id, not per-message
+      // ids) — re-fetch from the server so delete/edit/regenerate on
+      // this exchange has a real id to target, without needing every
+      // reply to carry one through the stream itself.
+      if (conversationId) {
+        const data = await getConversation(conversationId);
+        if (data) setMessages(data.messages.map((m) => ({ ...m, pending: false })));
+      }
     } catch (err) {
       if (err.name === 'AbortError') {
         const suffix = timedOut ? '\n\n*(connection stalled — try again)*' : '\n\n*(stopped)*';
         setMessages((prev) => {
           const next = [...prev];
-          next[next.length - 1] = { role: 'assistant', content: fullText + suffix, pending: false };
+          next[next.length - 1] = { ...next[next.length - 1], role: 'assistant', content: fullText + suffix, pending: false };
           return next;
         });
       } else {
         setMessages((prev) => {
           const next = [...prev];
-          next[next.length - 1] = { role: 'assistant', content: 'Something went wrong: ' + err.message, pending: false };
+          next[next.length - 1] = { ...next[next.length - 1], role: 'assistant', content: 'Something went wrong: ' + err.message, pending: false };
           return next;
         });
       }
@@ -169,6 +212,74 @@ export default function ChatView({ onOpenDrawer }) {
       setGenerating(false);
       abortRef.current = null;
     }
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+
+    if (generating) {
+      abortRef.current?.abort();
+      return;
+    }
+
+    const text = input.trim();
+    if (!text) return;
+    setInput('');
+
+    setMessages((prev) => [...prev, { role: 'user', content: text }, { role: 'assistant', content: 'thinking...', pending: true }]);
+
+    await runStream('/chat', { message: text, conversation_id: currentId, model: model || null, think });
+  }
+
+  async function handleDeleteMessage(messageId) {
+    setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    if (currentId) await deleteMessage(currentId, messageId);
+  }
+
+  function startEdit(m) {
+    setEditingId(m.id);
+    setEditText(m.content);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditText('');
+  }
+
+  async function submitEdit(messageId) {
+    const text = editText.trim();
+    setEditingId(null);
+    if (!text || generating) return;
+
+    setMessages((prev) => {
+      const idx = prev.findIndex((m) => m.id === messageId);
+      if (idx === -1) return prev;
+      return [
+        ...prev.slice(0, idx),
+        { ...prev[idx], content: text },
+        { role: 'assistant', content: 'thinking...', pending: true },
+      ];
+    });
+
+    await runStream(`/conversations/${currentId}/messages/${messageId}/resend`, {
+      content: text,
+      model: model || null,
+      think,
+    });
+  }
+
+  async function handleRegenerate(messageId) {
+    if (generating) return;
+    setMessages((prev) => {
+      const idx = prev.findIndex((m) => m.id === messageId);
+      if (idx === -1) return prev;
+      return [...prev.slice(0, idx), { role: 'assistant', content: 'thinking...', pending: true }];
+    });
+
+    await runStream(`/conversations/${currentId}/messages/${messageId}/resend`, {
+      model: model || null,
+      think,
+    });
   }
 
   return (
@@ -213,29 +324,80 @@ export default function ChatView({ onOpenDrawer }) {
         </TopBar>
 
         <div ref={messagesRef} style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '14px 12px' : 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {messages.map((m, i) => (
-            <div
-              key={i}
-              className="msg-bubble"
-              style={{
-                maxWidth: isMobile ? '88%' : '70%',
-                alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-                padding: '10px 14px',
-                borderRadius: 14,
-                lineHeight: 1.45,
-                fontSize: 14.5,
-                whiteSpace: m.role === 'user' || m.pending ? 'pre-wrap' : 'normal',
-                fontStyle: m.pending ? 'italic' : 'normal',
-                color: m.pending ? 'var(--text-dim)' : m.role === 'user' ? 'var(--accent-text)' : 'var(--text)',
-                background: m.role === 'user' ? 'var(--accent)' : 'var(--panel-2)',
-                border: m.role === 'assistant' ? '1px solid var(--accent)' : 'none',
-                boxShadow: m.role === 'user' || m.role === 'assistant' ? '0 0 10px var(--accent-glow)' : 'none',
-              }}
-              {...(m.role === 'assistant' && !m.pending
-                ? { dangerouslySetInnerHTML: { __html: renderMarkdown(m.content) } }
-                : { children: m.content })}
-            />
-          ))}
+          {messages.map((m, i) => {
+            const isEditing = m.id != null && editingId === m.id;
+            return (
+              <div
+                key={m.id ?? `pending-${i}`}
+                className="msg-row"
+                style={{ display: 'flex', flexDirection: 'column', maxWidth: isMobile ? '88%' : '70%', alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start' }}
+              >
+                {isEditing ? (
+                  <textarea
+                    autoFocus
+                    rows={Math.min(8, Math.max(2, editText.split('\n').length))}
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitEdit(m.id); }
+                      if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
+                    }}
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: 14,
+                      lineHeight: 1.45,
+                      fontSize: 14.5,
+                      fontFamily: 'inherit',
+                      color: 'var(--accent-text)',
+                      background: 'var(--accent)',
+                      border: '1px solid var(--accent)',
+                      resize: 'vertical',
+                      boxShadow: '0 0 10px var(--accent-glow)',
+                    }}
+                  />
+                ) : (
+                  <div
+                    className="msg-bubble"
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: 14,
+                      lineHeight: 1.45,
+                      fontSize: 14.5,
+                      whiteSpace: m.role === 'user' || m.pending ? 'pre-wrap' : 'normal',
+                      fontStyle: m.pending ? 'italic' : 'normal',
+                      color: m.pending ? 'var(--text-dim)' : m.role === 'user' ? 'var(--accent-text)' : 'var(--text)',
+                      background: m.role === 'user' ? 'var(--accent)' : 'var(--panel-2)',
+                      border: m.role === 'assistant' ? '1px solid var(--accent)' : 'none',
+                      boxShadow: m.role === 'user' || m.role === 'assistant' ? '0 0 10px var(--accent-glow)' : 'none',
+                    }}
+                    {...(m.role === 'assistant' && !m.pending
+                      ? { dangerouslySetInnerHTML: { __html: renderMarkdown(m.content) } }
+                      : { children: m.content })}
+                  />
+                )}
+                {m.id != null && !m.pending && !isEditing && (
+                  <div
+                    className={`msg-actions${isMobile ? ' always-visible' : ''}`}
+                    style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start' }}
+                  >
+                    {m.role === 'user' && (
+                      <MsgActionButton label="Edit and resend" onClick={() => startEdit(m)}>
+                        <EditIcon />
+                      </MsgActionButton>
+                    )}
+                    {m.role === 'assistant' && (
+                      <MsgActionButton label="Regenerate this response" onClick={() => handleRegenerate(m.id)}>
+                        <RetryIcon />
+                      </MsgActionButton>
+                    )}
+                    <MsgActionButton label="Delete message" onClick={() => handleDeleteMessage(m.id)}>
+                      <TrashIcon />
+                    </MsgActionButton>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <form

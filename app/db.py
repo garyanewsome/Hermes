@@ -92,10 +92,10 @@ def conversation_exists(conversation_id: str) -> bool:
 def get_messages(conversation_id: str) -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY id",
+            "SELECT id, role, content FROM messages WHERE conversation_id = ? ORDER BY id",
             (conversation_id,),
         ).fetchall()
-    return [{"role": row["role"], "content": row["content"]} for row in rows]
+    return [{"id": row["id"], "role": row["role"], "content": row["content"]} for row in rows]
 
 
 def list_conversations() -> list[dict]:
@@ -113,3 +113,37 @@ def delete_conversation(conversation_id: str) -> None:
     with _connect() as conn:
         conn.execute("DELETE FROM messages WHERE conversation_id = ?", (conversation_id,))
         conn.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
+
+
+def get_message(message_id: int) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT id, conversation_id, role, content FROM messages WHERE id = ?", (message_id,)
+        ).fetchone()
+    if row is None:
+        return None
+    return {"id": row["id"], "conversation_id": row["conversation_id"], "role": row["role"], "content": row["content"]}
+
+
+def delete_message(message_id: int) -> None:
+    """Removes exactly this one message, nothing else — for a plain
+    "get rid of this" from the UI with no regenerate involved."""
+    with _connect() as conn:
+        conn.execute("DELETE FROM messages WHERE id = ?", (message_id,))
+
+
+def delete_messages_from(conversation_id: str, message_id: int) -> None:
+    """Drops this message and everything after it (by id, which is also
+    insertion order) — the truncation step behind both regenerate (target
+    an assistant message) and edit-and-resend (target a user message,
+    dropping the stale reply and anything after it)."""
+    with _connect() as conn:
+        conn.execute(
+            "DELETE FROM messages WHERE conversation_id = ? AND id >= ?",
+            (conversation_id, message_id),
+        )
+
+
+def update_message_content(message_id: int, content: str) -> None:
+    with _connect() as conn:
+        conn.execute("UPDATE messages SET content = ? WHERE id = ?", (content, message_id))
