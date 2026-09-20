@@ -15,7 +15,7 @@ from app.config import (
     HINDSIGHT_URL,
     IRIS_URL,
 )
-from app import planner_db
+from app import db, planner_db
 
 
 def search_vault(query: str) -> str:
@@ -271,13 +271,28 @@ def forget_repo(repo: str) -> str:
     return f"Deleted the local clone and index for \"{repo}\". Any findings notes already in the vault are untouched."
 
 
-def write_vault_note(folder: str, filename: str, content: str) -> str:
+def write_vault_note(folder: str, filename: str, content: str | None = None, conversation_id: str | None = None) -> str:
     # General-purpose vault write — reuses CodebaseSearcher's existing
     # git-clone/commit/push plumbing for the vault (it already holds the
     # write-scoped deploy key), rather than standing up a second one.
-    # Unlike research_repo's findings notes, folder/filename/content here
-    # are whatever the model itself decides — e.g. saving a plan drafted
-    # earlier in the conversation, not something CodebaseSearcher researched.
+    #
+    # content is optional on purpose: the common case ("save that plan
+    # you just wrote") would otherwise force the model to retype
+    # something it already produced, verbatim, as a JSON tool-call
+    # argument — slow (nothing streams to the user until the whole
+    # argument is generated, confirmed live: a multi-KB plan blew past
+    # the frontend's 45s stall timeout with zero bytes sent) and risky
+    # (the same long-string retyping corruption already seen and fixed
+    # for generate_image's image URLs, just for text instead of a URL).
+    # Omitted content pulls the conversation's own last assistant reply
+    # straight from storage instead — instant, and guaranteed byte-exact.
+    if not content:
+        if not conversation_id:
+            raise ValueError("No content given, and no conversation to pull the last message from.")
+        content = db.get_last_assistant_message(conversation_id)
+        if not content:
+            raise ValueError("No previous assistant message found in this conversation to save — pass content explicitly.")
+
     response = httpx.post(
         f"{CODEBASE_SEARCHER_URL}/write_note",
         json={"folder": folder, "filename": filename, "content": content},
@@ -681,30 +696,50 @@ TOOLS = [
         "function": {
             "name": "write_vault_note",
             "description": (
-                "Save arbitrary content as a new note in the user's Obsidian vault, at "
-                "whatever folder they specify — e.g. 'write this up as a note', 'save that "
-                "plan to my vault', or pasting a folder path like '10 Development/Tech "
-                "Plans'. Not for codebase research findings — research_repo already writes "
-                "those itself. Always creates a new file; never overwrites an existing one "
-                "(auto-suffixes on a name collision instead)."
+                "Save a note in the user's Obsidian vault, at whatever folder they specify — "
+                "e.g. 'write this up as a note', 'save that plan to my vault', or pasting a "
+                "path like '10 Development/Tech Plans'. Not for codebase research findings — "
+                "research_repo already writes those itself. Always creates a new file; never "
+                "overwrites an existing one (auto-suffixes on a name collision instead). "
+                "Omit `content` whenever you're saving something you (the assistant) already "
+                "wrote earlier in this conversation — it saves your actual last message "
+                "byte-for-byte, which is faster and safer than retyping it."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "folder": {
                         "type": "string",
-                        "description": "Folder path within the vault, e.g. '10 Development/Tech Plans'. Use exactly what the user gave, if they gave one.",
+                        "description": (
+                            "Folder path within the vault, e.g. '10 Development/Tech Plans'. "
+                            "If the user gave one combined path with the filename at the end "
+                            "(e.g. '10 Development/Tech Plans/Audio Analyzer.md'), split it: "
+                            "everything before the last '/' is the folder."
+                        ),
                     },
                     "filename": {
                         "type": "string",
-                        "description": "Filename including extension, e.g. 'webrtc-audio-streaming-plan.md'. Pick something short and descriptive if the user didn't specify one.",
+                        "description": (
+                            "Filename including extension, e.g. 'audio-analyzer-plan.md'. If "
+                            "the user gave a combined path, use just the last segment (e.g. "
+                            "'Audio Analyzer.md'). Pick something short and descriptive if "
+                            "they didn't specify a name at all."
+                        ),
                     },
                     "content": {
                         "type": "string",
-                        "description": "The full note content (markdown), e.g. the plan/summary already discussed in this conversation.",
+                        "description": (
+                            "Only set this when writing NEW content the user is dictating or "
+                            "you're composing fresh right now. Leave it out entirely when "
+                            "saving something you already said earlier in this conversation "
+                            "(e.g. 'write that plan to the vault') — omitting it saves your "
+                            "actual last message directly, instead of you having to retype a "
+                            "long response as this argument, which is slow and risks "
+                            "corrupting the text."
+                        ),
                     },
                 },
-                "required": ["folder", "filename", "content"],
+                "required": ["folder", "filename"],
             },
         },
     },

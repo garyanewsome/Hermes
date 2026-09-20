@@ -98,6 +98,20 @@ def get_messages(conversation_id: str) -> list[dict]:
     return [{"id": row["id"], "role": row["role"], "content": row["content"]} for row in rows]
 
 
+def get_last_assistant_message(conversation_id: str) -> str | None:
+    """For write_vault_note's default path: pull the model's own most
+    recent reply straight from storage instead of asking it to retype
+    (large) content as a tool-call argument — same corruption/latency
+    risk already solved for generate_image's image URLs, just for text
+    instead of a URL."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT content FROM messages WHERE conversation_id = ? AND role = 'assistant' ORDER BY id DESC LIMIT 1",
+            (conversation_id,),
+        ).fetchone()
+    return row["content"] if row else None
+
+
 def list_conversations() -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
