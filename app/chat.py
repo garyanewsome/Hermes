@@ -185,12 +185,25 @@ async def run_chat_stream(
             try:
                 if name == "generate_image":
                     await _unload_ollama_model(model)
-                    result = handler(**arguments, conversation_id=conversation_id)
-                    await _unload_iris()
+                    try:
+                        result = handler(**arguments, conversation_id=conversation_id)
+                    finally:
+                        # finally, not inline after the call: a raise from
+                        # the handler (Iris down, SDXL OOM, ...) must still
+                        # free whatever Iris did manage to allocate, or the
+                        # next generate_image starts from an already-full
+                        # GPU instead of a clean one.
+                        await _unload_iris()
                 elif name == "research_repo":
                     await _unload_ollama_model(model)
-                    result = handler(**arguments)
-                    await _unload_codebase_searcher()
+                    try:
+                        result = handler(**arguments)
+                    finally:
+                        # Same reasoning as generate_image above — confirmed
+                        # needed for real: a failed embed left CodebaseSearcher
+                        # holding ~9GB of stale CUDA allocator cache because
+                        # this unload never ran on the exception path.
+                        await _unload_codebase_searcher()
                 else:
                     result = handler(**arguments)
             except Exception as exc:
