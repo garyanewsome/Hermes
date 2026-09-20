@@ -7,7 +7,14 @@ and a handler function, not restructuring anything."""
 
 import httpx
 
-from app.config import ATHENAEUM_HOST_HEADER, ATHENAEUM_URL, HINDSIGHT_BANK_ID, HINDSIGHT_URL, IRIS_URL
+from app.config import (
+    ATHENAEUM_HOST_HEADER,
+    ATHENAEUM_URL,
+    CODEBASE_SEARCHER_URL,
+    HINDSIGHT_BANK_ID,
+    HINDSIGHT_URL,
+    IRIS_URL,
+)
 from app import planner_db
 
 
@@ -219,6 +226,42 @@ def list_recent_scratch_notes() -> str:
     if not notes:
         return "No notes yet."
     return "\n".join(f"- {_note_title(n['content'])}" for n in notes)
+
+
+def research_repo(repo: str, question: str | None = None) -> str:
+    # On-demand, not a background sync like search_vault's Athenaeum —
+    # this clones/indexes the repo right now, only re-embedding if its
+    # commit actually moved since last time. Can genuinely take a while
+    # (first-time clone + embed of a real repo), hence the longer timeout
+    # than this file's other tool calls.
+    response = httpx.post(
+        f"{CODEBASE_SEARCHER_URL}/research",
+        json={"repo": repo, "question": question},
+        timeout=300.0,
+    )
+    response.raise_for_status()
+    data = response.json()
+
+    lines = [f"Indexed {repo} at commit {data['commit'][:8]}."]
+    hits = data.get("hits") or []
+    if question:
+        if hits:
+            lines.append(f"Found {len(hits)} relevant snippet(s) for \"{question}\":")
+            for hit in hits[:3]:
+                lines.append(f"- {hit['file_path']}")
+        else:
+            lines.append(f"No snippets matched \"{question}\".")
+    if data.get("note_path"):
+        lines.append(f"Findings written to the vault at: {data['note_path']}")
+    elif data.get("note_error"):
+        lines.append(f"(Couldn't write the findings note: {data['note_error']})")
+    return "\n".join(lines)
+
+
+def forget_repo(repo: str) -> str:
+    response = httpx.post(f"{CODEBASE_SEARCHER_URL}/forget", json={"repo": repo}, timeout=30.0)
+    response.raise_for_status()
+    return f"Deleted the local clone and index for \"{repo}\". Any findings notes already in the vault are untouched."
 
 
 TOOLS = [
@@ -551,6 +594,51 @@ TOOLS = [
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "research_repo",
+            "description": (
+                "Look at one of the user's GitHub repos on demand: clones/updates it, "
+                "semantically searches its code for `question` if given, and writes the "
+                "findings as a note in the user's Obsidian vault. Use when the user says "
+                "something like 'check out my X repo', 'look into how Y's repo handles Z', "
+                "or similar — this is a one-shot look, not a standing index, so call it "
+                "again if they ask about the same repo later (it only re-indexes if the "
+                "repo actually changed since last time, so repeat calls are cheap)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "repo": {"type": "string", "description": "The repo's name as it appears on the user's GitHub, e.g. 'Hermes' or 'Iris'"},
+                    "question": {
+                        "type": "string",
+                        "description": "What to look for in the repo's code, if the user asked something specific. Omit for a general first look.",
+                    },
+                },
+                "required": ["repo"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "forget_repo",
+            "description": (
+                "Delete a previously-researched repo's local clone and search index — use "
+                "when the user says a repo they had you check out wasn't useful/relevant "
+                "and they want it cleaned up. Does not delete any findings note already "
+                "written to the vault; only the disposable, regenerable cache."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "repo": {"type": "string", "description": "The repo's name, matching what was passed to research_repo"}
+                },
+                "required": ["repo"],
+            },
+        },
+    },
 ]
 
 TOOL_HANDLERS = {
@@ -570,4 +658,6 @@ TOOL_HANDLERS = {
     "add_scratch_note": add_scratch_note,
     "search_scratch_notes": search_scratch_notes,
     "list_recent_scratch_notes": list_recent_scratch_notes,
+    "research_repo": research_repo,
+    "forget_repo": forget_repo,
 }

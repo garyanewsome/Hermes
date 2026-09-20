@@ -25,6 +25,12 @@ HINDSIGHT_BANK_ID = os.environ.get("HINDSIGHT_BANK_ID", "vst-test")
 
 DB_PATH = os.environ.get("DB_PATH", "./hermes.db")
 
+# CodebaseSearcher runs inside K3s too, same as Athenaeum now does —
+# in-cluster service DNS, no Host-header trick needed. On-demand repo
+# research/indexing, not a background sync — see its own README for why
+# that's a deliberately different shape from Athenaeum's hourly vault sync.
+CODEBASE_SEARCHER_URL = os.environ.get("CODEBASE_SEARCHER_URL", "http://codebase-searcher-api:8000")
+
 # What "today" means for habit logging/streaks. Deliberately explicit rather
 # than trusting the pod's system clock — K3s containers default to UTC
 # regardless of the host machine's own local timezone, so date.today() in
