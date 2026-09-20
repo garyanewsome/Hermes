@@ -9,9 +9,36 @@ import NotesView from './views/NotesView.jsx';
 import SketchView from './views/SketchView.jsx';
 import { checkAuth } from './api.js';
 
+const VIEWS = ['chat', 'tasks', 'habits', 'todo', 'notes', 'sketch'];
+const LAST_VIEW_KEY = 'hermes:lastView';
+
+function initialView() {
+  try {
+    const saved = localStorage.getItem(LAST_VIEW_KEY);
+    if (VIEWS.includes(saved)) return saved;
+  } catch {
+    // Private-browsing / storage-blocked — fine, just default to chat.
+  }
+  return 'chat';
+}
+
 export default function App() {
-  const [view, setView] = useState('chat');
+  // "resume where we left off" — a refresh always dropped you back on
+  // chat with nothing selected, regardless of which view you were
+  // actually on. Persisted per-browser (localStorage, not React state
+  // alone), so it survives a full reload, not just navigation within
+  // the same load.
+  const [view, setViewState] = useState(initialView);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  function setView(next) {
+    setViewState(next);
+    try {
+      localStorage.setItem(LAST_VIEW_KEY, next);
+    } catch {
+      // Non-fatal if storage isn't available.
+    }
+  }
   // null = still checking, so we don't flash the login screen on a normal
   // page load before the /auth/check round trip lands.
   const [authenticated, setAuthenticated] = useState(null);

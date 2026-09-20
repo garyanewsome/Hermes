@@ -43,6 +43,8 @@ function MsgActionButton({ onClick, label, children }) {
   );
 }
 
+const LAST_CONVERSATION_KEY = 'hermes:lastConversationId';
+
 export default function ChatView({ onOpenDrawer }) {
   const [conversations, setConversations] = useState([]);
   const [currentId, setCurrentId] = useState(null);
@@ -69,8 +71,34 @@ export default function ChatView({ onOpenDrawer }) {
         if (list.includes('qwen3:14b')) setModel('qwen3:14b');
       })
       .catch(() => setModels([]));
-    refreshConversations();
+
+    // Resume the last-open conversation on a fresh page load, rather than
+    // always landing on an empty new chat — but only if it still exists
+    // (it may have been deleted since, from this device or another).
+    // localStorage, not sessionStorage: "resume where we left off" should
+    // survive closing the tab entirely, not just a same-tab refresh.
+    let savedId = null;
+    try {
+      savedId = localStorage.getItem(LAST_CONVERSATION_KEY);
+    } catch {
+      // Private-browsing / storage-blocked — fine, just start fresh.
+    }
+    listConversations().then((list) => {
+      setConversations(list);
+      if (savedId && list.some((c) => c.id === savedId)) {
+        selectConversation(savedId);
+      }
+    });
   }, []);
+
+  useEffect(() => {
+    try {
+      if (currentId) localStorage.setItem(LAST_CONVERSATION_KEY, currentId);
+      else localStorage.removeItem(LAST_CONVERSATION_KEY);
+    } catch {
+      // Same as above — non-fatal if storage isn't available.
+    }
+  }, [currentId]);
 
   useEffect(() => {
     if (messagesRef.current) {
