@@ -271,6 +271,23 @@ def forget_repo(repo: str) -> str:
     return f"Deleted the local clone and index for \"{repo}\". Any findings notes already in the vault are untouched."
 
 
+def write_vault_note(folder: str, filename: str, content: str) -> str:
+    # General-purpose vault write — reuses CodebaseSearcher's existing
+    # git-clone/commit/push plumbing for the vault (it already holds the
+    # write-scoped deploy key), rather than standing up a second one.
+    # Unlike research_repo's findings notes, folder/filename/content here
+    # are whatever the model itself decides — e.g. saving a plan drafted
+    # earlier in the conversation, not something CodebaseSearcher researched.
+    response = httpx.post(
+        f"{CODEBASE_SEARCHER_URL}/write_note",
+        json={"folder": folder, "filename": filename, "content": content},
+        timeout=30.0,
+    )
+    response.raise_for_status()
+    note_path = response.json()["note_path"]
+    return f"Saved to the vault at: {note_path}"
+
+
 TOOLS = [
     {
         "type": "function",
@@ -659,6 +676,38 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_vault_note",
+            "description": (
+                "Save arbitrary content as a new note in the user's Obsidian vault, at "
+                "whatever folder they specify — e.g. 'write this up as a note', 'save that "
+                "plan to my vault', or pasting a folder path like '10 Development/Tech "
+                "Plans'. Not for codebase research findings — research_repo already writes "
+                "those itself. Always creates a new file; never overwrites an existing one "
+                "(auto-suffixes on a name collision instead)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "folder": {
+                        "type": "string",
+                        "description": "Folder path within the vault, e.g. '10 Development/Tech Plans'. Use exactly what the user gave, if they gave one.",
+                    },
+                    "filename": {
+                        "type": "string",
+                        "description": "Filename including extension, e.g. 'webrtc-audio-streaming-plan.md'. Pick something short and descriptive if the user didn't specify one.",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "The full note content (markdown), e.g. the plan/summary already discussed in this conversation.",
+                    },
+                },
+                "required": ["folder", "filename", "content"],
+            },
+        },
+    },
 ]
 
 TOOL_HANDLERS = {
@@ -680,4 +729,5 @@ TOOL_HANDLERS = {
     "list_recent_scratch_notes": list_recent_scratch_notes,
     "research_repo": research_repo,
     "forget_repo": forget_repo,
+    "write_vault_note": write_vault_note,
 }
