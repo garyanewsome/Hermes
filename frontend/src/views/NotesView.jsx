@@ -211,6 +211,8 @@ function NoteList({ notes, activeId, onSelect, onCreate, onDelete, isMobile, mob
   );
 }
 
+const POLL_INTERVAL_MS = 20000;
+
 export default function NotesView({ onOpenDrawer }) {
   const [notes, setNotes] = useState([]);
   const [activeId, setActiveId] = useState(null);
@@ -218,18 +220,38 @@ export default function NotesView({ onOpenDrawer }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const isMobile = useIsMobile();
   const saveTimerRef = useRef(null);
+  // A ref mirror of activeId — refresh() is called from a setInterval set
+  // up once on mount, so its closure would otherwise see activeId frozen
+  // at whatever it was on that first render (the classic stale-closure
+  // trap for interval callbacks in React), never noticing which note is
+  // actually open by the time a later poll fires.
+  const activeIdRef = useRef(null);
+  activeIdRef.current = activeId;
 
   useEffect(() => {
     refresh();
+    // Poll for changes made elsewhere (another device, another tab) —
+    // notes jotted down on the phone at the gym used to need a manual
+    // page refresh here to show up at all.
+    const interval = setInterval(refresh, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
   }, []);
 
   async function refresh() {
     const fetched = await listNotes();
     setNotes(fetched);
-    setActiveId((current) => {
-      if (current != null && fetched.some((n) => n.id === current)) return current;
-      return fetched[0]?.id ?? null;
-    });
+
+    const currentActiveId = activeIdRef.current;
+    const stillExists = currentActiveId != null && fetched.some((n) => n.id === currentActiveId);
+    if (!stillExists) {
+      setActiveId(fetched[0]?.id ?? null);
+    } else if (!saveTimerRef.current) {
+      // Nothing unsaved locally right now — safe to pick up a remote edit
+      // to the note that's currently open. If there IS a pending save,
+      // leave draft alone rather than risk clobbering in-progress typing.
+      const updated = fetched.find((n) => n.id === currentActiveId);
+      if (updated) setDraft(updated.content || '');
+    }
   }
 
   useEffect(() => {
