@@ -129,6 +129,14 @@ def init_planner_db() -> None:
             WHERE todo_items.id = sub.id AND todo_items.position IS NULL
             """
         )
+        # NULL = one-off (the default/common case); a positive integer = an
+        # item that, on completion, resets itself to open with due_date
+        # pushed out that many days from today rather than staying checked
+        # off — "take out trash every 3 days" without needing the full
+        # streak-tracking machinery habits already own (a recurring todo
+        # doesn't need a log of every past completion, just "when's it due
+        # next").
+        conn.execute("ALTER TABLE todo_items ADD COLUMN IF NOT EXISTS recurrence_days INTEGER")
         # Simplenote-style scratchpad — no title field, the first line of
         # `content` serves as the title in the list. A quick-capture spot
         # for ideas on the go, meant to get copied into Obsidian later, not
@@ -493,7 +501,7 @@ def list_todo_items(list_id: int) -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
             """
-            SELECT id, list_id, text, done, due_date, position, created_at
+            SELECT id, list_id, text, done, due_date, position, recurrence_days, created_at
             FROM todo_items
             WHERE list_id = %s
             ORDER BY done, position
@@ -503,15 +511,15 @@ def list_todo_items(list_id: int) -> list[dict]:
     return [dict(row) for row in rows]
 
 
-def create_todo_item(list_id: int, text: str) -> dict:
+def create_todo_item(list_id: int, text: str, recurrence_days: int | None = None) -> dict:
     with _connect() as conn:
         row = conn.execute(
             """
-            INSERT INTO todo_items (list_id, text, position)
-            VALUES (%s, %s, COALESCE((SELECT MAX(position) + 1 FROM todo_items WHERE list_id = %s), 0))
-            RETURNING id, list_id, text, done, due_date, position, created_at
+            INSERT INTO todo_items (list_id, text, position, recurrence_days)
+            VALUES (%s, %s, COALESCE((SELECT MAX(position) + 1 FROM todo_items WHERE list_id = %s), 0), %s)
+            RETURNING id, list_id, text, done, due_date, position, recurrence_days, created_at
             """,
-            (list_id, text, list_id),
+            (list_id, text, list_id, recurrence_days),
         ).fetchone()
     return dict(row)
 
@@ -522,7 +530,28 @@ def update_todo_item(
     done: bool | None = None,
     due_date: str | None = None,
     position: float | None = None,
-) -> None:
+    recurrence_days: int | None = None,
+) -> dict:
+    # recurrence_days: None means "don't touch" (same convention as every
+    # other optional field here); 0 is the sentinel for "clear it" — a real
+    # interval can never be 0, same reasoning as due_date's "" sentinel.
+    if done is True:
+        with _connect() as conn:
+            current = conn.execute(
+                "SELECT recurrence_days FROM todo_items WHERE id = %s", (item_id,)
+            ).fetchone()
+        effective_recurrence = current["recurrence_days"] if current else None
+        if recurrence_days is not None:
+            effective_recurrence = None if recurrence_days == 0 else recurrence_days
+        if effective_recurrence:
+            # Recurring items don't stay checked off — completing one resets
+            # it to open with the next due date pushed out from *today*
+            # (not from the old due date), so finishing early or late never
+            # compounds drift; it's always "N days from when I actually did
+            # it," not "N days from when it was originally scheduled."
+            done = False
+            due_date = (_today() + timedelta(days=effective_recurrence)).isoformat()
+
     fields, params = [], []
     if text is not None:
         fields.append("text = %s")
@@ -538,11 +567,33 @@ def update_todo_item(
     if position is not None:
         fields.append("position = %s")
         params.append(position)
-    if not fields:
-        return
-    params.append(item_id)
+    if recurrence_days is not None:
+        fields.append("recurrence_days = %s")
+        params.append(None if recurrence_days == 0 else recurrence_days)
+
     with _connect() as conn:
-        conn.execute(f"UPDATE todo_items SET {', '.join(fields)} WHERE id = %s", params)
+        if fields:
+            params.append(item_id)
+            row = conn.execute(
+                f"""
+                UPDATE todo_items SET {', '.join(fields)} WHERE id = %s
+                RETURNING id, list_id, text, done, due_date, position, recurrence_days, created_at
+                """,
+                params,
+            ).fetchone()
+        else:
+            row = conn.execute(
+                """
+                SELECT id, list_id, text, done, due_date, position, recurrence_days, created_at
+                FROM todo_items WHERE id = %s
+                """,
+                (item_id,),
+            ).fetchone()
+    # Returned so callers (the PATCH route) can sync the client to what
+    # actually happened server-side — critical for a recurring item, where
+    # "mark done" can silently turn into "reset to open, due_date advanced"
+    # instead of the plain done=True the caller asked for.
+    return dict(row)
 
 
 def delete_todo_item(item_id: int) -> None:

@@ -107,6 +107,7 @@ class TodoListUpdateRequest(BaseModel):
 
 class TodoItemRequest(BaseModel):
     text: str
+    recurrence_days: int | None = None
 
 
 class TodoItemUpdateRequest(BaseModel):
@@ -114,6 +115,7 @@ class TodoItemUpdateRequest(BaseModel):
     done: bool | None = None
     due_date: str | None = None
     position: float | None = None
+    recurrence_days: int | None = None
 
 
 class NoteUpdateRequest(BaseModel):
@@ -410,13 +412,23 @@ def get_todo_items(list_id: int):
 
 @app.post("/todo-lists/{list_id}/items")
 def post_todo_item(list_id: int, request: TodoItemRequest):
-    return planner_db.create_todo_item(list_id, request.text)
+    return planner_db.create_todo_item(list_id, request.text, recurrence_days=request.recurrence_days)
 
 
 @app.patch("/todo-items/{item_id}")
 def patch_todo_item(item_id: int, request: TodoItemUpdateRequest):
-    planner_db.update_todo_item(item_id, text=request.text, done=request.done, due_date=request.due_date, position=request.position)
-    return {"status": "ok"}
+    # Returns the actual resulting item, not just {"status": "ok"} — a
+    # recurring item's "mark done" can turn into "reset to open, due_date
+    # advanced" server-side, and the client needs the real outcome to
+    # reflect that instead of assuming done=True stuck.
+    return planner_db.update_todo_item(
+        item_id,
+        text=request.text,
+        done=request.done,
+        due_date=request.due_date,
+        position=request.position,
+        recurrence_days=request.recurrence_days,
+    )
 
 
 @app.delete("/todo-items/{item_id}")

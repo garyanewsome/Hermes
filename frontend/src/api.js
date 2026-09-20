@@ -215,11 +215,15 @@ export async function createTodoItem(listId, text) {
 }
 
 export async function updateTodoItem(itemId, updates) {
-  await apiFetch(`/todo-items/${itemId}`, {
+  // Returns the real resulting item — a recurring item's "mark done" can
+  // turn into "reset to open, due_date advanced" server-side, so callers
+  // need the actual outcome, not just an ack.
+  const res = await apiFetch(`/todo-items/${itemId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(updates),
   });
+  return res.json();
 }
 
 export async function deleteTodoItem(itemId) {

@@ -12,6 +12,14 @@ import {
   deleteTodoItem,
 } from '../api.js';
 
+function RepeatIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+      <path d="M2 6.5V5a3 3 0 0 1 3-3h5.5M12 2v3h-3M12 7.5V9a3 3 0 0 1-3 3H3.5M2 12v-3h3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function ConfirmDeleteList({ list, onCancel, onConfirm }) {
   return (
     <div
@@ -302,6 +310,14 @@ function TodoItemRow({ item, onToggle, onUpdate, onDelete, onDragStart, isDragOv
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(item.text);
   const [pickingDate, setPickingDate] = useState(false);
+  const [pickingRecurrence, setPickingRecurrence] = useState(false);
+  const [recurrenceValue, setRecurrenceValue] = useState(item.recurrence_days || '');
+
+  function commitRecurrence() {
+    setPickingRecurrence(false);
+    const n = parseInt(recurrenceValue, 10);
+    if (n > 0 && n !== item.recurrence_days) onUpdate(item.id, { recurrence_days: n });
+  }
 
   function commitEdit() {
     const trimmed = editValue.trim();
@@ -434,6 +450,51 @@ function TodoItemRow({ item, onToggle, onUpdate, onDelete, onDragStart, isDragOv
         </button>
       )}
 
+      {pickingRecurrence ? (
+        <input
+          type="number"
+          min="1"
+          autoFocus
+          value={recurrenceValue}
+          placeholder="days"
+          onChange={(e) => setRecurrenceValue(e.target.value)}
+          onBlur={commitRecurrence}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commitRecurrence(); }
+            if (e.key === 'Escape') { e.preventDefault(); setRecurrenceValue(item.recurrence_days || ''); setPickingRecurrence(false); }
+          }}
+          style={{ width: 54, background: 'var(--panel-2)', border: '1px solid var(--accent)', color: 'var(--text)', borderRadius: 6, padding: '4px 6px', fontSize: 12 }}
+        />
+      ) : item.recurrence_days ? (
+        <button
+          onClick={() => { setRecurrenceValue(item.recurrence_days); setPickingRecurrence(true); }}
+          title="Repeats — click to change"
+          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 3, background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-faint)', borderRadius: 6, padding: '3px 8px', fontSize: 11 }}
+        >
+          <RepeatIcon />
+          every {item.recurrence_days}d
+        </button>
+      ) : (
+        <button
+          onClick={() => setPickingRecurrence(true)}
+          aria-label="Make recurring"
+          title="Make recurring"
+          style={{ flexShrink: 0, width: 22, height: 22, background: 'transparent', border: 'none', color: 'var(--text-faint)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <RepeatIcon />
+        </button>
+      )}
+      {item.recurrence_days && !pickingRecurrence && (
+        <button
+          onClick={() => onUpdate(item.id, { recurrence_days: 0 })}
+          aria-label="Stop recurring"
+          title="Stop recurring"
+          style={{ flexShrink: 0, background: 'transparent', border: 'none', color: 'var(--text-faint)', fontSize: 12, padding: 0 }}
+        >
+          ×
+        </button>
+      )}
+
       <button
         onClick={() => onDelete(item.id)}
         aria-label="Delete item"
@@ -519,17 +580,33 @@ export default function TodoView({ onOpenDrawer }) {
   }
 
   async function handleToggle(itemId, done) {
+    const prevItem = items.find((i) => i.id === itemId);
     setItems((prev) => {
       const next = prev.map((i) => (i.id === itemId ? { ...i, done } : i));
       return [...next.filter((i) => !i.done), ...next.filter((i) => i.done)];
     });
-    setLists((prev) => prev.map((l) => (l.id === activeId ? { ...l, open_count: (l.open_count || 0) + (done ? -1 : 1) } : l)));
-    await updateTodoItem(itemId, { done });
+    const updated = await updateTodoItem(itemId, { done });
+    // Reconcile with what actually happened, not what was asked for — a
+    // recurring item's "mark done" silently turns into "stays open,
+    // due_date pushed out" server-side, so the optimistic flip above can
+    // be wrong. Confirmed live: without this, a recurring item visually
+    // stayed checked off forever instead of resetting for its next cycle.
+    setItems((prev) => {
+      const next = prev.map((i) => (i.id === itemId ? updated : i));
+      return [...next.filter((i) => !i.done), ...next.filter((i) => i.done)];
+    });
+    if (prevItem && prevItem.done !== updated.done) {
+      const delta = updated.done ? -1 : 1;
+      setLists((prev) =>
+        prev.map((l) => (l.id === activeId ? { ...l, open_count: Math.max(0, (l.open_count || 0) + delta) } : l))
+      );
+    }
   }
 
   async function handleUpdateItem(itemId, updates) {
     setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, ...updates } : i)));
-    await updateTodoItem(itemId, updates);
+    const updated = await updateTodoItem(itemId, updates);
+    setItems((prev) => prev.map((i) => (i.id === itemId ? updated : i)));
   }
 
   async function handleDeleteItem(itemId) {

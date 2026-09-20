@@ -157,10 +157,11 @@ def habit_status(name: str | None = None) -> str:
     )
 
 
-def add_todo_item(text: str, list_name: str | None = None) -> str:
+def add_todo_item(text: str, list_name: str | None = None, recurrence_days: int | None = None) -> str:
     todo_list = planner_db.get_or_create_todo_list(list_name or "General")
-    item = planner_db.create_todo_item(todo_list["id"], text)
-    return f"Added \"{item['text']}\" to \"{todo_list['name']}\"."
+    item = planner_db.create_todo_item(todo_list["id"], text, recurrence_days=recurrence_days)
+    suffix = f" — repeats every {recurrence_days} days" if recurrence_days else ""
+    return f"Added \"{item['text']}\" to \"{todo_list['name']}\"{suffix}."
 
 
 def _format_todo_item(item: dict, with_list: bool) -> str:
@@ -200,7 +201,12 @@ def complete_todo_item(text: str, list_name: str | None = None) -> str:
     if len(matches) > 1:
         options = "\n".join(f"- {m['text']} [{m['list_name']}]" for m in matches)
         return f"Multiple items match \"{text}\" — which one?\n{options}"
-    planner_db.update_todo_item(matches[0]["id"], done=True)
+    updated = planner_db.update_todo_item(matches[0]["id"], done=True)
+    # A recurring item doesn't stay checked off — it's reset to open with
+    # the next due date. Say so, rather than a flat "checked off" that
+    # would misleadingly suggest it's gone from the list for good.
+    if updated["recurrence_days"]:
+        return f"Checked off \"{matches[0]['text']}\" — repeats every {updated['recurrence_days']} days, next due {updated['due_date']}."
     return f"Checked off \"{matches[0]['text']}\" on \"{matches[0]['list_name']}\"."
 
 
@@ -535,7 +541,11 @@ TOOLS = [
                 "music-production/dev task board. Use this one for casual "
                 "'add X to my list' requests that aren't project work. If the "
                 "named list doesn't exist yet it's created; if the user doesn't "
-                "name a list, it goes on \"General\"."
+                "name a list, it goes on \"General\". For something that repeats "
+                "('remind me to take out the trash every 3 days', 'water the "
+                "plants weekly'), set recurrence_days — checking it off then "
+                "resets it to open with the due date pushed out that many days, "
+                "instead of leaving it checked off for good."
             ),
             "parameters": {
                 "type": "object",
@@ -544,6 +554,10 @@ TOOLS = [
                     "list_name": {
                         "type": "string",
                         "description": "Which list, e.g. 'groceries' or 'errands' (fuzzy match; omit for the general list)",
+                    },
+                    "recurrence_days": {
+                        "type": "integer",
+                        "description": "How often this repeats, in days (1 for daily, 7 for weekly, etc.) — omit for a normal one-off item.",
                     },
                 },
                 "required": ["text"],
