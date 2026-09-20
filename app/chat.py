@@ -3,7 +3,7 @@ import logging
 
 import httpx
 
-from app.config import CHAT_MODEL, IRIS_URL, OLLAMA_HOST, SYSTEM_PROMPT
+from app.config import CHAT_MODEL, CODEBASE_SEARCHER_URL, IRIS_URL, OLLAMA_HOST, SYSTEM_PROMPT
 from app.tools import TOOL_HANDLERS, TOOLS
 
 MAX_TOOL_ITERATIONS = 5
@@ -41,6 +41,19 @@ async def _unload_iris() -> None:
             response.raise_for_status()
     except Exception:
         logger.exception("Failed to unload Iris pipeline after generate_image")
+
+
+async def _unload_codebase_searcher() -> None:
+    """Same handoff as _unload_iris, for CodebaseSearcher's embedding model
+    — it moved to bare-metal/GPU after a CPU-only run took 9+ minutes on a
+    real repo. Frees the embedding model right after research_repo returns,
+    before Ollama reloads the chat model for the follow-up reply."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(f"{CODEBASE_SEARCHER_URL}/unload")
+            response.raise_for_status()
+    except Exception:
+        logger.exception("Failed to unload CodebaseSearcher model after research_repo")
 
 
 async def _stream_ollama(messages: list[dict], model: str, think: bool):
@@ -174,6 +187,10 @@ async def run_chat_stream(
                     await _unload_ollama_model(model)
                     result = handler(**arguments, conversation_id=conversation_id)
                     await _unload_iris()
+                elif name == "research_repo":
+                    await _unload_ollama_model(model)
+                    result = handler(**arguments)
+                    await _unload_codebase_searcher()
                 else:
                     result = handler(**arguments)
             except Exception as exc:
