@@ -599,18 +599,31 @@ TOOLS = [
         "function": {
             "name": "research_repo",
             "description": (
-                "Look at one of the user's GitHub repos on demand: clones/updates it, "
-                "semantically searches its code for `question` if given, and writes the "
-                "findings as a note in the user's Obsidian vault. Use when the user says "
-                "something like 'check out my X repo', 'look into how Y's repo handles Z', "
-                "or similar — this is a one-shot look, not a standing index, so call it "
-                "again if they ask about the same repo later (it only re-indexes if the "
-                "repo actually changed since last time, so repeat calls are cheap)."
+                "Look at any GitHub repo on demand — the user's own, or anyone else's public "
+                "repo: clones/updates it, semantically searches its code for `question` if "
+                "given, and writes the findings as a note in the user's Obsidian vault. Use "
+                "when the user says something like 'check out my X repo', 'look into how Y's "
+                "repo handles Z', or pastes a GitHub URL — this is a one-shot look, not a "
+                "standing index, so call it again if they ask about the same repo later (it "
+                "only re-indexes if the repo actually changed since last time, so repeat "
+                "calls are cheap)."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "repo": {"type": "string", "description": "The repo's name as it appears on the user's GitHub, e.g. 'Hermes' or 'Iris'"},
+                    "repo": {
+                        "type": "string",
+                        "description": (
+                            "Pass through exactly what the user gave you — do not shorten or "
+                            "rewrite it. A full GitHub URL if they pasted one (e.g. "
+                            "'https://github.com/someone/their-repo'), 'owner/repo' if they "
+                            "named someone else's repo that way (e.g. 'someone/their-repo'), "
+                            "or just the bare name (e.g. 'Hermes') only when it's the user's "
+                            "own repo. Stripping a third-party URL down to a bare name is "
+                            "wrong — it gets resolved as if it were the user's own repo of "
+                            "that name, which will fail."
+                        ),
+                    },
                     "question": {
                         "type": "string",
                         "description": "What to look for in the repo's code, if the user asked something specific. Omit for a general first look.",
