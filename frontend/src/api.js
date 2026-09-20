@@ -187,11 +187,11 @@ export async function createTodoList(name) {
   return res.json();
 }
 
-export async function renameTodoList(listId, name) {
+export async function updateTodoList(listId, updates) {
   await apiFetch(`/todo-lists/${listId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(updates),
   });
 }
 

@@ -4,7 +4,7 @@ import useIsMobile from '../hooks/useIsMobile.js';
 import {
   listTodoLists,
   createTodoList,
-  renameTodoList,
+  updateTodoList,
   deleteTodoList,
   listTodoItems,
   createTodoItem,
@@ -53,12 +53,13 @@ function ConfirmDeleteList({ list, onCancel, onConfirm }) {
   );
 }
 
-function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onDelete, isMobile, mobileOpen, onMobileClose }) {
+function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onReorder, onDelete, isMobile, mobileOpen, onMobileClose }) {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [renamingId, setRenamingId] = useState(null);
   const [renameValue, setRenameValue] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(null);
+  const [dragOverId, setDragOverId] = useState(null);
 
   if (isMobile && !mobileOpen) return null;
 
@@ -85,6 +86,36 @@ function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onDelete, i
     const list = confirmingDelete;
     setConfirmingDelete(null);
     onDelete(list.id);
+  }
+
+  function handleDragStart(e, listId) {
+    e.dataTransfer.setData('text/plain', String(listId));
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
+  function handleDropOnList(e, targetList) {
+    e.preventDefault();
+    e.stopPropagation(); // don't also fire the container's own onDrop (append-to-end) for this same drop
+    setDragOverId(null);
+    const draggedId = Number(e.dataTransfer.getData('text/plain'));
+    if (draggedId === targetList.id) return;
+
+    // Insert immediately before the target — fractional position between
+    // it and its current previous sibling, same approach already used for
+    // reordering task cards (see TasksView.jsx's handleDropOnTask).
+    const siblings = lists.filter((l) => l.id !== draggedId);
+    const targetIndex = siblings.findIndex((l) => l.id === targetList.id);
+    const prevSibling = siblings[targetIndex - 1];
+    const newPosition = prevSibling ? (prevSibling.position + targetList.position) / 2 : targetList.position - 1;
+    onReorder(draggedId, newPosition);
+  }
+
+  function handleDropAtEnd(e) {
+    e.preventDefault();
+    const draggedId = Number(e.dataTransfer.getData('text/plain'));
+    const last = lists[lists.length - 1];
+    if (!last || draggedId === last.id) return;
+    onReorder(draggedId, last.position + 1);
   }
 
   return (
@@ -126,6 +157,11 @@ function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onDelete, i
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => {
+                  // Explicit, not just relying on native "Enter submits a
+                  // single-input form" — every other commit-on-Enter field
+                  // in this app already does this explicitly, and it's the
+                  // one that's actually reliable across input methods.
+                  if (e.key === 'Enter') { e.preventDefault(); submitCreate(e); }
                   if (e.key === 'Escape') {
                     setAdding(false);
                     setNewName('');
@@ -158,7 +194,11 @@ function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onDelete, i
           )}
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px' }}>
+        <div
+          style={{ flex: 1, overflowY: 'auto', padding: '0 8px' }}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleDropAtEnd}
+        >
           {lists.map((list) => (
             <div key={list.id} style={{ marginBottom: 2 }}>
               {renamingId === list.id ? (
@@ -185,6 +225,14 @@ function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onDelete, i
                 />
               ) : (
                 <div
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, list.id)}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (dragOverId !== list.id) setDragOverId(list.id);
+                  }}
+                  onDragLeave={() => setDragOverId((id) => (id === list.id ? null : id))}
+                  onDrop={(e) => handleDropOnList(e, list)}
                   onClick={() => {
                     onSelect(list.id);
                     if (isMobile) onMobileClose();
@@ -197,9 +245,10 @@ function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onDelete, i
                     borderRadius: 8,
                     fontSize: 13,
                     color: list.id === activeId ? 'var(--text)' : 'var(--text-dim)',
-                    cursor: 'pointer',
+                    cursor: 'grab',
                     background: list.id === activeId ? 'rgba(255,255,255,0.06)' : 'transparent',
                     boxShadow: list.id === activeId ? 'inset 2px 0 0 var(--accent)' : 'none',
+                    borderTop: dragOverId === list.id ? '2px solid var(--accent)' : '2px solid transparent',
                   }}
                 >
                   <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -249,7 +298,7 @@ function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onDelete, i
   );
 }
 
-function TodoItemRow({ item, onToggle, onUpdate, onDelete }) {
+function TodoItemRow({ item, onToggle, onUpdate, onDelete, onDragStart, isDragOver, onDragOverRow, onDragLeaveRow, onDropOnRow }) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(item.text);
   const [pickingDate, setPickingDate] = useState(false);
@@ -262,6 +311,11 @@ function TodoItemRow({ item, onToggle, onUpdate, onDelete }) {
 
   return (
     <div
+      draggable
+      onDragStart={(e) => onDragStart(e, item.id)}
+      onDragOver={onDragOverRow}
+      onDragLeave={onDragLeaveRow}
+      onDrop={onDropOnRow}
       style={{
         display: 'flex',
         flexWrap: 'wrap',
@@ -269,9 +323,11 @@ function TodoItemRow({ item, onToggle, onUpdate, onDelete }) {
         gap: 10,
         background: 'var(--bg)',
         border: '1px solid var(--border)',
+        borderTop: isDragOver ? '2px solid var(--accent)' : '1px solid var(--border)',
         borderRadius: 8,
         padding: '10px 12px',
         fontSize: 14,
+        cursor: 'grab',
       }}
     >
       <button
@@ -399,6 +455,7 @@ export default function TodoView({ onOpenDrawer }) {
   const [newItemText, setNewItemText] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [hideDone, setHideDone] = useState(false);
+  const [dragOverItemId, setDragOverItemId] = useState(null);
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -430,7 +487,14 @@ export default function TodoView({ onOpenDrawer }) {
 
   async function handleRenameList(listId, name) {
     setLists((prev) => prev.map((l) => (l.id === listId ? { ...l, name } : l)));
-    await renameTodoList(listId, name);
+    await updateTodoList(listId, { name });
+  }
+
+  async function handleReorderList(listId, position) {
+    setLists((prev) =>
+      prev.map((l) => (l.id === listId ? { ...l, position } : l)).sort((a, b) => a.position - b.position)
+    );
+    await updateTodoList(listId, { position });
   }
 
   async function handleDeleteList(listId) {
@@ -475,6 +539,46 @@ export default function TodoView({ onOpenDrawer }) {
       setLists((prev) => prev.map((l) => (l.id === activeId ? { ...l, open_count: Math.max(0, (l.open_count || 0) - 1) } : l)));
     }
     await deleteTodoItem(itemId);
+  }
+
+  async function handleReorderItem(itemId, position) {
+    setItems((prev) => {
+      const next = prev.map((i) => (i.id === itemId ? { ...i, position } : i));
+      // Same shape as the server's own ORDER BY (done, position).
+      return [...next].sort((a, b) => (a.done !== b.done ? (a.done ? 1 : -1) : a.position - b.position));
+    });
+    await updateTodoItem(itemId, { position });
+  }
+
+  function handleItemDragStart(e, itemId) {
+    e.dataTransfer.setData('text/plain', String(itemId));
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
+  function handleDropOnItem(e, targetItem) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverItemId(null);
+    const draggedId = Number(e.dataTransfer.getData('text/plain'));
+    if (draggedId === targetItem.id) return;
+
+    const siblings = items.filter((i) => i.id !== draggedId);
+    const targetIndex = siblings.findIndex((i) => i.id === targetItem.id);
+    const prevSibling = siblings[targetIndex - 1];
+    const newPosition =
+      prevSibling && prevSibling.done === targetItem.done
+        ? (prevSibling.position + targetItem.position) / 2
+        : targetItem.position - 1;
+    handleReorderItem(draggedId, newPosition);
+  }
+
+  function handleDropAtEndOfItems(e) {
+    e.preventDefault();
+    setDragOverItemId(null);
+    const draggedId = Number(e.dataTransfer.getData('text/plain'));
+    const last = items[items.length - 1];
+    if (!last || draggedId === last.id) return;
+    handleReorderItem(draggedId, last.position + 1);
   }
 
   const activeList = lists.find((l) => l.id === activeId);
@@ -536,9 +640,29 @@ export default function TodoView({ onOpenDrawer }) {
             )}
 
             {items.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>Nothing on this list yet.</div>}
-            {(hideDone ? items.filter((i) => !i.done) : items).map((item) => (
-              <TodoItemRow key={item.id} item={item} onToggle={handleToggle} onUpdate={handleUpdateItem} onDelete={handleDeleteItem} />
-            ))}
+            <div
+              style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDropAtEndOfItems}
+            >
+              {(hideDone ? items.filter((i) => !i.done) : items).map((item) => (
+                <TodoItemRow
+                  key={item.id}
+                  item={item}
+                  onToggle={handleToggle}
+                  onUpdate={handleUpdateItem}
+                  onDelete={handleDeleteItem}
+                  onDragStart={handleItemDragStart}
+                  isDragOver={dragOverItemId === item.id}
+                  onDragOverRow={(e) => {
+                    e.preventDefault();
+                    if (dragOverItemId !== item.id) setDragOverItemId(item.id);
+                  }}
+                  onDragLeaveRow={() => setDragOverItemId((id) => (id === item.id ? null : id))}
+                  onDropOnRow={(e) => handleDropOnItem(e, item)}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -549,6 +673,7 @@ export default function TodoView({ onOpenDrawer }) {
         onSelect={setActiveId}
         onCreate={handleCreateList}
         onRename={handleRenameList}
+        onReorder={handleReorderList}
         onDelete={handleDeleteList}
         isMobile={isMobile}
         mobileOpen={pickerOpen}

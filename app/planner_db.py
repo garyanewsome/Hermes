@@ -107,6 +107,28 @@ def init_planner_db() -> None:
             """
         )
         conn.execute("ALTER TABLE todo_items ADD COLUMN IF NOT EXISTS due_date DATE")
+        # Additive, same as tasks' own position column above — backfilled
+        # below rather than defaulted to 0, so existing lists/items don't
+        # all collapse onto the same position (they'd still *render* in a
+        # reasonable order via the id/created_at tiebreak, but the first
+        # drag-reorder on any of them would be starting from a meaningless
+        # value instead of their actual current order).
+        conn.execute("ALTER TABLE todo_lists ADD COLUMN IF NOT EXISTS position DOUBLE PRECISION")
+        conn.execute("ALTER TABLE todo_items ADD COLUMN IF NOT EXISTS position DOUBLE PRECISION")
+        conn.execute(
+            """
+            UPDATE todo_lists SET position = sub.rn
+            FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY created_at) AS rn FROM todo_lists) sub
+            WHERE todo_lists.id = sub.id AND todo_lists.position IS NULL
+            """
+        )
+        conn.execute(
+            """
+            UPDATE todo_items SET position = sub.rn
+            FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY list_id ORDER BY created_at) AS rn FROM todo_items) sub
+            WHERE todo_items.id = sub.id AND todo_items.position IS NULL
+            """
+        )
         # Simplenote-style scratchpad — no title field, the first line of
         # `content` serves as the title in the list. A quick-capture spot
         # for ideas on the go, meant to get copied into Obsidian later, not
@@ -366,12 +388,12 @@ def list_todo_lists() -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
             """
-            SELECT l.id, l.name,
+            SELECT l.id, l.name, l.position,
                    count(i.id) FILTER (WHERE NOT i.done) AS open_count
             FROM todo_lists l
             LEFT JOIN todo_items i ON i.list_id = l.id
-            GROUP BY l.id, l.name
-            ORDER BY l.created_at
+            GROUP BY l.id, l.name, l.position
+            ORDER BY l.position
             """
         ).fetchall()
     return [dict(row) for row in rows]
@@ -380,15 +402,29 @@ def list_todo_lists() -> list[dict]:
 def create_todo_list(name: str) -> dict:
     with _connect() as conn:
         row = conn.execute(
-            "INSERT INTO todo_lists (name) VALUES (%s) RETURNING id, name",
+            """
+            INSERT INTO todo_lists (name, position)
+            VALUES (%s, COALESCE((SELECT MAX(position) + 1 FROM todo_lists), 0))
+            RETURNING id, name, position
+            """,
             (name,),
         ).fetchone()
     return {**dict(row), "open_count": 0}
 
 
-def rename_todo_list(list_id: int, name: str) -> None:
+def update_todo_list(list_id: int, name: str | None = None, position: float | None = None) -> None:
+    fields, params = [], []
+    if name is not None:
+        fields.append("name = %s")
+        params.append(name)
+    if position is not None:
+        fields.append("position = %s")
+        params.append(position)
+    if not fields:
+        return
+    params.append(list_id)
     with _connect() as conn:
-        conn.execute("UPDATE todo_lists SET name = %s WHERE id = %s", (name, list_id))
+        conn.execute(f"UPDATE todo_lists SET {', '.join(fields)} WHERE id = %s", params)
 
 
 def delete_todo_list(list_id: int) -> None:
@@ -449,16 +485,18 @@ def find_open_todo_items_by_text(text: str, list_id: int | None = None) -> list[
 
 
 def list_todo_items(list_id: int) -> list[dict]:
-    # Open items first (in the order they were added), done items below —
-    # the common shape for a simple checklist, so finishing something
-    # doesn't reshuffle what you're still working through.
+    # Open items first (in position order), done items below — the common
+    # shape for a simple checklist, so finishing something doesn't reshuffle
+    # what you're still working through. position is scoped to the whole
+    # list (open and done items share one axis), which is fine since the
+    # done/open split is the primary sort key regardless.
     with _connect() as conn:
         rows = conn.execute(
             """
-            SELECT id, list_id, text, done, due_date, created_at
+            SELECT id, list_id, text, done, due_date, position, created_at
             FROM todo_items
             WHERE list_id = %s
-            ORDER BY done, created_at
+            ORDER BY done, position
             """,
             (list_id,),
         ).fetchall()
@@ -468,8 +506,12 @@ def list_todo_items(list_id: int) -> list[dict]:
 def create_todo_item(list_id: int, text: str) -> dict:
     with _connect() as conn:
         row = conn.execute(
-            "INSERT INTO todo_items (list_id, text) VALUES (%s, %s) RETURNING id, list_id, text, done, due_date, created_at",
-            (list_id, text),
+            """
+            INSERT INTO todo_items (list_id, text, position)
+            VALUES (%s, %s, COALESCE((SELECT MAX(position) + 1 FROM todo_items WHERE list_id = %s), 0))
+            RETURNING id, list_id, text, done, due_date, position, created_at
+            """,
+            (list_id, text, list_id),
         ).fetchone()
     return dict(row)
 
@@ -479,6 +521,7 @@ def update_todo_item(
     text: str | None = None,
     done: bool | None = None,
     due_date: str | None = None,
+    position: float | None = None,
 ) -> None:
     fields, params = [], []
     if text is not None:
@@ -492,6 +535,9 @@ def update_todo_item(
         # update_task's due_date arg.
         fields.append("due_date = %s")
         params.append(due_date or None)
+    if position is not None:
+        fields.append("position = %s")
+        params.append(position)
     if not fields:
         return
     params.append(item_id)

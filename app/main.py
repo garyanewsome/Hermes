@@ -100,6 +100,11 @@ class TodoListRequest(BaseModel):
     name: str
 
 
+class TodoListUpdateRequest(BaseModel):
+    name: str | None = None
+    position: float | None = None
+
+
 class TodoItemRequest(BaseModel):
     text: str
 
@@ -108,6 +113,7 @@ class TodoItemUpdateRequest(BaseModel):
     text: str | None = None
     done: bool | None = None
     due_date: str | None = None
+    position: float | None = None
 
 
 class NoteUpdateRequest(BaseModel):
@@ -386,8 +392,8 @@ def post_todo_list(request: TodoListRequest):
 
 
 @app.patch("/todo-lists/{list_id}")
-def patch_todo_list(list_id: int, request: TodoListRequest):
-    planner_db.rename_todo_list(list_id, request.name)
+def patch_todo_list(list_id: int, request: TodoListUpdateRequest):
+    planner_db.update_todo_list(list_id, name=request.name, position=request.position)
     return {"status": "ok"}
 
 
@@ -409,7 +415,7 @@ def post_todo_item(list_id: int, request: TodoItemRequest):
 
 @app.patch("/todo-items/{item_id}")
 def patch_todo_item(item_id: int, request: TodoItemUpdateRequest):
-    planner_db.update_todo_item(item_id, text=request.text, done=request.done, due_date=request.due_date)
+    planner_db.update_todo_item(item_id, text=request.text, done=request.done, due_date=request.due_date, position=request.position)
     return {"status": "ok"}
 
 
