@@ -393,16 +393,23 @@ def list_habits_with_streaks() -> list[dict]:
 
 
 def list_todo_lists() -> list[dict]:
+    # due_today_count drives the sidebar's "something's due today" marker
+    # — computed from the app's own timezone-aware today (see _today's own
+    # comment for why: Postgres's CURRENT_DATE would use the pod's/DB
+    # server's timezone, which isn't necessarily APP_TIMEZONE).
+    today = _today()
     with _connect() as conn:
         rows = conn.execute(
             """
             SELECT l.id, l.name, l.position,
-                   count(i.id) FILTER (WHERE NOT i.done) AS open_count
+                   count(i.id) FILTER (WHERE NOT i.done) AS open_count,
+                   count(i.id) FILTER (WHERE NOT i.done AND i.due_date = %s) AS due_today_count
             FROM todo_lists l
             LEFT JOIN todo_items i ON i.list_id = l.id
             GROUP BY l.id, l.name, l.position
             ORDER BY l.position
-            """
+            """,
+            (today,),
         ).fetchall()
     return [dict(row) for row in rows]
 
@@ -417,7 +424,7 @@ def create_todo_list(name: str) -> dict:
             """,
             (name,),
         ).fetchone()
-    return {**dict(row), "open_count": 0}
+    return {**dict(row), "open_count": 0, "due_today_count": 0}
 
 
 def update_todo_list(list_id: int, name: str | None = None, position: float | None = None) -> None:

@@ -12,6 +12,14 @@ import {
   deleteTodoItem,
 } from '../api.js';
 
+function StarIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+      <path d="M6 0.5l1.64 3.53 3.86.46-2.9 2.64.79 3.87L6 9.1 2.61 11l.79-3.87-2.9-2.64 3.86-.46z" />
+    </svg>
+  );
+}
+
 function RepeatIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
@@ -259,6 +267,14 @@ function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onReorder, 
                     borderTop: dragOverId === list.id ? '2px solid var(--accent)' : '2px solid transparent',
                   }}
                 >
+                  {list.due_today_count > 0 && (
+                    <div
+                      title={`${list.due_today_count} item${list.due_today_count === 1 ? '' : 's'} due today`}
+                      style={{ flexShrink: 0, color: 'var(--accent)', display: 'flex' }}
+                    >
+                      <StarIcon />
+                    </div>
+                  )}
                   <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {list.name}
                   </div>
@@ -601,12 +617,20 @@ export default function TodoView({ onOpenDrawer }) {
         prev.map((l) => (l.id === activeId ? { ...l, open_count: Math.max(0, (l.open_count || 0) + delta) } : l))
       );
     }
+    // done and due_date both feed the sidebar's "due today" marker
+    // (recurring items also move due_date here) — an optimistic patch
+    // would need to know the old due_date too to get right, so just
+    // refetch rather than trying to diff it client-side.
+    if (prevItem && (prevItem.done !== updated.done || prevItem.due_date !== updated.due_date)) {
+      refreshLists();
+    }
   }
 
   async function handleUpdateItem(itemId, updates) {
     setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, ...updates } : i)));
     const updated = await updateTodoItem(itemId, updates);
     setItems((prev) => prev.map((i) => (i.id === itemId ? updated : i)));
+    if ('due_date' in updates) refreshLists();
   }
 
   async function handleDeleteItem(itemId) {
@@ -616,6 +640,9 @@ export default function TodoView({ onOpenDrawer }) {
       setLists((prev) => prev.map((l) => (l.id === activeId ? { ...l, open_count: Math.max(0, (l.open_count || 0) - 1) } : l)));
     }
     await deleteTodoItem(itemId);
+    // After the delete completes, not before — refetching too early would
+    // still see the item server-side and get a stale due-today count.
+    if (item && item.due_date) refreshLists();
   }
 
   async function handleReorderItem(itemId, position) {
