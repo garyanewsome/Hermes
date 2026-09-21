@@ -525,7 +525,9 @@ function TodoItemRow({ item, onToggle, onUpdate, onDelete, onDragStart, isDragOv
   );
 }
 
-export default function TodoView({ onOpenDrawer }) {
+const TODO_POLL_INTERVAL_MS = 30000;
+
+export default function TodoView({ onOpenDrawer, onDueTodayChange }) {
   const [lists, setLists] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [items, setItems] = useState([]);
@@ -537,11 +539,21 @@ export default function TodoView({ onOpenDrawer }) {
 
   useEffect(() => {
     refreshLists();
+    // TodoView stays mounted even when another view is active (see
+    // App.jsx's comment on why), so this is also what keeps the nav
+    // drawer's "due today" star fresh while you're looking at Chat/Notes/
+    // whatever else — not just when Todo happens to be the active view.
+    const interval = setInterval(refreshLists, TODO_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
     if (activeId != null) refreshItems(activeId);
   }, [activeId]);
+
+  useEffect(() => {
+    onDueTodayChange?.(lists.reduce((sum, l) => sum + (l.due_today_count || 0), 0));
+  }, [lists, onDueTodayChange]);
 
   async function refreshLists() {
     const fetched = await listTodoLists();

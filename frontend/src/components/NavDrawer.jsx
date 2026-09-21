@@ -69,7 +69,15 @@ const ITEMS = [
   },
 ];
 
-export default function NavDrawer({ open, activeView, onNavigate, onClose }) {
+function StarIcon({ color }) {
+  return (
+    <svg width="11" height="11" viewBox="0 0 12 12" fill={color}>
+      <path d="M6 0.5l1.64 3.53 3.86.46-2.9 2.64.79 3.87L6 9.1 2.61 11l.79-3.87-2.9-2.64 3.86-.46z" />
+    </svg>
+  );
+}
+
+export default function NavDrawer({ open, activeView, onNavigate, onClose, todoDueToday }) {
   if (!open) return null;
   return (
     <>
@@ -121,6 +129,18 @@ export default function NavDrawer({ open, activeView, onNavigate, onClose }) {
             >
               {item.icon(color)}
               {item.label}
+              {item.key === 'todo' && todoDueToday > 0 && (
+                <span
+                  title={`${todoDueToday} item${todoDueToday === 1 ? '' : 's'} due today`}
+                  style={{ display: 'flex', marginLeft: -4 }}
+                >
+                  {/* Hardcoded to Todo's own accent (not the `color` var
+                      above, which tracks whichever view is currently
+                      active) so it reads as "Todo" branded regardless of
+                      what you're looking at right now. */}
+                  <StarIcon color="#b46bff" />
+                </span>
+              )}
             </button>
           );
         })}

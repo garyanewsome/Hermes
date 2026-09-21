@@ -30,6 +30,11 @@ export default function App() {
   // the same load.
   const [view, setViewState] = useState(initialView);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Lifted out of TodoView (which stays mounted always, per the comment
+  // below) so the nav drawer can show it too — the point is exactly to
+  // notice something's due while looking at a *different* view, not just
+  // when already on Todo.
+  const [todoDueToday, setTodoDueToday] = useState(0);
 
   function setView(next) {
     setViewState(next);
@@ -88,7 +93,7 @@ export default function App() {
         <HabitsView onOpenDrawer={() => setDrawerOpen(true)} />
       </div>
       <div style={{ display: view === 'todo' ? 'contents' : 'none' }}>
-        <TodoView onOpenDrawer={() => setDrawerOpen(true)} />
+        <TodoView onOpenDrawer={() => setDrawerOpen(true)} onDueTodayChange={setTodoDueToday} />
       </div>
       <div style={{ display: view === 'notes' ? 'contents' : 'none' }}>
         <NotesView onOpenDrawer={() => setDrawerOpen(true)} />
@@ -97,7 +102,7 @@ export default function App() {
         <SketchView onOpenDrawer={() => setDrawerOpen(true)} />
       </div>
 
-      <NavDrawer open={drawerOpen} activeView={view} onNavigate={setView} onClose={() => setDrawerOpen(false)} />
+      <NavDrawer open={drawerOpen} activeView={view} onNavigate={setView} onClose={() => setDrawerOpen(false)} todoDueToday={todoDueToday} />
     </div>
   );
 }
