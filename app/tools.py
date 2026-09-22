@@ -264,7 +264,11 @@ def research_repo(repo: str, question: str | None = None) -> str:
             lines.append(f"\n--- {hit['file_path']} ---\n{content}")
     elif question:
         lines.append(f"No snippets matched \"{question}\".")
-    if data.get("note_path"):
+    if data.get("note_path") and data.get("note_reused"):
+        # Same commit as an already-existing overview note — CodebaseSearcher
+        # skipped writing a duplicate rather than creating another one.
+        lines.append(f"\n(Already have an up-to-date overview of this repo in the vault at: {data['note_path']})")
+    elif data.get("note_path"):
         lines.append(f"\nFindings written to the vault at: {data['note_path']}")
     elif data.get("note_error"):
         lines.append(f"\n(Couldn't write the findings note: {data['note_error']})")
