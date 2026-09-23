@@ -108,6 +108,7 @@ class TodoListUpdateRequest(BaseModel):
 class TodoItemRequest(BaseModel):
     text: str
     recurrence_days: int | None = None
+    recurrence_weekdays: str | None = None
 
 
 class TodoItemUpdateRequest(BaseModel):
@@ -116,6 +117,7 @@ class TodoItemUpdateRequest(BaseModel):
     due_date: str | None = None
     position: float | None = None
     recurrence_days: int | None = None
+    recurrence_weekdays: str | None = None
 
 
 class NoteUpdateRequest(BaseModel):
@@ -412,7 +414,9 @@ def get_todo_items(list_id: int):
 
 @app.post("/todo-lists/{list_id}/items")
 def post_todo_item(list_id: int, request: TodoItemRequest):
-    return planner_db.create_todo_item(list_id, request.text, recurrence_days=request.recurrence_days)
+    return planner_db.create_todo_item(
+        list_id, request.text, recurrence_days=request.recurrence_days, recurrence_weekdays=request.recurrence_weekdays
+    )
 
 
 @app.patch("/todo-items/{item_id}")
@@ -428,6 +432,7 @@ def patch_todo_item(item_id: int, request: TodoItemUpdateRequest):
         due_date=request.due_date,
         position=request.position,
         recurrence_days=request.recurrence_days,
+        recurrence_weekdays=request.recurrence_weekdays,
     )
 
 

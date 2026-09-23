@@ -137,6 +137,14 @@ def init_planner_db() -> None:
         # doesn't need a log of every past completion, just "when's it due
         # next").
         conn.execute("ALTER TABLE todo_items ADD COLUMN IF NOT EXISTS recurrence_days INTEGER")
+        # The other recurrence mode: specific days of the week ("every Mon/
+        # Wed/Fri") instead of a fixed N-day interval. Comma-separated ISO
+        # weekday numbers (1=Monday..7=Sunday), e.g. "1,3,5" — a plain TEXT
+        # column rather than a Postgres array so it round-trips through
+        # Python as a single string with zero type-adapter fuss. The two
+        # recurrence modes are mutually exclusive on a given item (see
+        # update_todo_item); NULL here means "not using this mode."
+        conn.execute("ALTER TABLE todo_items ADD COLUMN IF NOT EXISTS recurrence_weekdays TEXT")
         # Simplenote-style scratchpad — no title field, the first line of
         # `content` serves as the title in the list. A quick-capture spot
         # for ideas on the go, meant to get copied into Obsidian later, not
@@ -499,6 +507,23 @@ def find_open_todo_items_by_text(text: str, list_id: int | None = None) -> list[
     return [dict(row) for row in rows]
 
 
+def _parse_weekdays(value: str | None) -> set[int]:
+    if not value:
+        return set()
+    return {int(d) for d in value.split(",") if d}
+
+
+def _next_weekday_occurrence(today: date, weekdays: set[int]) -> date:
+    # Smallest delta in 1..7 whose ISO weekday (1=Monday..7=Sunday) is one
+    # of the selected days — always strictly after today, even if today
+    # itself is a selected day, since today's occurrence was just done.
+    for delta in range(1, 8):
+        candidate = today + timedelta(days=delta)
+        if candidate.isoweekday() in weekdays:
+            return candidate
+    return today + timedelta(days=7)  # unreachable if weekdays is non-empty
+
+
 def list_todo_items(list_id: int) -> list[dict]:
     # Open items first (in position order), done items below — the common
     # shape for a simple checklist, so finishing something doesn't reshuffle
@@ -508,7 +533,7 @@ def list_todo_items(list_id: int) -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
             """
-            SELECT id, list_id, text, done, due_date, position, recurrence_days, created_at
+            SELECT id, list_id, text, done, due_date, position, recurrence_days, recurrence_weekdays, created_at
             FROM todo_items
             WHERE list_id = %s
             ORDER BY done, position
@@ -518,15 +543,20 @@ def list_todo_items(list_id: int) -> list[dict]:
     return [dict(row) for row in rows]
 
 
-def create_todo_item(list_id: int, text: str, recurrence_days: int | None = None) -> dict:
+def create_todo_item(
+    list_id: int,
+    text: str,
+    recurrence_days: int | None = None,
+    recurrence_weekdays: str | None = None,
+) -> dict:
     with _connect() as conn:
         row = conn.execute(
             """
-            INSERT INTO todo_items (list_id, text, position, recurrence_days)
-            VALUES (%s, %s, COALESCE((SELECT MAX(position) + 1 FROM todo_items WHERE list_id = %s), 0), %s)
-            RETURNING id, list_id, text, done, due_date, position, recurrence_days, created_at
+            INSERT INTO todo_items (list_id, text, position, recurrence_days, recurrence_weekdays)
+            VALUES (%s, %s, COALESCE((SELECT MAX(position) + 1 FROM todo_items WHERE list_id = %s), 0), %s, %s)
+            RETURNING id, list_id, text, done, due_date, position, recurrence_days, recurrence_weekdays, created_at
             """,
-            (list_id, text, list_id, recurrence_days),
+            (list_id, text, list_id, recurrence_days, recurrence_weekdays),
         ).fetchone()
     return dict(row)
 
@@ -538,26 +568,42 @@ def update_todo_item(
     due_date: str | None = None,
     position: float | None = None,
     recurrence_days: int | None = None,
+    recurrence_weekdays: str | None = None,
 ) -> dict:
-    # recurrence_days: None means "don't touch" (same convention as every
-    # other optional field here); 0 is the sentinel for "clear it" — a real
-    # interval can never be 0, same reasoning as due_date's "" sentinel.
+    # recurrence_days: None means "don't touch"; 0 is the sentinel for
+    # "clear it" (a real interval can never be 0). recurrence_weekdays:
+    # None means "don't touch"; "" is the clear sentinel (same convention
+    # as due_date, since this is also a string field). The two recurrence
+    # modes are mutually exclusive — setting one to a real value clears
+    # the other, so an item is never simultaneously "every 3 days" and
+    # "every Mon/Wed/Fri."
+    if recurrence_days is not None and recurrence_days != 0:
+        recurrence_weekdays = ""
+    elif recurrence_weekdays is not None and recurrence_weekdays != "":
+        recurrence_days = 0
+
     if done is True:
         with _connect() as conn:
             current = conn.execute(
-                "SELECT recurrence_days FROM todo_items WHERE id = %s", (item_id,)
+                "SELECT recurrence_days, recurrence_weekdays FROM todo_items WHERE id = %s", (item_id,)
             ).fetchone()
-        effective_recurrence = current["recurrence_days"] if current else None
+        effective_days = current["recurrence_days"] if current else None
+        effective_weekdays = current["recurrence_weekdays"] if current else None
         if recurrence_days is not None:
-            effective_recurrence = None if recurrence_days == 0 else recurrence_days
-        if effective_recurrence:
-            # Recurring items don't stay checked off — completing one resets
-            # it to open with the next due date pushed out from *today*
-            # (not from the old due date), so finishing early or late never
-            # compounds drift; it's always "N days from when I actually did
-            # it," not "N days from when it was originally scheduled."
+            effective_days = None if recurrence_days == 0 else recurrence_days
+        if recurrence_weekdays is not None:
+            effective_weekdays = recurrence_weekdays or None
+
+        # Recurring items don't stay checked off — completing one resets it
+        # to open with the next due date, so finishing early or late never
+        # compounds drift; it's always "from when I actually did it," not
+        # "from when it was originally scheduled."
+        if effective_days:
             done = False
-            due_date = (_today() + timedelta(days=effective_recurrence)).isoformat()
+            due_date = (_today() + timedelta(days=effective_days)).isoformat()
+        elif effective_weekdays:
+            done = False
+            due_date = _next_weekday_occurrence(_today(), _parse_weekdays(effective_weekdays)).isoformat()
 
     fields, params = [], []
     if text is not None:
@@ -577,6 +623,9 @@ def update_todo_item(
     if recurrence_days is not None:
         fields.append("recurrence_days = %s")
         params.append(None if recurrence_days == 0 else recurrence_days)
+    if recurrence_weekdays is not None:
+        fields.append("recurrence_weekdays = %s")
+        params.append(recurrence_weekdays or None)
 
     with _connect() as conn:
         if fields:
@@ -584,14 +633,14 @@ def update_todo_item(
             row = conn.execute(
                 f"""
                 UPDATE todo_items SET {', '.join(fields)} WHERE id = %s
-                RETURNING id, list_id, text, done, due_date, position, recurrence_days, created_at
+                RETURNING id, list_id, text, done, due_date, position, recurrence_days, recurrence_weekdays, created_at
                 """,
                 params,
             ).fetchone()
         else:
             row = conn.execute(
                 """
-                SELECT id, list_id, text, done, due_date, position, recurrence_days, created_at
+                SELECT id, list_id, text, done, due_date, position, recurrence_days, recurrence_weekdays, created_at
                 FROM todo_items WHERE id = %s
                 """,
                 (item_id,),

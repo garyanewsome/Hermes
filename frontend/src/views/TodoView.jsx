@@ -28,6 +28,221 @@ function RepeatIcon() {
   );
 }
 
+const WEEKDAY_LABELS = [
+  { iso: 1, short: 'Mo' },
+  { iso: 2, short: 'Tu' },
+  { iso: 3, short: 'We' },
+  { iso: 4, short: 'Th' },
+  { iso: 5, short: 'Fr' },
+  { iso: 6, short: 'Sa' },
+  { iso: 7, short: 'Su' },
+];
+
+const RECURRENCE_PRESETS = [
+  ['Daily', 1],
+  ['Weekly', 7],
+  ['Biweekly', 14],
+  ['Monthly', 30],
+];
+
+function formatRecurrence(item) {
+  if (item.recurrence_days) return `every ${item.recurrence_days}d`;
+  if (item.recurrence_weekdays) {
+    const days = new Set(item.recurrence_weekdays.split(',').map(Number));
+    return WEEKDAY_LABELS.filter((w) => days.has(w.iso))
+      .map((w) => w.short)
+      .join('/');
+  }
+  return null;
+}
+
+function RecurrencePopover({ item, onApply, onClear, onClose }) {
+  const [mode, setMode] = useState(item.recurrence_weekdays ? 'weekdays' : 'days');
+  const [daysValue, setDaysValue] = useState(item.recurrence_days ? String(item.recurrence_days) : '');
+  const [selectedWeekdays, setSelectedWeekdays] = useState(
+    new Set(item.recurrence_weekdays ? item.recurrence_weekdays.split(',').map(Number) : [])
+  );
+
+  function toggleWeekday(iso) {
+    setSelectedWeekdays((prev) => {
+      const next = new Set(prev);
+      if (next.has(iso)) next.delete(iso);
+      else next.add(iso);
+      return next;
+    });
+  }
+
+  const canApply = mode === 'days' ? parseInt(daysValue, 10) > 0 : selectedWeekdays.size > 0;
+
+  function handleApply() {
+    if (!canApply) return;
+    if (mode === 'days') {
+      onApply({ recurrence_days: parseInt(daysValue, 10) });
+    } else {
+      onApply({ recurrence_weekdays: [...selectedWeekdays].sort((a, b) => a - b).join(',') });
+    }
+  }
+
+  const hasExistingRecurrence = Boolean(item.recurrence_days || item.recurrence_weekdays);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 300,
+          maxWidth: '90vw',
+          background: 'var(--bg)',
+          border: '1px solid var(--accent)',
+          boxShadow: '0 0 20px var(--accent-glow)',
+          borderRadius: 12,
+          padding: 18,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 14,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Repeat</div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', fontSize: 18, padding: 0, lineHeight: 1 }}
+          >
+            ×
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 4, background: 'var(--panel-2)', borderRadius: 8, padding: 3 }}>
+          {[
+            ['days', 'Every N days'],
+            ['weekdays', 'Days of week'],
+          ].map(([m, label]) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              style={{
+                flex: 1,
+                padding: '6px 0',
+                fontSize: 12.5,
+                borderRadius: 6,
+                border: 'none',
+                background: mode === m ? 'var(--accent)' : 'transparent',
+                color: mode === m ? 'var(--accent-text)' : 'var(--text-dim)',
+                fontWeight: mode === m ? 600 : 400,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {mode === 'days' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>Every</span>
+              {/* type="text" + digit filtering, not type="number" — that's
+                  exactly what caused the native spinner arrows to overlap
+                  the value in the old inline input. */}
+              <input
+                type="text"
+                inputMode="numeric"
+                autoFocus
+                value={daysValue}
+                onChange={(e) => setDaysValue(e.target.value.replace(/[^0-9]/g, ''))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && canApply) handleApply();
+                }}
+                style={{
+                  width: 56,
+                  textAlign: 'center',
+                  background: 'var(--panel-2)',
+                  border: '1px solid var(--border-strong)',
+                  color: 'var(--text)',
+                  borderRadius: 6,
+                  padding: '6px 4px',
+                  fontSize: 14,
+                }}
+              />
+              <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>days</span>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {RECURRENCE_PRESETS.map(([label, n]) => (
+                <button
+                  key={label}
+                  onClick={() => setDaysValue(String(n))}
+                  style={{
+                    background: String(n) === daysValue ? 'var(--accent-wash)' : 'var(--panel-2)',
+                    border: `1px solid ${String(n) === daysValue ? 'var(--accent)' : 'var(--border-strong)'}`,
+                    color: String(n) === daysValue ? 'var(--accent)' : 'var(--text-dim)',
+                    borderRadius: 6,
+                    padding: '4px 10px',
+                    fontSize: 11.5,
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 5, justifyContent: 'space-between' }}>
+            {WEEKDAY_LABELS.map((w) => (
+              <button
+                key={w.iso}
+                onClick={() => toggleWeekday(w.iso)}
+                aria-pressed={selectedWeekdays.has(w.iso)}
+                style={{
+                  width: 34,
+                  height: 34,
+                  flexShrink: 0,
+                  borderRadius: '50%',
+                  border: `1px solid ${selectedWeekdays.has(w.iso) ? 'var(--accent)' : 'var(--border-strong)'}`,
+                  background: selectedWeekdays.has(w.iso) ? 'var(--accent-wash)' : 'transparent',
+                  color: selectedWeekdays.has(w.iso) ? 'var(--accent)' : 'var(--text-dim)',
+                  fontSize: 12,
+                  fontWeight: selectedWeekdays.has(w.iso) ? 700 : 400,
+                }}
+              >
+                {w.short}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+          {hasExistingRecurrence ? (
+            <button onClick={onClear} style={{ background: 'transparent', border: 'none', color: '#ff6b6b', fontSize: 12.5, padding: 0 }}>
+              Stop repeating
+            </button>
+          ) : (
+            <span />
+          )}
+          <button
+            onClick={handleApply}
+            disabled={!canApply}
+            style={{
+              background: canApply ? 'var(--accent)' : 'var(--panel-2)',
+              color: canApply ? 'var(--accent-text)' : 'var(--text-faint)',
+              border: 'none',
+              borderRadius: 8,
+              padding: '7px 16px',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: canApply ? 'pointer' : 'default',
+            }}
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ConfirmDeleteList({ list, onCancel, onConfirm }) {
   return (
     <div
@@ -327,13 +542,6 @@ function TodoItemRow({ item, onToggle, onUpdate, onDelete, onDragStart, isDragOv
   const [editValue, setEditValue] = useState(item.text);
   const [pickingDate, setPickingDate] = useState(false);
   const [pickingRecurrence, setPickingRecurrence] = useState(false);
-  const [recurrenceValue, setRecurrenceValue] = useState(item.recurrence_days || '');
-
-  function commitRecurrence() {
-    setPickingRecurrence(false);
-    const n = parseInt(recurrenceValue, 10);
-    if (n > 0 && n !== item.recurrence_days) onUpdate(item.id, { recurrence_days: n });
-  }
 
   function commitEdit() {
     const trimmed = editValue.trim();
@@ -466,29 +674,14 @@ function TodoItemRow({ item, onToggle, onUpdate, onDelete, onDragStart, isDragOv
         </button>
       )}
 
-      {pickingRecurrence ? (
-        <input
-          type="number"
-          min="1"
-          autoFocus
-          value={recurrenceValue}
-          placeholder="days"
-          onChange={(e) => setRecurrenceValue(e.target.value)}
-          onBlur={commitRecurrence}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') { e.preventDefault(); commitRecurrence(); }
-            if (e.key === 'Escape') { e.preventDefault(); setRecurrenceValue(item.recurrence_days || ''); setPickingRecurrence(false); }
-          }}
-          style={{ width: 54, background: 'var(--panel-2)', border: '1px solid var(--accent)', color: 'var(--text)', borderRadius: 6, padding: '5px 8px', fontSize: 12 }}
-        />
-      ) : item.recurrence_days ? (
+      {formatRecurrence(item) ? (
         <button
-          onClick={() => { setRecurrenceValue(item.recurrence_days); setPickingRecurrence(true); }}
+          onClick={() => setPickingRecurrence(true)}
           title="Repeats — click to change"
           style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-dim)', borderRadius: 6, padding: '5px 10px', fontSize: 11 }}
         >
           <RepeatIcon />
-          every {item.recurrence_days}d
+          {formatRecurrence(item)}
         </button>
       ) : (
         <button
@@ -500,15 +693,19 @@ function TodoItemRow({ item, onToggle, onUpdate, onDelete, onDragStart, isDragOv
           <RepeatIcon />
         </button>
       )}
-      {item.recurrence_days && !pickingRecurrence && (
-        <button
-          onClick={() => onUpdate(item.id, { recurrence_days: 0 })}
-          aria-label="Stop recurring"
-          title="Stop recurring"
-          style={{ flexShrink: 0, background: 'transparent', border: 'none', color: 'var(--text-dim)', fontSize: 12, padding: 0 }}
-        >
-          ×
-        </button>
+      {pickingRecurrence && (
+        <RecurrencePopover
+          item={item}
+          onApply={(updates) => {
+            setPickingRecurrence(false);
+            onUpdate(item.id, updates);
+          }}
+          onClear={() => {
+            setPickingRecurrence(false);
+            onUpdate(item.id, { recurrence_days: 0, recurrence_weekdays: '' });
+          }}
+          onClose={() => setPickingRecurrence(false)}
+        />
       )}
 
       <button

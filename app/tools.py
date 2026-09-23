@@ -157,10 +157,26 @@ def habit_status(name: str | None = None) -> str:
     )
 
 
-def add_todo_item(text: str, list_name: str | None = None, recurrence_days: int | None = None) -> str:
+_WEEKDAY_NAMES = {1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday", 7: "Sunday"}
+
+
+def add_todo_item(
+    text: str,
+    list_name: str | None = None,
+    recurrence_days: int | None = None,
+    recurrence_weekdays: str | None = None,
+) -> str:
     todo_list = planner_db.get_or_create_todo_list(list_name or "General")
-    item = planner_db.create_todo_item(todo_list["id"], text, recurrence_days=recurrence_days)
-    suffix = f" — repeats every {recurrence_days} days" if recurrence_days else ""
+    item = planner_db.create_todo_item(
+        todo_list["id"], text, recurrence_days=recurrence_days, recurrence_weekdays=recurrence_weekdays
+    )
+    if recurrence_days:
+        suffix = f" — repeats every {recurrence_days} days"
+    elif recurrence_weekdays:
+        names = [_WEEKDAY_NAMES[int(d)] for d in recurrence_weekdays.split(",") if d]
+        suffix = f" — repeats every {', '.join(names)}"
+    else:
+        suffix = ""
     return f"Added \"{item['text']}\" to \"{todo_list['name']}\"{suffix}."
 
 
@@ -545,11 +561,14 @@ TOOLS = [
                 "\"The Board\" (the music-production/dev task board). Use this "
                 "one for casual 'add X to my list' requests that aren't project "
                 "work. If the named list doesn't exist yet it's created; if the user doesn't "
-                "name a list, it goes on \"General\". For something that repeats "
-                "('remind me to take out the trash every 3 days', 'water the "
-                "plants weekly'), set recurrence_days — checking it off then "
-                "resets it to open with the due date pushed out that many days, "
-                "instead of leaving it checked off for good."
+                "name a list, it goes on \"General\". For something that repeats on a "
+                "fixed interval ('remind me to take out the trash every 3 days', "
+                "'water the plants weekly'), set recurrence_days. For something that "
+                "repeats on specific days of the week ('every Monday and Thursday', "
+                "'gym on weekdays'), set recurrence_weekdays instead. Only set one of "
+                "the two. Either way, checking the item off resets it to open with the "
+                "due date pushed to the next occurrence, instead of leaving it checked "
+                "off for good."
             ),
             "parameters": {
                 "type": "object",
@@ -561,7 +580,11 @@ TOOLS = [
                     },
                     "recurrence_days": {
                         "type": "integer",
-                        "description": "How often this repeats, in days (1 for daily, 7 for weekly, etc.) — omit for a normal one-off item.",
+                        "description": "Fixed-interval recurrence, in days (1 for daily, 7 for weekly, etc.) — omit for a normal one-off item, or if using recurrence_weekdays instead.",
+                    },
+                    "recurrence_weekdays": {
+                        "type": "string",
+                        "description": "Specific-weekday recurrence: comma-separated ISO weekday numbers, 1=Monday through 7=Sunday (e.g. '1,3,5' for Mon/Wed/Fri, '1,2,3,4,5' for weekdays). Omit for a normal one-off item, or if using recurrence_days instead.",
                     },
                 },
                 "required": ["text"],
