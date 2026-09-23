@@ -479,13 +479,13 @@ function TodoItemRow({ item, onToggle, onUpdate, onDelete, onDragStart, isDragOv
             if (e.key === 'Enter') { e.preventDefault(); commitRecurrence(); }
             if (e.key === 'Escape') { e.preventDefault(); setRecurrenceValue(item.recurrence_days || ''); setPickingRecurrence(false); }
           }}
-          style={{ width: 54, background: 'var(--panel-2)', border: '1px solid var(--accent)', color: 'var(--text)', borderRadius: 6, padding: '4px 6px', fontSize: 12 }}
+          style={{ width: 54, background: 'var(--panel-2)', border: '1px solid var(--accent)', color: 'var(--text)', borderRadius: 6, padding: '5px 8px', fontSize: 12 }}
         />
       ) : item.recurrence_days ? (
         <button
           onClick={() => { setRecurrenceValue(item.recurrence_days); setPickingRecurrence(true); }}
           title="Repeats — click to change"
-          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 3, background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-faint)', borderRadius: 6, padding: '3px 8px', fontSize: 11 }}
+          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-faint)', borderRadius: 6, padding: '5px 10px', fontSize: 11 }}
         >
           <RepeatIcon />
           every {item.recurrence_days}d
