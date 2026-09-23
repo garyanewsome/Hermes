@@ -289,7 +289,7 @@ function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onReorder, 
                     }}
                     aria-label="Rename list"
                     title="Rename list"
-                    style={{ flexShrink: 0, width: 18, height: 18, background: 'transparent', border: 'none', color: 'var(--text-faint)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    style={{ flexShrink: 0, width: 18, height: 18, background: 'transparent', border: 'none', color: 'var(--text-dim)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   >
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                       <path d="M8.5 1.5l2 2-6 6-2.4.4.4-2.4 6-6z" stroke="currentColor" strokeWidth="1" strokeLinejoin="round" />
@@ -302,7 +302,7 @@ function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onReorder, 
                     }}
                     aria-label="Delete list"
                     title="Delete list"
-                    style={{ flexShrink: 0, width: 18, height: 18, background: 'transparent', border: 'none', color: 'var(--text-faint)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    style={{ flexShrink: 0, width: 18, height: 18, background: 'transparent', border: 'none', color: 'var(--text-dim)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   >
                     <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
                       <path d="M2.5 3.5H11.5M5.5 3.5V2.2C5.5 1.9 5.7 1.7 6 1.7H8C8.3 1.7 8.5 1.9 8.5 2.2V3.5M5.8 6V10M8.2 6V10M3.3 3.5L3.8 11.3C3.8 11.7 4.2 12 4.6 12H9.4C9.8 12 10.2 11.7 10.2 11.3L10.7 3.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
@@ -438,7 +438,7 @@ function TodoItemRow({ item, onToggle, onUpdate, onDelete, onDragStart, isDragOv
       ) : item.due_date ? (
         <button
           onClick={() => setPickingDate(true)}
-          style={{ flexShrink: 0, background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-faint)', borderRadius: 6, padding: '3px 8px', fontSize: 11 }}
+          style={{ flexShrink: 0, background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-dim)', borderRadius: 6, padding: '3px 8px', fontSize: 11 }}
         >
           due {item.due_date}
         </button>
@@ -447,7 +447,7 @@ function TodoItemRow({ item, onToggle, onUpdate, onDelete, onDragStart, isDragOv
           onClick={() => setPickingDate(true)}
           aria-label="Set due date"
           title="Set due date"
-          style={{ flexShrink: 0, width: 22, height: 22, background: 'transparent', border: 'none', color: 'var(--text-faint)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          style={{ flexShrink: 0, width: 22, height: 22, background: 'transparent', border: 'none', color: 'var(--text-dim)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <rect x="1.5" y="2.5" width="11" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.1" />
@@ -460,7 +460,7 @@ function TodoItemRow({ item, onToggle, onUpdate, onDelete, onDragStart, isDragOv
           onClick={() => onUpdate(item.id, { due_date: '' })}
           aria-label="Clear due date"
           title="Clear due date"
-          style={{ flexShrink: 0, background: 'transparent', border: 'none', color: 'var(--text-faint)', fontSize: 12, padding: 0 }}
+          style={{ flexShrink: 0, background: 'transparent', border: 'none', color: 'var(--text-dim)', fontSize: 12, padding: 0 }}
         >
           ×
         </button>
@@ -485,7 +485,7 @@ function TodoItemRow({ item, onToggle, onUpdate, onDelete, onDragStart, isDragOv
         <button
           onClick={() => { setRecurrenceValue(item.recurrence_days); setPickingRecurrence(true); }}
           title="Repeats — click to change"
-          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-faint)', borderRadius: 6, padding: '5px 10px', fontSize: 11 }}
+          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-dim)', borderRadius: 6, padding: '5px 10px', fontSize: 11 }}
         >
           <RepeatIcon />
           every {item.recurrence_days}d
@@ -495,7 +495,7 @@ function TodoItemRow({ item, onToggle, onUpdate, onDelete, onDragStart, isDragOv
           onClick={() => setPickingRecurrence(true)}
           aria-label="Make recurring"
           title="Make recurring"
-          style={{ flexShrink: 0, width: 22, height: 22, background: 'transparent', border: 'none', color: 'var(--text-faint)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          style={{ flexShrink: 0, width: 22, height: 22, background: 'transparent', border: 'none', color: 'var(--text-dim)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         >
           <RepeatIcon />
         </button>
@@ -505,7 +505,7 @@ function TodoItemRow({ item, onToggle, onUpdate, onDelete, onDragStart, isDragOv
           onClick={() => onUpdate(item.id, { recurrence_days: 0 })}
           aria-label="Stop recurring"
           title="Stop recurring"
-          style={{ flexShrink: 0, background: 'transparent', border: 'none', color: 'var(--text-faint)', fontSize: 12, padding: 0 }}
+          style={{ flexShrink: 0, background: 'transparent', border: 'none', color: 'var(--text-dim)', fontSize: 12, padding: 0 }}
         >
           ×
         </button>
@@ -515,7 +515,7 @@ function TodoItemRow({ item, onToggle, onUpdate, onDelete, onDragStart, isDragOv
         onClick={() => onDelete(item.id)}
         aria-label="Delete item"
         title="Delete item"
-        style={{ flexShrink: 0, width: 20, height: 20, background: 'transparent', border: 'none', color: 'var(--text-faint)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        style={{ flexShrink: 0, width: 20, height: 20, background: 'transparent', border: 'none', color: 'var(--text-dim)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       >
         <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
           <path d="M2.5 3.5H11.5M5.5 3.5V2.2C5.5 1.9 5.7 1.7 6 1.7H8C8.3 1.7 8.5 1.9 8.5 2.2V3.5M5.8 6V10M8.2 6V10M3.3 3.5L3.8 11.3C3.8 11.7 4.2 12 4.6 12H9.4C9.8 12 10.2 11.7 10.2 11.3L10.7 3.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
