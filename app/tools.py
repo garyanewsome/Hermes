@@ -541,10 +541,10 @@ TOOLS = [
             "name": "add_todo_item",
             "description": (
                 "Add an item to a plain everyday to-do list (groceries, errands, "
-                "life stuff) — a different thing from add_task, which is for the "
-                "music-production/dev task board. Use this one for casual "
-                "'add X to my list' requests that aren't project work. If the "
-                "named list doesn't exist yet it's created; if the user doesn't "
+                "life stuff) — a different thing from add_task, which is for "
+                "\"The Board\" (the music-production/dev task board). Use this "
+                "one for casual 'add X to my list' requests that aren't project "
+                "work. If the named list doesn't exist yet it's created; if the user doesn't "
                 "name a list, it goes on \"General\". For something that repeats "
                 "('remind me to take out the trash every 3 days', 'water the "
                 "plants weekly'), set recurrence_days — checking it off then "
@@ -574,8 +574,8 @@ TOOLS = [
             "name": "list_todo_items",
             "description": (
                 "List open (not checked off) items from the everyday to-do lists. "
-                "Use for 'what's on my todo/grocery/errands list' — not for the "
-                "Tasks board, use list_tasks for that. Omit list_name to see "
+                "Use for 'what's on my todo/grocery/errands list' — not for "
+                "\"The Board\", use list_tasks for that. Omit list_name to see "
                 "everything across all lists."
             ),
             "parameters": {
@@ -595,7 +595,7 @@ TOOLS = [
                 "Check an item off an everyday to-do list, matched by its text "
                 "(partial match is fine). Use when the user says they picked up, "
                 "did, or finished something that sounds like a todo-list item, "
-                "not the Tasks board — use complete_task for that instead."
+                "not \"The Board\" — use complete_task for that instead."
             ),
             "parameters": {
                 "type": "object",

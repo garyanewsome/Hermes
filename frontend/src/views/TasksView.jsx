@@ -469,7 +469,7 @@ export default function TasksView({ onOpenDrawer }) {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      <TopBar title="Tasks" subtitle={view === 'board' ? 'drag a card to recategorize or reorder' : 'what actually got done'} onOpenDrawer={onOpenDrawer}>
+      <TopBar title="The Board" subtitle={view === 'board' ? 'drag a card to recategorize or reorder' : 'what actually got done'} onOpenDrawer={onOpenDrawer}>
         <div style={{ display: 'flex', border: '1px solid var(--border-strong)', borderRadius: 8, overflow: 'hidden' }}>
           <button
             onClick={() => setView('board')}
