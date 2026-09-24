@@ -86,15 +86,24 @@ def add_message(conversation_id: str, role: str, content: str) -> int:
 
 
 def add_attachment(
-    message_id: int, kind: str, path: str, mime_type: str | None, original_filename: str | None
+    message_id: int,
+    kind: str,
+    path: str,
+    mime_type: str | None,
+    original_filename: str | None,
+    extracted_text: str | None = None,
 ) -> None:
+    # extracted_text is stored for completeness/future use but never read
+    # back by get_attachments — a document's text is spliced into the
+    # model's context once, at the turn it's attached (see main.py), not
+    # replayed on every later turn the way image attachments are.
     with _connect() as conn:
         conn.execute(
             """
-            INSERT INTO attachments (message_id, kind, path, mime_type, original_filename, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO attachments (message_id, kind, path, mime_type, original_filename, extracted_text, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (message_id, kind, path, mime_type, original_filename, _now()),
+            (message_id, kind, path, mime_type, original_filename, extracted_text, _now()),
         )
 
 

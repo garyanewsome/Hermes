@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import auth
+from app import auth, documents
 from app.chat import list_models, run_chat_stream
 from app.config import UPLOADS_DIR
 from app.db import (
@@ -47,9 +47,11 @@ except Exception:
 
 
 class AttachmentRef(BaseModel):
+    kind: str = "image"
     path: str
     mime_type: str | None = None
     filename: str | None = None
+    extracted_text: str | None = None
 
 
 class ChatRequest(BaseModel):
@@ -307,12 +309,28 @@ async def chat(request: ChatRequest):
     # _stream_and_persist's clean_history builder treats this turn's
     # not-yet-persisted attachments identically to older, already-stored
     # ones — no separate code path needed for "the newest message."
-    pending_attachments = [{"kind": "image", **a.model_dump()} for a in request.attachments or []]
-    history.append({"role": "user", "content": request.message, "attachments": pending_attachments})
+    pending_attachments = [a.model_dump() for a in request.attachments or []]
+
+    # A document's text is spliced into the content sent to Ollama for
+    # *this* turn only — not persisted (the DB keeps request.message
+    # exactly as typed) and not replayed on later turns the way image
+    # attachments are (see documents.py / add_attachment's docstring for
+    # why: a large document's full text getting re-sent on every later
+    # message in the conversation would be expensive and mostly wasted).
+    ollama_content = request.message
+    doc_blocks = [
+        f"--- {a.filename or a.path} ---\n{documents.cap_text(a.extracted_text)}\n--- end ---"
+        for a in request.attachments or []
+        if a.kind == "document" and a.extracted_text
+    ]
+    if doc_blocks:
+        ollama_content = f"{request.message}\n\n" + "\n\n".join(doc_blocks)
+
+    history.append({"role": "user", "content": ollama_content, "attachments": pending_attachments})
 
     message_id = add_message(conversation_id, "user", request.message)
     for a in request.attachments or []:
-        add_attachment(message_id, "image", a.path, a.mime_type, a.filename)
+        add_attachment(message_id, a.kind, a.path, a.mime_type, a.filename, a.extracted_text)
     if is_new:
         maybe_set_title(conversation_id, request.message)
 
@@ -531,12 +549,26 @@ def remove_sketch(sketch_id: int):
 
 
 class UploadResponse(BaseModel):
+    kind: str
     path: str
     mime_type: str
     filename: str
+    extracted_text: str | None = None
 
 
-_ALLOWED_UPLOAD_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+# Classified by extension, not the browser's Content-Type header — some
+# OSes send generic/inconsistent types for .md (application/octet-stream
+# is common), so extension is the more reliable signal here.
+_UPLOAD_KINDS = {
+    ".png": ("image", "image/png"),
+    ".jpg": ("image", "image/jpeg"),
+    ".jpeg": ("image", "image/jpeg"),
+    ".webp": ("image", "image/webp"),
+    ".gif": ("image", "image/gif"),
+    ".pdf": ("document", "application/pdf"),
+    ".txt": ("document", "text/plain"),
+    ".md": ("document", "text/plain"),
+}
 
 
 @app.post("/uploads")
@@ -545,16 +577,24 @@ async def upload(file: UploadFile) -> UploadResponse:
     # /chat creates the actual attachment row once it knows the real
     # message_id this ends up attached to; an attachment picked but never
     # sent just leaves an orphaned file on disk, never an orphaned row.
-    if file.content_type not in _ALLOWED_UPLOAD_TYPES:
-        raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.content_type}")
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in _UPLOAD_KINDS:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext or 'unknown'}")
+    kind, mime_type = _UPLOAD_KINDS[ext]
 
-    ext = os.path.splitext(file.filename or "")[1].lower() or ".bin"
     filename = f"{uuid.uuid4()}{ext}"
     os.makedirs(UPLOADS_DIR, exist_ok=True)
-    with open(os.path.join(UPLOADS_DIR, filename), "wb") as f:
+    local_path = os.path.join(UPLOADS_DIR, filename)
+    with open(local_path, "wb") as f:
         f.write(await file.read())
 
-    return UploadResponse(path=filename, mime_type=file.content_type, filename=file.filename or filename)
+    extracted_text = None
+    if kind == "document":
+        extracted_text = documents.extract_text(local_path, mime_type)
+
+    return UploadResponse(
+        kind=kind, path=filename, mime_type=mime_type, filename=file.filename or filename, extracted_text=extracted_text
+    )
 
 
 # Kept behind the auth middleware (unlike Iris's public /images — see

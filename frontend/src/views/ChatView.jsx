@@ -29,6 +29,15 @@ function RetryIcon() {
   );
 }
 
+function DocumentIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M3 1.5h5l3 3v8a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+      <path d="M8 1.5v3h3" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function AttachIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -412,14 +421,34 @@ export default function ChatView({ onOpenDrawer }) {
                       alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
                     }}
                   >
-                    {m.attachments.map((a) => (
-                      <img
-                        key={a.path}
-                        src={`/uploads/${a.path}`}
-                        alt={a.filename || a.original_filename || 'attachment'}
-                        style={{ maxWidth: 200, maxHeight: 200, borderRadius: 10, border: '1px solid var(--border)', display: 'block' }}
-                      />
-                    ))}
+                    {m.attachments.map((a) =>
+                      a.kind === 'document' ? (
+                        <div
+                          key={a.path}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '6px 10px',
+                            borderRadius: 8,
+                            border: '1px solid var(--border)',
+                            background: 'var(--panel-2)',
+                            color: 'var(--text-dim)',
+                            fontSize: 12,
+                          }}
+                        >
+                          <DocumentIcon />
+                          {a.filename || a.original_filename}
+                        </div>
+                      ) : (
+                        <img
+                          key={a.path}
+                          src={`/uploads/${a.path}`}
+                          alt={a.filename || a.original_filename || 'attachment'}
+                          style={{ maxWidth: 200, maxHeight: 200, borderRadius: 10, border: '1px solid var(--border)', display: 'block' }}
+                        />
+                      )
+                    )}
                   </div>
                 )}
                 {isEditing ? (
@@ -501,37 +530,81 @@ export default function ChatView({ onOpenDrawer }) {
         >
           {attachments.length > 0 && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingBottom: 12 }}>
-              {attachments.map((a) => (
-                <div key={a.path} style={{ position: 'relative', width: 56, height: 56, flexShrink: 0 }}>
-                  <img
-                    src={`/uploads/${a.path}`}
-                    alt={a.filename}
-                    style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeAttachment(a.path)}
-                    aria-label="Remove attachment"
-                    title="Remove attachment"
+              {attachments.map((a) =>
+                a.kind === 'document' ? (
+                  <div
+                    key={a.path}
                     style={{
-                      position: 'absolute',
-                      top: -6,
-                      right: -6,
-                      width: 18,
-                      height: 18,
-                      borderRadius: '50%',
-                      background: 'var(--bg)',
-                      border: '1px solid var(--border-strong)',
+                      position: 'relative',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      maxWidth: 160,
+                      padding: '6px 22px 6px 10px',
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
+                      background: 'var(--panel-2)',
                       color: 'var(--text-dim)',
-                      fontSize: 11,
-                      padding: 0,
-                      lineHeight: 1,
+                      fontSize: 12,
                     }}
                   >
-                    ×
-                  </button>
-                </div>
-              ))}
+                    <DocumentIcon />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.filename}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(a.path)}
+                      aria-label="Remove attachment"
+                      title="Remove attachment"
+                      style={{
+                        position: 'absolute',
+                        top: -6,
+                        right: -6,
+                        width: 18,
+                        height: 18,
+                        borderRadius: '50%',
+                        background: 'var(--bg)',
+                        border: '1px solid var(--border-strong)',
+                        color: 'var(--text-dim)',
+                        fontSize: 11,
+                        padding: 0,
+                        lineHeight: 1,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : (
+                  <div key={a.path} style={{ position: 'relative', width: 56, height: 56, flexShrink: 0 }}>
+                    <img
+                      src={`/uploads/${a.path}`}
+                      alt={a.filename}
+                      style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(a.path)}
+                      aria-label="Remove attachment"
+                      title="Remove attachment"
+                      style={{
+                        position: 'absolute',
+                        top: -6,
+                        right: -6,
+                        width: 18,
+                        height: 18,
+                        borderRadius: '50%',
+                        background: 'var(--bg)',
+                        border: '1px solid var(--border-strong)',
+                        color: 'var(--text-dim)',
+                        fontSize: 11,
+                        padding: 0,
+                        lineHeight: 1,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )
+              )}
             </div>
           )}
         </div>
@@ -550,7 +623,7 @@ export default function ChatView({ onOpenDrawer }) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
+            accept="image/png,image/jpeg,image/webp,image/gif,.pdf,.txt,.md,application/pdf,text/plain,text/markdown"
             multiple
             onChange={handleFilesSelected}
             style={{ display: 'none' }}
@@ -559,8 +632,8 @@ export default function ChatView({ onOpenDrawer }) {
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            aria-label="Attach image"
-            title="Attach image"
+            aria-label="Attach image or document"
+            title="Attach image or document"
             style={{
               flexShrink: 0,
               width: 40,
