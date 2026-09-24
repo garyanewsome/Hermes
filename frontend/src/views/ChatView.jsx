@@ -79,7 +79,7 @@ export default function ChatView({ onOpenDrawer }) {
     getModels()
       .then((list) => {
         setModels(list);
-        if (list.includes('qwen3:14b')) setModel('qwen3:14b');
+        if (list.includes('gemma4:12b')) setModel('gemma4:12b');
       })
       .catch(() => setModels([]));
 
