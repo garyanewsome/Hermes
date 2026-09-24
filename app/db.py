@@ -116,6 +116,27 @@ def get_attachments(message_id: int) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def find_document_attachments(conversation_id: str, filename_query: str | None = None) -> list[dict]:
+    """Documents attached anywhere earlier in this conversation, most
+    recent first — backs the read_document tool, which pulls a document's
+    extracted text back into context on a later turn since (per
+    add_attachment's docstring) it's normally only injected once, on the
+    turn it's attached."""
+    query = """
+        SELECT a.id, a.original_filename, a.extracted_text, a.created_at
+        FROM attachments a JOIN messages m ON m.id = a.message_id
+        WHERE m.conversation_id = ? AND a.kind = 'document' AND a.extracted_text IS NOT NULL
+    """
+    params: list = [conversation_id]
+    if filename_query:
+        query += " AND a.original_filename LIKE ?"
+        params.append(f"%{filename_query}%")
+    query += " ORDER BY a.created_at DESC"
+    with _connect() as conn:
+        rows = conn.execute(query, params).fetchall()
+    return [dict(row) for row in rows]
+
+
 def maybe_set_title(conversation_id: str, first_user_message: str) -> None:
     title = first_user_message.strip().replace("\n", " ")
     if len(title) > 60:

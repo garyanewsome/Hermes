@@ -15,7 +15,7 @@ from app.config import (
     HINDSIGHT_URL,
     IRIS_URL,
 )
-from app import db, planner_db
+from app import db, documents, planner_db
 
 
 def search_vault(query: str) -> str:
@@ -327,6 +327,27 @@ def write_vault_note(folder: str, filename: str, content: str | None = None, con
     response.raise_for_status()
     note_path = response.json()["note_path"]
     return f"Saved to the vault at: {note_path}"
+
+
+def read_document(filename: str | None = None, conversation_id: str | None = None) -> str:
+    # A document's extracted text is normally only in context for the turn
+    # it's attached on (see add_attachment's docstring — deliberately not
+    # replayed every turn like images, to avoid resending a whole PDF's
+    # text on every later message). This is the escape hatch: called
+    # on-demand when the user refers back to a document instead of
+    # eagerly carrying its text forward forever.
+    if not conversation_id:
+        return "No conversation to look up an attached document in."
+    matches = db.find_document_attachments(conversation_id, filename)
+    if not matches:
+        if filename:
+            return f"No document matching \"{filename}\" found in this conversation."
+        return "No documents have been attached in this conversation."
+    if len(matches) > 1:
+        options = ", ".join(m["original_filename"] or "unnamed" for m in matches)
+        return f"Multiple documents match: {options}. Say which one you mean."
+    doc = matches[0]
+    return f"--- {doc['original_filename']} ---\n{documents.cap_text(doc['extracted_text'])}\n--- end ---"
 
 
 TOOLS = [
@@ -784,6 +805,36 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_document",
+            "description": (
+                "Re-read the extracted text of a document (PDF/text/markdown) the "
+                "user attached earlier in this conversation. Attached documents are "
+                "only visible to you for the turn they're attached on, not carried "
+                "forward automatically — call this when the user refers back to a "
+                "document they shared previously (e.g. 'what did that PDF say about "
+                "X', 'check the invoice again', 'what was in that file') and its "
+                "content isn't already visible earlier in this conversation."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filename": {
+                        "type": "string",
+                        "description": (
+                            "The document's filename, or a fragment of it, if the user "
+                            "mentioned or it's otherwise known. Omit to get the most "
+                            "recently attached document, or a list to choose from if "
+                            "more than one document is attached in this conversation."
+                        ),
+                    }
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 TOOL_HANDLERS = {
@@ -806,4 +857,5 @@ TOOL_HANDLERS = {
     "research_repo": research_repo,
     "forget_repo": forget_repo,
     "write_vault_note": write_vault_note,
+    "read_document": read_document,
 }

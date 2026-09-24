@@ -204,10 +204,11 @@ async def run_chat_stream(
                         # holding ~9GB of stale CUDA allocator cache because
                         # this unload never ran on the exception path.
                         await _unload_codebase_searcher()
-                elif name == "write_vault_note":
-                    # No GPU handoff needed (plain git operations, not an
-                    # embedding call) — just needs conversation_id so it can
-                    # pull the last assistant message when content is omitted.
+                elif name in ("write_vault_note", "read_document"):
+                    # No GPU handoff needed for either — just needs
+                    # conversation_id: write_vault_note to pull the last
+                    # assistant message when content is omitted, read_document
+                    # to scope its lookup to this conversation's own uploads.
                     result = handler(**arguments, conversation_id=conversation_id)
                 else:
                     result = handler(**arguments)
