@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import auth, documents
+from app import audio, auth, documents
 from app.chat import list_models, run_chat_stream
 from app.config import UPLOADS_DIR
 from app.db import (
@@ -311,20 +311,24 @@ async def chat(request: ChatRequest):
     # ones — no separate code path needed for "the newest message."
     pending_attachments = [a.model_dump() for a in request.attachments or []]
 
-    # A document's text is spliced into the content sent to Ollama for
-    # *this* turn only — not persisted (the DB keeps request.message
-    # exactly as typed) and not replayed on later turns the way image
-    # attachments are (see documents.py / add_attachment's docstring for
-    # why: a large document's full text getting re-sent on every later
-    # message in the conversation would be expensive and mostly wasted).
+    # A document's (or voice memo's) text is spliced into the content sent
+    # to Ollama for *this* turn only — not persisted (the DB keeps
+    # request.message exactly as typed) and not replayed on later turns
+    # the way image attachments are (see documents.py / add_attachment's
+    # docstring for why: a large document's full text getting re-sent on
+    # every later message in the conversation would be expensive and
+    # mostly wasted). Audio's transcript reuses the exact same splice
+    # mechanism — by the time it reaches here it's just text, same as a
+    # PDF's extracted text.
     ollama_content = request.message
-    doc_blocks = [
-        f"--- {a.filename or a.path} ---\n{documents.cap_text(a.extracted_text)}\n--- end ---"
-        for a in request.attachments or []
-        if a.kind == "document" and a.extracted_text
-    ]
-    if doc_blocks:
-        ollama_content = f"{request.message}\n\n" + "\n\n".join(doc_blocks)
+    text_blocks = []
+    for a in request.attachments or []:
+        if a.kind not in ("document", "audio") or not a.extracted_text:
+            continue
+        label = "Transcript of voice memo" if a.kind == "audio" else "Document"
+        text_blocks.append(f"--- {label}: {a.filename or a.path} ---\n{documents.cap_text(a.extracted_text)}\n--- end ---")
+    if text_blocks:
+        ollama_content = f"{request.message}\n\n" + "\n\n".join(text_blocks)
 
     history.append({"role": "user", "content": ollama_content, "attachments": pending_attachments})
 
@@ -568,6 +572,17 @@ _UPLOAD_KINDS = {
     ".pdf": ("document", "application/pdf"),
     ".txt": ("document", "text/plain"),
     ".md": ("document", "text/plain"),
+    # Covers both a live recording (browser MediaRecorder: webm/opus in
+    # Chrome/Firefox, mp4/aac in Safari) and a pre-recorded file the user
+    # picks directly. The mime_type here is just what gets stored/served
+    # back for playback — transcription (app/audio.py) transcodes to wav
+    # itself regardless of the original container.
+    ".webm": ("audio", "audio/webm"),
+    ".m4a": ("audio", "audio/mp4"),
+    ".mp4": ("audio", "audio/mp4"),
+    ".wav": ("audio", "audio/wav"),
+    ".mp3": ("audio", "audio/mpeg"),
+    ".ogg": ("audio", "audio/ogg"),
 }
 
 
@@ -591,6 +606,8 @@ async def upload(file: UploadFile) -> UploadResponse:
     extracted_text = None
     if kind == "document":
         extracted_text = documents.extract_text(local_path, mime_type)
+    elif kind == "audio":
+        extracted_text = audio.transcribe(local_path)
 
     return UploadResponse(
         kind=kind, path=filename, mime_type=mime_type, filename=file.filename or filename, extracted_text=extracted_text

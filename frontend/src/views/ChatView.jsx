@@ -46,6 +46,32 @@ function AttachIcon() {
   );
 }
 
+function MicIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="6" y="1.5" width="4" height="7.5" rx="2" stroke="var(--accent)" strokeWidth="1.2" />
+      <path d="M3.5 8a4.5 4.5 0 0 0 9 0M8 12.5v2" stroke="var(--accent)" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// Browser MediaRecorder output varies (webm/opus in Chrome/Firefox, mp4/aac
+// in Safari) — pick whatever the browser actually supports and use a
+// matching extension so the backend's extension-based upload classifier
+// (see main.py's _UPLOAD_KINDS) recognizes it correctly.
+function pickAudioMimeType() {
+  const candidates = [
+    ['audio/webm;codecs=opus', 'webm'],
+    ['audio/webm', 'webm'],
+    ['audio/mp4', 'm4a'],
+    ['audio/ogg;codecs=opus', 'ogg'],
+  ];
+  for (const [mime, ext] of candidates) {
+    if (window.MediaRecorder?.isTypeSupported?.(mime)) return { mime, ext };
+  }
+  return { mime: '', ext: 'webm' };
+}
+
 function MsgActionButton({ onClick, label, children }) {
   return (
     <button
@@ -76,10 +102,12 @@ export default function ChatView({ onOpenDrawer }) {
   const [editText, setEditText] = useState('');
   const [attachments, setAttachments] = useState([]); // pending, not-yet-sent: [{path, mime_type, filename}]
   const [uploading, setUploading] = useState(false);
+  const [recording, setRecording] = useState(false);
   const isMobile = useIsMobile();
 
   const abortRef = useRef(null);
   const fileInputRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
   const messagesRef = useRef(null);
   const currentIdRef = useRef(null);
   currentIdRef.current = currentId;
@@ -281,6 +309,42 @@ export default function ChatView({ onOpenDrawer }) {
     setAttachments((prev) => prev.filter((a) => a.path !== path));
   }
 
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const { mime, ext } = pickAudioMimeType();
+      const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      const chunks = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunks, { type: recorder.mimeType || mime || 'audio/webm' });
+        const file = new File([blob], `voice-memo-${Date.now()}.${ext}`, { type: blob.type });
+        setUploading(true);
+        try {
+          const uploaded = await uploadAttachment(file);
+          setAttachments((prev) => [...prev, uploaded]);
+        } catch (err) {
+          setMessages((prev) => [...prev, { role: 'assistant', content: 'Voice memo upload failed: ' + err.message }]);
+        } finally {
+          setUploading(false);
+        }
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+    } catch (err) {
+      setMessages((prev) => [...prev, { role: 'assistant', content: 'Could not access the microphone: ' + err.message }]);
+    }
+  }
+
+  function stopRecording() {
+    mediaRecorderRef.current?.stop();
+    setRecording(false);
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
 
@@ -440,6 +504,8 @@ export default function ChatView({ onOpenDrawer }) {
                           <DocumentIcon />
                           {a.filename || a.original_filename}
                         </div>
+                      ) : a.kind === 'audio' ? (
+                        <audio key={a.path} controls src={`/uploads/${a.path}`} style={{ height: 32, maxWidth: 240 }} />
                       ) : (
                         <img
                           key={a.path}
@@ -573,6 +639,47 @@ export default function ChatView({ onOpenDrawer }) {
                       ×
                     </button>
                   </div>
+                ) : a.kind === 'audio' ? (
+                  <div
+                    key={a.path}
+                    style={{
+                      position: 'relative',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '6px 22px 6px 10px',
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
+                      background: 'var(--panel-2)',
+                      color: 'var(--text-dim)',
+                      fontSize: 12,
+                    }}
+                  >
+                    <MicIcon />
+                    <span>Voice memo</span>
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(a.path)}
+                      aria-label="Remove attachment"
+                      title="Remove attachment"
+                      style={{
+                        position: 'absolute',
+                        top: -6,
+                        right: -6,
+                        width: 18,
+                        height: 18,
+                        borderRadius: '50%',
+                        background: 'var(--bg)',
+                        border: '1px solid var(--border-strong)',
+                        color: 'var(--text-dim)',
+                        fontSize: 11,
+                        padding: 0,
+                        lineHeight: 1,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
                 ) : (
                   <div key={a.path} style={{ position: 'relative', width: 56, height: 56, flexShrink: 0 }}>
                     <img
@@ -623,7 +730,7 @@ export default function ChatView({ onOpenDrawer }) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif,.pdf,.txt,.md,application/pdf,text/plain,text/markdown"
+            accept="image/png,image/jpeg,image/webp,image/gif,.pdf,.txt,.md,application/pdf,text/plain,text/markdown,.wav,.mp3,.m4a,.webm,.ogg,audio/*"
             multiple
             onChange={handleFilesSelected}
             style={{ display: 'none' }}
@@ -632,8 +739,8 @@ export default function ChatView({ onOpenDrawer }) {
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            aria-label="Attach image or document"
-            title="Attach image or document"
+            aria-label="Attach image, document, or audio file"
+            title="Attach image, document, or audio file"
             style={{
               flexShrink: 0,
               width: 40,
@@ -648,6 +755,27 @@ export default function ChatView({ onOpenDrawer }) {
             }}
           >
             <AttachIcon />
+          </button>
+          <button
+            type="button"
+            onClick={recording ? stopRecording : startRecording}
+            disabled={uploading}
+            aria-label={recording ? 'Stop recording' : 'Record a voice memo'}
+            title={recording ? 'Stop recording' : 'Record a voice memo'}
+            style={{
+              flexShrink: 0,
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              background: recording ? 'rgba(255,77,77,0.15)' : 'transparent',
+              border: recording ? '1px solid #ff4d4d' : '1px solid var(--border-strong)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: uploading ? 0.5 : 1,
+            }}
+          >
+            <MicIcon />
           </button>
           <textarea
             rows={1}

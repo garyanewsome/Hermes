@@ -9,6 +9,12 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# ffmpeg: transcodes voice-memo uploads (browser MediaRecorder output —
+# webm/opus or mp4/aac depending on browser) to the wav format Ollama's
+# audio input actually accepts (confirmed live: it rejects webm outright).
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

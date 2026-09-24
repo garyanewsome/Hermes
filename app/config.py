@@ -3,6 +3,14 @@ import os
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://192.168.1.157:11434")
 CHAT_MODEL = os.environ.get("CHAT_MODEL", "gemma4:12b")
 
+# For transcribing voice-memo attachments (app/audio.py) — deliberately
+# independent of CHAT_MODEL/whatever the user has selected in the UI,
+# since not every chat model has Ollama's "audio" capability (confirmed:
+# qwen3.5:9b doesn't, gemma4:12b does). Transcription always uses this
+# model regardless, the same way document text extraction doesn't care
+# which model is chatting.
+AUDIO_MODEL = os.environ.get("AUDIO_MODEL", "gemma4:12b")
+
 # Athenaeum is reached via its LAN Ingress hostname. Targeted directly by
 # IP + explicit Host header for now (avoids needing local DNS / /etc/hosts
 # entries on every client) — revisit once Hermes itself runs inside K3s,
