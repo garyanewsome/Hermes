@@ -1,16 +1,21 @@
+import base64
 import json
 import logging
+import os
+import uuid
 from datetime import date
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app import auth
 from app.chat import list_models, run_chat_stream
+from app.config import UPLOADS_DIR
 from app.db import (
+    add_attachment,
     add_message,
     create_conversation,
     delete_conversation,
@@ -41,11 +46,18 @@ except Exception:
     logger.exception("planner_db.init_planner_db() failed — tasks/habits will be unavailable until this is fixed")
 
 
+class AttachmentRef(BaseModel):
+    path: str
+    mime_type: str | None = None
+    filename: str | None = None
+
+
 class ChatRequest(BaseModel):
     message: str
     conversation_id: str | None = None
     model: str | None = None
     think: bool = False
+    attachments: list[AttachmentRef] | None = None
 
 
 class RenameRequest(BaseModel):
@@ -225,13 +237,38 @@ def remove_conversation(conversation_id: str):
     return {"status": "ok"}
 
 
+def _encode_image_attachments(attachments: list[dict] | None) -> list[str]:
+    # Ollama's /api/chat has no server-side image cache — a vision model
+    # only "sees" whatever's in the images field of *this* request, so a
+    # photo from three turns ago has to be re-read and re-encoded on every
+    # subsequent call too, not just the turn it was originally attached
+    # to. Missing/unreadable files are skipped rather than failing the
+    # whole chat turn over one bad attachment.
+    images = []
+    for a in attachments or []:
+        if a.get("kind") != "image":
+            continue
+        try:
+            with open(os.path.join(UPLOADS_DIR, a["path"]), "rb") as f:
+                images.append(base64.b64encode(f.read()).decode("ascii"))
+        except OSError:
+            logger.exception("Failed to read attachment %s for a chat turn", a.get("path"))
+    return images
+
+
 def _stream_and_persist(conversation_id: str, history: list[dict], model: str | None, think: bool):
     # Shared by /chat and /resend — both send an initial history to Ollama,
     # stream the reply back as ndjson, and persist it the same way on
     # completion or client abort. run_chat_stream gets id-free {role,
     # content} pairs — the message id is our own bookkeeping, not
     # something to hand to Ollama's API.
-    clean_history = [{"role": m["role"], "content": m["content"]} for m in history]
+    clean_history = []
+    for m in history:
+        entry = {"role": m["role"], "content": m["content"]}
+        images = _encode_image_attachments(m.get("attachments"))
+        if images:
+            entry["images"] = images
+        clean_history.append(entry)
 
     async def event_stream():
         accumulated = ""
@@ -266,9 +303,16 @@ async def chat(request: ChatRequest):
         conversation_id = create_conversation()
 
     history = get_messages(conversation_id)
-    history.append({"role": "user", "content": request.message})
+    # Same {kind, path, ...} shape get_attachments() returns, so
+    # _stream_and_persist's clean_history builder treats this turn's
+    # not-yet-persisted attachments identically to older, already-stored
+    # ones — no separate code path needed for "the newest message."
+    pending_attachments = [{"kind": "image", **a.model_dump()} for a in request.attachments or []]
+    history.append({"role": "user", "content": request.message, "attachments": pending_attachments})
 
-    add_message(conversation_id, "user", request.message)
+    message_id = add_message(conversation_id, "user", request.message)
+    for a in request.attachments or []:
+        add_attachment(message_id, "image", a.path, a.mime_type, a.filename)
     if is_new:
         maybe_set_title(conversation_id, request.message)
 
@@ -485,6 +529,41 @@ def remove_sketch(sketch_id: int):
     planner_db.delete_sketch(sketch_id)
     return {"status": "ok"}
 
+
+class UploadResponse(BaseModel):
+    path: str
+    mime_type: str
+    filename: str
+
+
+_ALLOWED_UPLOAD_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+
+
+@app.post("/uploads")
+async def upload(file: UploadFile) -> UploadResponse:
+    # Saves the file and hands back a reference only — no DB row yet.
+    # /chat creates the actual attachment row once it knows the real
+    # message_id this ends up attached to; an attachment picked but never
+    # sent just leaves an orphaned file on disk, never an orphaned row.
+    if file.content_type not in _ALLOWED_UPLOAD_TYPES:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.content_type}")
+
+    ext = os.path.splitext(file.filename or "")[1].lower() or ".bin"
+    filename = f"{uuid.uuid4()}{ext}"
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
+    with open(os.path.join(UPLOADS_DIR, filename), "wb") as f:
+        f.write(await file.read())
+
+    return UploadResponse(path=filename, mime_type=file.content_type, filename=file.filename or filename)
+
+
+# Kept behind the auth middleware (unlike Iris's public /images — see
+# _PUBLIC_PATHS/_PUBLIC_PREFIXES above) — the browser already sends the
+# session cookie on same-origin <img> requests, so this doesn't break
+# rendering. Mounted before the catch-all static mount below so it isn't
+# shadowed by it.
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 # Mounted last so it doesn't shadow the API routes above.
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

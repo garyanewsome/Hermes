@@ -25,6 +25,12 @@ HINDSIGHT_BANK_ID = os.environ.get("HINDSIGHT_BANK_ID", "vst-test")
 
 DB_PATH = os.environ.get("DB_PATH", "./hermes.db")
 
+# Chat attachments (images, later documents) — reuses the same PVC as the
+# sqlite DB (see k8s/hermes-pv.yaml) rather than provisioning a second
+# volume like Iris's separate IMAGES_DIR; just a subdirectory alongside
+# hermes.db.
+UPLOADS_DIR = os.environ.get("UPLOADS_DIR", os.path.join(os.path.dirname(DB_PATH) or ".", "uploads"))
+
 # Bare-metal on the host, not K3s (like Iris) — embedding needs the GPU,
 # and the cluster has no device plugin for it. Reached by LAN IP:port,
 # same as IRIS_URL above. On-demand repo research/indexing, not a

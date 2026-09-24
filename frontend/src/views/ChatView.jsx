@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
 import ConversationSidebar from './ConversationSidebar.jsx';
-import { deleteMessage, getConversation, getModels, listConversations } from '../api.js';
+import { deleteMessage, getConversation, getModels, listConversations, uploadAttachment } from '../api.js';
 import { renderMarkdown } from '../lib/markdown.js';
 import useIsMobile from '../hooks/useIsMobile.js';
 
@@ -25,6 +25,14 @@ function RetryIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
       <path d="M9.8 5.5A3.8 3.8 0 1 1 8.6 2.9M9.8 1.7v2.6H7.2" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function AttachIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M11 5.5l-4.8 4.8a2 2 0 1 1-2.8-2.8l5.3-5.3a3.2 3.2 0 1 1 4.5 4.5l-5.4 5.4a1.2 1.2 0 0 1-1.7-1.7l4.6-4.6" stroke="var(--accent)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -57,9 +65,12 @@ export default function ChatView({ onOpenDrawer }) {
   const [convSidebarOpen, setConvSidebarOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState('');
+  const [attachments, setAttachments] = useState([]); // pending, not-yet-sent: [{path, mime_type, filename}]
+  const [uploading, setUploading] = useState(false);
   const isMobile = useIsMobile();
 
   const abortRef = useRef(null);
+  const fileInputRef = useRef(null);
   const messagesRef = useRef(null);
   const currentIdRef = useRef(null);
   currentIdRef.current = currentId;
@@ -242,6 +253,25 @@ export default function ChatView({ onOpenDrawer }) {
     }
   }
 
+  async function handleFilesSelected(e) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = ''; // lets the same file be picked again later
+    if (!files.length) return;
+    setUploading(true);
+    try {
+      const uploaded = await Promise.all(files.map(uploadAttachment));
+      setAttachments((prev) => [...prev, ...uploaded]);
+    } catch (err) {
+      setMessages((prev) => [...prev, { role: 'assistant', content: 'Attachment upload failed: ' + err.message }]);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function removeAttachment(path) {
+    setAttachments((prev) => prev.filter((a) => a.path !== path));
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
 
@@ -251,12 +281,24 @@ export default function ChatView({ onOpenDrawer }) {
     }
 
     const text = input.trim();
-    if (!text) return;
+    if (!text && attachments.length === 0) return;
     setInput('');
+    const sentAttachments = attachments;
+    setAttachments([]);
 
-    setMessages((prev) => [...prev, { role: 'user', content: text }, { role: 'assistant', content: 'thinking...', pending: true }]);
+    setMessages((prev) => [
+      ...prev,
+      { role: 'user', content: text, attachments: sentAttachments },
+      { role: 'assistant', content: 'thinking...', pending: true },
+    ]);
 
-    await runStream('/chat', { message: text, conversation_id: currentId, model: model || null, think });
+    await runStream('/chat', {
+      message: text,
+      conversation_id: currentId,
+      model: model || null,
+      think,
+      attachments: sentAttachments,
+    });
   }
 
   async function handleDeleteMessage(messageId) {
@@ -360,6 +402,26 @@ export default function ChatView({ onOpenDrawer }) {
                 className="msg-row"
                 style={{ display: 'flex', flexDirection: 'column', maxWidth: isMobile ? '88%' : '70%', alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start' }}
               >
+                {m.attachments?.length > 0 && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 6,
+                      flexWrap: 'wrap',
+                      marginBottom: 6,
+                      alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+                    }}
+                  >
+                    {m.attachments.map((a) => (
+                      <img
+                        key={a.path}
+                        src={`/uploads/${a.path}`}
+                        alt={a.filename || a.original_filename || 'attachment'}
+                        style={{ maxWidth: 200, maxHeight: 200, borderRadius: 10, border: '1px solid var(--border)', display: 'block' }}
+                      />
+                    ))}
+                  </div>
+                )}
                 {isEditing ? (
                   <textarea
                     autoFocus
@@ -384,24 +446,26 @@ export default function ChatView({ onOpenDrawer }) {
                     }}
                   />
                 ) : (
-                  <div
-                    className="msg-bubble"
-                    style={{
-                      padding: '10px 14px',
-                      borderRadius: 14,
-                      lineHeight: 1.45,
-                      fontSize: 14.5,
-                      whiteSpace: m.role === 'user' || m.pending ? 'pre-wrap' : 'normal',
-                      fontStyle: m.pending ? 'italic' : 'normal',
-                      color: m.pending ? 'var(--text-dim)' : m.role === 'user' ? 'var(--accent-text)' : 'var(--text)',
-                      background: m.role === 'user' ? 'var(--accent)' : 'var(--panel-2)',
-                      border: m.role === 'assistant' ? '1px solid var(--accent)' : 'none',
-                      boxShadow: m.role === 'user' || m.role === 'assistant' ? '0 0 10px var(--accent-glow)' : 'none',
-                    }}
-                    {...(m.role === 'assistant' && !m.pending
-                      ? { dangerouslySetInnerHTML: { __html: renderMarkdown(m.content) } }
-                      : { children: m.content })}
-                  />
+                  m.content && (
+                    <div
+                      className="msg-bubble"
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: 14,
+                        lineHeight: 1.45,
+                        fontSize: 14.5,
+                        whiteSpace: m.role === 'user' || m.pending ? 'pre-wrap' : 'normal',
+                        fontStyle: m.pending ? 'italic' : 'normal',
+                        color: m.pending ? 'var(--text-dim)' : m.role === 'user' ? 'var(--accent-text)' : 'var(--text)',
+                        background: m.role === 'user' ? 'var(--accent)' : 'var(--panel-2)',
+                        border: m.role === 'assistant' ? '1px solid var(--accent)' : 'none',
+                        boxShadow: m.role === 'user' || m.role === 'assistant' ? '0 0 10px var(--accent-glow)' : 'none',
+                      }}
+                      {...(m.role === 'assistant' && !m.pending
+                        ? { dangerouslySetInnerHTML: { __html: renderMarkdown(m.content) } }
+                        : { children: m.content })}
+                    />
+                  )
                 )}
                 {m.id != null && !m.pending && !isEditing && (
                   <div
@@ -428,16 +492,90 @@ export default function ChatView({ onOpenDrawer }) {
           })}
         </div>
 
+        <div
+          style={{
+            padding: `${attachments.length ? 12 : 0}px ${isMobile ? 12 : 20}px 0`,
+            borderTop: attachments.length ? '1px solid var(--border)' : 'none',
+            background: 'var(--panel)',
+          }}
+        >
+          {attachments.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingBottom: 12 }}>
+              {attachments.map((a) => (
+                <div key={a.path} style={{ position: 'relative', width: 56, height: 56, flexShrink: 0 }}>
+                  <img
+                    src={`/uploads/${a.path}`}
+                    alt={a.filename}
+                    style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(a.path)}
+                    aria-label="Remove attachment"
+                    title="Remove attachment"
+                    style={{
+                      position: 'absolute',
+                      top: -6,
+                      right: -6,
+                      width: 18,
+                      height: 18,
+                      borderRadius: '50%',
+                      background: 'var(--bg)',
+                      border: '1px solid var(--border-strong)',
+                      color: 'var(--text-dim)',
+                      fontSize: 11,
+                      padding: 0,
+                      lineHeight: 1,
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <form
           onSubmit={handleSubmit}
           style={{
             display: 'flex',
             gap: 10,
+            alignItems: 'flex-end',
             padding: `16px ${isMobile ? 12 : 20}px calc(16px + env(safe-area-inset-bottom))`,
-            borderTop: '1px solid var(--border)',
+            borderTop: attachments.length ? 'none' : '1px solid var(--border)',
             background: 'var(--panel)',
           }}
         >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            multiple
+            onChange={handleFilesSelected}
+            style={{ display: 'none' }}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            aria-label="Attach image"
+            title="Attach image"
+            style={{
+              flexShrink: 0,
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              background: 'transparent',
+              border: '1px solid var(--border-strong)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: uploading ? 0.5 : 1,
+            }}
+          >
+            <AttachIcon />
+          </button>
           <textarea
             rows={1}
             value={input}

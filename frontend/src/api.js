@@ -72,6 +72,17 @@ export async function checkAuth() {
   return res.ok;
 }
 
+export async function uploadAttachment(file) {
+  // No Content-Type header set here on purpose — the browser fills in
+  // the multipart boundary itself when the body is a FormData, and
+  // apiFetch already just spreads whatever opts it's given.
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await apiFetch('/uploads', { method: 'POST', body: formData });
+  if (!res.ok) throw new Error('Upload failed: ' + res.status);
+  return res.json();
+}
+
 export async function getModels() {
   const res = await apiFetch('/models');
   const data = await res.json();

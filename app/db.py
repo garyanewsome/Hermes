@@ -40,6 +40,23 @@ def init_db() -> None:
             )
             """
         )
+        # One table for every attachment kind (image now, document later)
+        # rather than a separate migration per kind — extracted_text sits
+        # unused until documents need it.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS attachments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_id INTEGER NOT NULL REFERENCES messages(id),
+                kind TEXT NOT NULL,
+                path TEXT NOT NULL,
+                mime_type TEXT,
+                original_filename TEXT,
+                extracted_text TEXT,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
 
 
 def _now() -> str:
@@ -57,14 +74,37 @@ def create_conversation() -> str:
     return conversation_id
 
 
-def add_message(conversation_id: str, role: str, content: str) -> None:
+def add_message(conversation_id: str, role: str, content: str) -> int:
     now = _now()
     with _connect() as conn:
-        conn.execute(
+        cursor = conn.execute(
             "INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)",
             (conversation_id, role, content, now),
         )
         conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (now, conversation_id))
+        return cursor.lastrowid
+
+
+def add_attachment(
+    message_id: int, kind: str, path: str, mime_type: str | None, original_filename: str | None
+) -> None:
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO attachments (message_id, kind, path, mime_type, original_filename, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (message_id, kind, path, mime_type, original_filename, _now()),
+        )
+
+
+def get_attachments(message_id: int) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT id, kind, path, mime_type, original_filename FROM attachments WHERE message_id = ? ORDER BY id",
+            (message_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def maybe_set_title(conversation_id: str, first_user_message: str) -> None:
@@ -95,7 +135,10 @@ def get_messages(conversation_id: str) -> list[dict]:
             "SELECT id, role, content FROM messages WHERE conversation_id = ? ORDER BY id",
             (conversation_id,),
         ).fetchall()
-    return [{"id": row["id"], "role": row["role"], "content": row["content"]} for row in rows]
+    return [
+        {"id": row["id"], "role": row["role"], "content": row["content"], "attachments": get_attachments(row["id"])}
+        for row in rows
+    ]
 
 
 def get_last_assistant_message(conversation_id: str) -> str | None:
