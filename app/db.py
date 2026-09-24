@@ -137,6 +137,27 @@ def find_text_attachments(conversation_id: str, filename_query: str | None = Non
     return [dict(row) for row in rows]
 
 
+def find_audio_attachments(conversation_id: str, filename_query: str | None = None) -> list[dict]:
+    """Raw audio attachments (path on disk) anywhere earlier in this
+    conversation, most recent first — backs analyze_chords/
+    transcribe_melody, which need the actual audio file regardless of
+    whether it already has a (voice-memo) transcript, unlike
+    find_text_attachments which only returns attachments that do."""
+    query = """
+        SELECT a.id, a.original_filename, a.path, a.created_at
+        FROM attachments a JOIN messages m ON m.id = a.message_id
+        WHERE m.conversation_id = ? AND a.kind = 'audio'
+    """
+    params: list = [conversation_id]
+    if filename_query:
+        query += " AND a.original_filename LIKE ?"
+        params.append(f"%{filename_query}%")
+    query += " ORDER BY a.created_at DESC"
+    with _connect() as conn:
+        rows = conn.execute(query, params).fetchall()
+    return [dict(row) for row in rows]
+
+
 def maybe_set_title(conversation_id: str, first_user_message: str) -> None:
     title = first_user_message.strip().replace("\n", " ")
     if len(title) > 60:

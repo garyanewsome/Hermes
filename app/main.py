@@ -323,10 +323,26 @@ async def chat(request: ChatRequest):
     ollama_content = request.message
     text_blocks = []
     for a in request.attachments or []:
-        if a.kind not in ("document", "audio") or not a.extracted_text:
-            continue
-        label = "Transcript of voice memo" if a.kind == "audio" else "Document"
-        text_blocks.append(f"--- {label}: {a.filename or a.path} ---\n{documents.cap_text(a.extracted_text)}\n--- end ---")
+        name = a.filename or a.path
+        if a.kind == "document" and a.extracted_text:
+            text_blocks.append(f"--- Document: {name} ---\n{documents.cap_text(a.extracted_text)}\n--- end ---")
+        elif a.kind == "audio" and a.extracted_text:
+            text_blocks.append(f"--- Transcript of voice memo: {name} ---\n{documents.cap_text(a.extracted_text)}\n--- end ---")
+        elif a.kind == "audio" and not a.extracted_text:
+            # No speech transcript (likely music/instrumental, not spoken
+            # words — see audio.py's NO_SPEECH_MARKER) doesn't mean nothing
+            # to say: without this, an audio attachment with no transcript
+            # left literally no signal in the message content that any
+            # file was attached at all (confirmed live: the model flatly
+            # said "I don't see an audio file attached" with one right
+            # there in the request) — unlike images, a plain audio kind
+            # isn't encoded into the "images" field either, so this is the
+            # attachment's only representation in this turn's content.
+            text_blocks.append(
+                f"[Audio file attached: {name}. No spoken-word transcript (likely music or an instrumental "
+                f'clip, not speech). To answer about its musical content, call analyze_chords or '
+                f'transcribe_melody with filename="{name}".]'
+            )
     if text_blocks:
         ollama_content = f"{request.message}\n\n" + "\n\n".join(text_blocks)
 

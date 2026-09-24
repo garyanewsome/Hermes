@@ -4,3 +4,17 @@ httpx
 psycopg[binary]
 python-multipart
 pypdf
+essentia
+librosa
+mir-eval>=0.6
+pretty-midi>=0.2.9
+resampy<0.4.3,>=0.2.2
+scikit-learn
+scipy>=1.4.1
+typing-extensions
+onnxruntime
+# Older setuptools, deliberately: basic-pitch's own resampy dependency
+# still imports pkg_resources internally, which setuptools>=81 dropped
+# entirely (confirmed live: ModuleNotFoundError, not just a deprecation
+# warning, on setuptools 84).
+setuptools<81

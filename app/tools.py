@@ -5,6 +5,8 @@ vs. "what files exist under folder X") and RAG can't reliably do the
 second one. Adding a third tool later is just adding another dict here
 and a handler function, not restructuring anything."""
 
+import os
+
 import httpx
 
 from app.config import (
@@ -14,8 +16,9 @@ from app.config import (
     HINDSIGHT_BANK_ID,
     HINDSIGHT_URL,
     IRIS_URL,
+    UPLOADS_DIR,
 )
-from app import db, documents, planner_db
+from app import db, documents, music, planner_db
 
 
 def search_vault(query: str) -> str:
@@ -348,6 +351,47 @@ def read_attachment(filename: str | None = None, conversation_id: str | None = N
         return f"Multiple attachments match: {options}. Say which one you mean."
     doc = matches[0]
     return f"--- {doc['original_filename']} ---\n{documents.cap_text(doc['extracted_text'])}\n--- end ---"
+
+
+def _resolve_audio_attachment(filename: str | None, conversation_id: str | None) -> tuple[str | None, str | None]:
+    """Shared by analyze_chords/transcribe_melody: looks up the raw audio
+    file itself (unlike find_text_attachments, doesn't require an existing
+    transcript — a song upload has no reason to have gone through speech
+    transcription). Returns (local_path, None) on a single match, or
+    (None, message) to hand straight back as the tool's result."""
+    if not conversation_id:
+        return None, "No conversation to look up an attached audio file in."
+    matches = db.find_audio_attachments(conversation_id, filename)
+    if not matches:
+        if filename:
+            return None, f"No audio file matching \"{filename}\" found in this conversation."
+        return None, "No audio has been attached in this conversation."
+    if len(matches) > 1:
+        options = ", ".join(m["original_filename"] or "unnamed" for m in matches)
+        return None, f"Multiple audio files match: {options}. Say which one you mean."
+    return os.path.join(UPLOADS_DIR, matches[0]["path"]), None
+
+
+def analyze_chords(filename: str | None = None, conversation_id: str | None = None) -> str:
+    local_path, error = _resolve_audio_attachment(filename, conversation_id)
+    if error:
+        return error
+    result = music.detect_chords(local_path)
+    return result or (
+        "Couldn't detect a clear chord progression in that audio — it may be too short, too quiet, "
+        "or not tonal/harmonic content (e.g. pure drums or noise)."
+    )
+
+
+def transcribe_melody(filename: str | None = None, conversation_id: str | None = None) -> str:
+    local_path, error = _resolve_audio_attachment(filename, conversation_id)
+    if error:
+        return error
+    result = music.transcribe_melody(local_path)
+    return result or (
+        "Couldn't pick out a clear melody/riff from that audio — it may be too short, too dense/polyphonic, "
+        "or mostly percussive."
+    )
 
 
 TOOLS = [
@@ -837,6 +881,58 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "analyze_chords",
+            "description": (
+                "Detect the chord progression in a song or musical audio clip the user "
+                "attached — not for a spoken voice memo. Use when the user asks things "
+                "like 'what chords is this', 'what's the progression', 'work out the "
+                "changes for this song'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filename": {
+                        "type": "string",
+                        "description": (
+                            "The audio file's filename, or a fragment of it, if known. "
+                            "Omit to use the most recently attached audio, or a list to "
+                            "choose from if more than one is attached in this conversation."
+                        ),
+                    }
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "transcribe_melody",
+            "description": (
+                "Transcribe the melody or riff played in a song or musical audio clip "
+                "the user attached, as a sequence of note names — not for a spoken "
+                "voice memo. Use when the user asks things like 'what notes is this "
+                "riff', 'transcribe this melody', 'what's this lick'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filename": {
+                        "type": "string",
+                        "description": (
+                            "The audio file's filename, or a fragment of it, if known. "
+                            "Omit to use the most recently attached audio, or a list to "
+                            "choose from if more than one is attached in this conversation."
+                        ),
+                    }
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 TOOL_HANDLERS = {
@@ -860,4 +956,6 @@ TOOL_HANDLERS = {
     "forget_repo": forget_repo,
     "write_vault_note": write_vault_note,
     "read_attachment": read_attachment,
+    "analyze_chords": analyze_chords,
+    "transcribe_melody": transcribe_melody,
 }
