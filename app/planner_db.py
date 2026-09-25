@@ -145,6 +145,23 @@ def init_planner_db() -> None:
         # recurrence modes are mutually exclusive on a given item (see
         # update_todo_item); NULL here means "not using this mode."
         conn.execute("ALTER TABLE todo_items ADD COLUMN IF NOT EXISTS recurrence_weekdays TEXT")
+        # Every Obsidian task the nightly import (app/vault_tasks.py) has
+        # ever brought in, keyed by a hash of its normalized text. Kept
+        # separately from todo_items on purpose: a task you complete OR
+        # delete in Hermes must never get re-imported the next night just
+        # because it's still an open checkbox in the vault, so "already
+        # imported" can't be inferred from whether the item still exists.
+        # todo_item_id is informational only — no FK, so deleting the item
+        # (or its whole list) doesn't take the tombstone with it.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS vault_task_imports (
+                task_key TEXT PRIMARY KEY,
+                todo_item_id INTEGER,
+                imported_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
         # Simplenote-style scratchpad — no title field, the first line of
         # `content` serves as the title in the list. A quick-capture spot
         # for ideas on the go, meant to get copied into Obsidian later, not
@@ -762,3 +779,17 @@ def update_sketch(sketch_id: int, strokes: list | None = None, title: str | None
 def delete_sketch(sketch_id: int) -> None:
     with _connect() as conn:
         conn.execute("DELETE FROM sketches WHERE id = %s", (sketch_id,))
+
+
+def get_imported_vault_task_keys() -> set[str]:
+    with _connect() as conn:
+        rows = conn.execute("SELECT task_key FROM vault_task_imports").fetchall()
+    return {row["task_key"] for row in rows}
+
+
+def record_vault_task_import(task_key: str, todo_item_id: int) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO vault_task_imports (task_key, todo_item_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+            (task_key, todo_item_id),
+        )

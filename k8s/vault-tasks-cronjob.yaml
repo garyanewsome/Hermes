@@ -1,0 +1,43 @@
+# Nightly Obsidian -> Todo import (see app/vault_tasks.py). Runs the Hermes
+# image itself: it needs planner Postgres access (same secret hermes-api
+# uses) and Athenaeum's /tasks over in-cluster DNS, nothing else.
+#
+# Note: deploy.sh does NOT `kubectl apply` manifests — after changing this
+# file, apply it by hand: kubectl apply -f k8s/vault-tasks-cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vault-tasks-import
+spec:
+  # Late evening in the app's own timezone (config.APP_TIMEZONE), not the
+  # node's UTC. Athenaeum's vault clone syncs hourly, so by 23:30 it has
+  # whatever was pushed from Obsidian through ~23:00.
+  schedule: "30 23 * * *"
+  timeZone: "America/New_York"
+  concurrencyPolicy: Forbid
+  # Same reasoning as the vault-sync incident: without a deadline a hung
+  # run never reaches a terminal state and the history limits can't prune.
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 300
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: vault-tasks-import
+              image: hermes:latest
+              imagePullPolicy: Never
+              command: ["python", "-m", "app.vault_tasks"]
+              env:
+                - name: ATHENAEUM_URL
+                  value: "http://athenaeum-api:8000"
+                - name: ATHENAEUM_HOST_HEADER
+                  value: "athenaeum-api"
+                - name: PLANNER_DB_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: planner-postgres-secret
+                      key: hermes-db-url
