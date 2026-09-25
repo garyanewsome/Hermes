@@ -20,15 +20,31 @@ import httpx
 from app import planner_db
 from app.config import ATHENAEUM_HOST_HEADER, ATHENAEUM_URL
 
-LIST_NAME = "Obsidian Inbox"
+LIST_NAME = "Inbox"
+
+# The nightly scan only covers daily notes, but the very first run also
+# sweeps this standing task-list note once. A marker row in
+# vault_task_imports (written only after the run's items are all added)
+# records that it's been done, so a run that fails halfway retries the
+# bootstrap instead of skipping it — items already added are deduped by
+# their own keys either way. get_or_create_todo_list matches list names
+# fuzzily (ILIKE %name%), so if you already have a list with "inbox" in its
+# name, tasks land there rather than in a second one.
+BOOTSTRAP_FILE = "00 System/Tasks/Tasks.md"
+BOOTSTRAP_KEY = f"bootstrap:{BOOTSTRAP_FILE}"
 
 
 def _task_key(text: str) -> str:
     return hashlib.sha1(" ".join(text.lower().split()).encode("utf-8")).hexdigest()
 
 
-def fetch_vault_tasks() -> list[dict]:
-    response = httpx.get(f"{ATHENAEUM_URL}/tasks", headers={"Host": ATHENAEUM_HOST_HEADER}, timeout=60.0)
+def fetch_vault_tasks(extra_files: list[str]) -> list[dict]:
+    response = httpx.get(
+        f"{ATHENAEUM_URL}/tasks",
+        params={"extra": extra_files},
+        headers={"Host": ATHENAEUM_HOST_HEADER},
+        timeout=60.0,
+    )
     response.raise_for_status()
     data = response.json()
     if data.get("error"):
@@ -37,20 +53,35 @@ def fetch_vault_tasks() -> list[dict]:
 
 
 def sync(dry_run: bool = False) -> dict:
-    tasks = fetch_vault_tasks()
     already = planner_db.get_imported_vault_task_keys()
+    bootstrapping = BOOTSTRAP_KEY not in already
+    tasks = fetch_vault_tasks([BOOTSTRAP_FILE] if bootstrapping else [])
     new = [t for t in tasks if _task_key(t["text"]) not in already]
 
-    if dry_run or not new:
-        return {"scanned": len(tasks), "new": len(new), "added": 0, "sample": [t["text"] for t in new[:10]]}
+    if dry_run:
+        return {
+            "scanned": len(tasks),
+            "new": len(new),
+            "added": 0,
+            "first_run_includes": BOOTSTRAP_FILE if bootstrapping else None,
+            "sample": [t["text"] for t in new[:10]],
+        }
 
-    todo_list = planner_db.get_or_create_todo_list(LIST_NAME)
+    todo_list = planner_db.get_or_create_todo_list(LIST_NAME) if new else None
     for task in new:
         item = planner_db.create_todo_item(todo_list["id"], task["text"])
         if task.get("due"):
             planner_db.update_todo_item(item["id"], due_date=task["due"])
         planner_db.record_vault_task_import(_task_key(task["text"]), item["id"])
-    return {"scanned": len(tasks), "new": len(new), "added": len(new), "list": todo_list["name"]}
+    if bootstrapping:
+        planner_db.record_vault_task_import(BOOTSTRAP_KEY, None)
+    return {
+        "scanned": len(tasks),
+        "new": len(new),
+        "added": len(new),
+        "list": todo_list["name"] if todo_list else None,
+        "bootstrapped": bootstrapping,
+    }
 
 
 if __name__ == "__main__":
