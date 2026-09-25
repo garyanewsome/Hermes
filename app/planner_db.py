@@ -787,7 +787,7 @@ def get_imported_vault_task_keys() -> set[str]:
     return {row["task_key"] for row in rows}
 
 
-def record_vault_task_import(task_key: str, todo_item_id: int | None) -> None:
+def record_vault_task_import(task_key: str, todo_item_id: int) -> None:
     with _connect() as conn:
         conn.execute(
             "INSERT INTO vault_task_imports (task_key, todo_item_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
