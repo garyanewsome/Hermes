@@ -132,6 +132,7 @@ class TodoItemUpdateRequest(BaseModel):
     position: float | None = None
     recurrence_days: int | None = None
     recurrence_weekdays: str | None = None
+    list_id: int | None = None
 
 
 class NoteUpdateRequest(BaseModel):
@@ -507,15 +508,19 @@ def patch_todo_item(item_id: int, request: TodoItemUpdateRequest):
     # recurring item's "mark done" can turn into "reset to open, due_date
     # advanced" server-side, and the client needs the real outcome to
     # reflect that instead of assuming done=True stuck.
-    return planner_db.update_todo_item(
-        item_id,
-        text=request.text,
-        done=request.done,
-        due_date=request.due_date,
-        position=request.position,
-        recurrence_days=request.recurrence_days,
-        recurrence_weekdays=request.recurrence_weekdays,
-    )
+    try:
+        return planner_db.update_todo_item(
+            item_id,
+            text=request.text,
+            done=request.done,
+            due_date=request.due_date,
+            position=request.position,
+            recurrence_days=request.recurrence_days,
+            recurrence_weekdays=request.recurrence_weekdays,
+            list_id=request.list_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
 
 @app.delete("/todo-items/{item_id}")

@@ -77,7 +77,15 @@ function StarIcon({ color }) {
   );
 }
 
-export default function NavDrawer({ open, activeView, onNavigate, onClose, todoDueToday }) {
+function OverdueMark({ color }) {
+  return (
+    <span aria-hidden="true" style={{ color, fontSize: 13, fontWeight: 800, lineHeight: 1, width: 11, textAlign: 'center' }}>
+      !
+    </span>
+  );
+}
+
+export default function NavDrawer({ open, activeView, onNavigate, onClose, todoAttention }) {
   if (!open) return null;
   return (
     <>
@@ -129,10 +137,18 @@ export default function NavDrawer({ open, activeView, onNavigate, onClose, todoD
             >
               {item.icon(color)}
               {item.label}
-              {item.key === 'todo' && todoDueToday > 0 && (
+              {item.key === 'todo' && todoAttention.overdue > 0 && (
                 <span
-                  title={`${todoDueToday} item${todoDueToday === 1 ? '' : 's'} due today`}
+                  title={`${todoAttention.overdue} item${todoAttention.overdue === 1 ? '' : 's'} overdue`}
                   style={{ display: 'flex', marginLeft: -4 }}
+                >
+                  <OverdueMark color="#ff6b6b" />
+                </span>
+              )}
+              {item.key === 'todo' && todoAttention.dueToday > 0 && (
+                <span
+                  title={`${todoAttention.dueToday} item${todoAttention.dueToday === 1 ? '' : 's'} due today`}
+                  style={{ display: 'flex', marginLeft: todoAttention.overdue > 0 ? -6 : -4 }}
                 >
                   {/* Hardcoded to Todo's own accent (not the `color` var
                       above, which tracks whichever view is currently

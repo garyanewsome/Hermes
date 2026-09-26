@@ -418,8 +418,8 @@ def list_habits_with_streaks() -> list[dict]:
 
 
 def list_todo_lists() -> list[dict]:
-    # due_today_count drives the sidebar's "something's due today" marker
-    # — computed from the app's own timezone-aware today (see _today's own
+    # due_today_count / overdue_count drive the sidebar's "something's due
+    # today" star and "something's overdue" ! markers — computed from the app's own timezone-aware today (see _today's own
     # comment for why: Postgres's CURRENT_DATE would use the pod's/DB
     # server's timezone, which isn't necessarily APP_TIMEZONE).
     today = _today()
@@ -428,13 +428,14 @@ def list_todo_lists() -> list[dict]:
             """
             SELECT l.id, l.name, l.position,
                    count(i.id) FILTER (WHERE NOT i.done) AS open_count,
-                   count(i.id) FILTER (WHERE NOT i.done AND i.due_date = %s) AS due_today_count
+                   count(i.id) FILTER (WHERE NOT i.done AND i.due_date = %s) AS due_today_count,
+                   count(i.id) FILTER (WHERE NOT i.done AND i.due_date < %s) AS overdue_count
             FROM todo_lists l
             LEFT JOIN todo_items i ON i.list_id = l.id
             GROUP BY l.id, l.name, l.position
             ORDER BY l.position
             """,
-            (today,),
+            (today, today),
         ).fetchall()
     return [dict(row) for row in rows]
 
@@ -449,7 +450,7 @@ def create_todo_list(name: str) -> dict:
             """,
             (name,),
         ).fetchone()
-    return {**dict(row), "open_count": 0, "due_today_count": 0}
+    return {**dict(row), "open_count": 0, "due_today_count": 0, "overdue_count": 0}
 
 
 def update_todo_list(list_id: int, name: str | None = None, position: float | None = None) -> None:
@@ -586,7 +587,12 @@ def update_todo_item(
     position: float | None = None,
     recurrence_days: int | None = None,
     recurrence_weekdays: str | None = None,
+    list_id: int | None = None,
 ) -> dict:
+    # list_id: move the item to another list, appended at the end of it
+    # (unless an explicit position is also given). Raises ValueError if the
+    # destination list doesn't exist.
+    #
     # recurrence_days: None means "don't touch"; 0 is the sentinel for
     # "clear it" (a real interval can never be 0). recurrence_weekdays:
     # None means "don't touch"; "" is the clear sentinel (same convention
@@ -643,6 +649,15 @@ def update_todo_item(
     if recurrence_weekdays is not None:
         fields.append("recurrence_weekdays = %s")
         params.append(recurrence_weekdays or None)
+    if list_id is not None:
+        with _connect() as conn:
+            if conn.execute("SELECT 1 FROM todo_lists WHERE id = %s", (list_id,)).fetchone() is None:
+                raise ValueError(f"No todo list with id {list_id}")
+        fields.append("list_id = %s")
+        params.append(list_id)
+        if position is None:
+            fields.append("position = COALESCE((SELECT MAX(position) + 1 FROM todo_items WHERE list_id = %s), 0)")
+            params.append(list_id)
 
     with _connect() as conn:
         if fields:

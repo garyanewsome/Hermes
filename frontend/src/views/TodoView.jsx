@@ -20,6 +20,90 @@ function StarIcon() {
   );
 }
 
+// Distinct from the 'text/plain' id both list and item drags already set, so
+// a drop target can tell "an item, to move into this list" apart from "a
+// list, to reorder".
+const ITEM_DRAG_TYPE = 'application/x-hermes-todo-item';
+
+function OverdueMark({ title }) {
+  return (
+    <div
+      title={title}
+      style={{ flexShrink: 0, color: '#ff6b6b', fontSize: 13, fontWeight: 800, lineHeight: 1, width: 12, textAlign: 'center' }}
+    >
+      !
+    </div>
+  );
+}
+
+function MoveIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M1.5 4.2V3a1 1 0 0 1 1-1h3l1.2 1.4h4.8a1 1 0 0 1 1 1V10a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V4.2z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+      <path d="M5 7.2h4.2M7.6 5.6l1.6 1.6-1.6 1.6" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function MoveToListPopover({ item, lists, onPick, onClose }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, cursor: 'default' }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 320,
+          maxWidth: '90vw',
+          maxHeight: '70vh',
+          background: 'var(--bg)',
+          border: '1px solid var(--accent)',
+          boxShadow: '0 0 20px var(--accent-glow)',
+          borderRadius: 12,
+          padding: 18,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+        }}
+      >
+        <div style={{ fontSize: 14, color: 'var(--text)', overflowWrap: 'anywhere' }}>
+          Move "{item.text.length > 60 ? item.text.slice(0, 57) + '...' : item.text}" to:
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto', minHeight: 0 }}>
+          {lists.map((l) => (
+            <button
+              key={l.id}
+              onClick={() => onPick(l.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                textAlign: 'left',
+                background: 'var(--panel-2)',
+                border: '1px solid var(--border)',
+                color: 'var(--text)',
+                borderRadius: 8,
+                padding: '9px 12px',
+                fontSize: 13,
+              }}
+            >
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</span>
+              {l.open_count > 0 && <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>{l.open_count}</span>}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={onClose}
+          style={{ alignSelf: 'flex-end', background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-dim)', borderRadius: 8, padding: '7px 14px', fontSize: 13 }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function RepeatIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
@@ -284,13 +368,14 @@ function ConfirmDeleteList({ list, onCancel, onConfirm }) {
   );
 }
 
-function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onReorder, onDelete, isMobile, mobileOpen, onMobileClose }) {
+function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onReorder, onMoveItem, onDelete, isMobile, mobileOpen, onMobileClose }) {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [renamingId, setRenamingId] = useState(null);
   const [renameValue, setRenameValue] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
+  const [itemDropId, setItemDropId] = useState(null);
 
   if (isMobile && !mobileOpen) return null;
 
@@ -328,6 +413,11 @@ function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onReorder, 
     e.preventDefault();
     e.stopPropagation(); // don't also fire the container's own onDrop (append-to-end) for this same drop
     setDragOverId(null);
+    setItemDropId(null);
+    if (e.dataTransfer.types.includes(ITEM_DRAG_TYPE)) {
+      onMoveItem(Number(e.dataTransfer.getData(ITEM_DRAG_TYPE)), targetList.id);
+      return;
+    }
     const draggedId = Number(e.dataTransfer.getData('text/plain'));
     if (draggedId === targetList.id) return;
 
@@ -343,6 +433,7 @@ function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onReorder, 
 
   function handleDropAtEnd(e) {
     e.preventDefault();
+    if (e.dataTransfer.types.includes(ITEM_DRAG_TYPE)) return; // an item dropped on blank space isn't a list reorder
     const draggedId = Number(e.dataTransfer.getData('text/plain'));
     const last = lists[lists.length - 1];
     if (!last || draggedId === last.id) return;
@@ -460,9 +551,16 @@ function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onReorder, 
                   onDragStart={(e) => handleDragStart(e, list.id)}
                   onDragOver={(e) => {
                     e.preventDefault();
-                    if (dragOverId !== list.id) setDragOverId(list.id);
+                    if (e.dataTransfer.types.includes(ITEM_DRAG_TYPE)) {
+                      if (itemDropId !== list.id) setItemDropId(list.id);
+                    } else if (dragOverId !== list.id) {
+                      setDragOverId(list.id);
+                    }
                   }}
-                  onDragLeave={() => setDragOverId((id) => (id === list.id ? null : id))}
+                  onDragLeave={() => {
+                    setDragOverId((id) => (id === list.id ? null : id));
+                    setItemDropId((id) => (id === list.id ? null : id));
+                  }}
                   onDrop={(e) => handleDropOnList(e, list)}
                   onClick={() => {
                     onSelect(list.id);
@@ -477,11 +575,14 @@ function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onReorder, 
                     fontSize: 13,
                     color: list.id === activeId ? 'var(--text)' : 'var(--text-dim)',
                     cursor: 'grab',
-                    background: list.id === activeId ? 'rgba(255,255,255,0.06)' : 'transparent',
+                    background: itemDropId === list.id ? 'var(--accent-glow)' : list.id === activeId ? 'rgba(255,255,255,0.06)' : 'transparent',
                     boxShadow: list.id === activeId ? 'inset 2px 0 0 var(--accent)' : 'none',
                     borderTop: dragOverId === list.id ? '2px solid var(--accent)' : '2px solid transparent',
                   }}
                 >
+                  {list.overdue_count > 0 && (
+                    <OverdueMark title={`${list.overdue_count} item${list.overdue_count === 1 ? '' : 's'} overdue`} />
+                  )}
                   {list.due_today_count > 0 && (
                     <div
                       title={`${list.due_today_count} item${list.due_today_count === 1 ? '' : 's'} due today`}
@@ -537,11 +638,12 @@ function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onReorder, 
   );
 }
 
-function TodoItemRow({ item, onToggle, onUpdate, onDelete, onDragStart, isDragOver, onDragOverRow, onDragLeaveRow, onDropOnRow }) {
+function TodoItemRow({ item, otherLists, onMove, onToggle, onUpdate, onDelete, onDragStart, isDragOver, onDragOverRow, onDragLeaveRow, onDropOnRow }) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(item.text);
   const [pickingDate, setPickingDate] = useState(false);
   const [pickingRecurrence, setPickingRecurrence] = useState(false);
+  const [pickingList, setPickingList] = useState(false);
 
   function commitEdit() {
     const trimmed = editValue.trim();
@@ -708,6 +810,28 @@ function TodoItemRow({ item, onToggle, onUpdate, onDelete, onDragStart, isDragOv
         />
       )}
 
+      {otherLists.length > 0 && (
+        <button
+          onClick={() => setPickingList(true)}
+          aria-label="Move to another list"
+          title="Move to another list"
+          style={{ flexShrink: 0, width: 22, height: 22, background: 'transparent', border: 'none', color: 'var(--text-dim)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <MoveIcon />
+        </button>
+      )}
+      {pickingList && (
+        <MoveToListPopover
+          item={item}
+          lists={otherLists}
+          onPick={(listId) => {
+            setPickingList(false);
+            onMove(item.id, listId);
+          }}
+          onClose={() => setPickingList(false)}
+        />
+      )}
+
       <button
         onClick={() => onDelete(item.id)}
         aria-label="Delete item"
@@ -724,7 +848,7 @@ function TodoItemRow({ item, onToggle, onUpdate, onDelete, onDragStart, isDragOv
 
 const TODO_POLL_INTERVAL_MS = 30000;
 
-export default function TodoView({ onOpenDrawer, onDueTodayChange }) {
+export default function TodoView({ onOpenDrawer, onAttentionChange }) {
   const [lists, setLists] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [items, setItems] = useState([]);
@@ -748,9 +872,14 @@ export default function TodoView({ onOpenDrawer, onDueTodayChange }) {
     if (activeId != null) refreshItems(activeId);
   }, [activeId]);
 
+  // Numbers, not an object, as the effect's dependencies — the 30s poll
+  // replaces `lists` every time, and depending on `lists` itself would
+  // re-render App every poll even when nothing changed.
+  const dueToday = lists.reduce((sum, l) => sum + (l.due_today_count || 0), 0);
+  const overdue = lists.reduce((sum, l) => sum + (l.overdue_count || 0), 0);
   useEffect(() => {
-    onDueTodayChange?.(lists.reduce((sum, l) => sum + (l.due_today_count || 0), 0));
-  }, [lists, onDueTodayChange]);
+    onAttentionChange?.({ dueToday, overdue });
+  }, [dueToday, overdue, onAttentionChange]);
 
   async function refreshLists() {
     const fetched = await listTodoLists();
@@ -863,7 +992,35 @@ export default function TodoView({ onOpenDrawer, onDueTodayChange }) {
     await updateTodoItem(itemId, { position });
   }
 
+  async function handleMoveItem(itemId, targetListId) {
+    if (targetListId === activeId) return;
+    const item = items.find((i) => i.id === itemId);
+    if (!item) return;
+    setItems((prev) => prev.filter((i) => i.id !== itemId));
+    if (!item.done) {
+      setLists((prev) =>
+        prev.map((l) => {
+          if (l.id === activeId) return { ...l, open_count: Math.max(0, (l.open_count || 0) - 1) };
+          if (l.id === targetListId) return { ...l, open_count: (l.open_count || 0) + 1 };
+          return l;
+        })
+      );
+    }
+    let moved = false;
+    try {
+      moved = (await updateTodoItem(itemId, { list_id: targetListId })).list_id === targetListId;
+    } catch {
+      // fall through to the resync below
+    }
+    // A failed move (network error, or the destination list vanished) must
+    // not leave the item looking gone — put the view back to server truth.
+    if (!moved) refreshItems(activeId);
+    // due-today/overdue markers are per list, so both lists' counts moved.
+    refreshLists();
+  }
+
   function handleItemDragStart(e, itemId) {
+    e.dataTransfer.setData(ITEM_DRAG_TYPE, String(itemId));
     e.dataTransfer.setData('text/plain', String(itemId));
     e.dataTransfer.effectAllowed = 'move';
   }
@@ -962,6 +1119,8 @@ export default function TodoView({ onOpenDrawer, onDueTodayChange }) {
                 <TodoItemRow
                   key={item.id}
                   item={item}
+                  otherLists={lists.filter((l) => l.id !== activeId)}
+                  onMove={handleMoveItem}
                   onToggle={handleToggle}
                   onUpdate={handleUpdateItem}
                   onDelete={handleDeleteItem}
@@ -987,6 +1146,7 @@ export default function TodoView({ onOpenDrawer, onDueTodayChange }) {
         onCreate={handleCreateList}
         onRename={handleRenameList}
         onReorder={handleReorderList}
+        onMoveItem={handleMoveItem}
         onDelete={handleDeleteList}
         isMobile={isMobile}
         mobileOpen={pickerOpen}
