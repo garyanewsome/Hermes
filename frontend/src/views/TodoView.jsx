@@ -854,7 +854,7 @@ export default function TodoView({ onOpenDrawer, onAttentionChange }) {
   const [items, setItems] = useState([]);
   const [newItemText, setNewItemText] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [hideDone, setHideDone] = useState(false);
+  const [hideDone, setHideDone] = useState(true);
   const [dragOverItemId, setDragOverItemId] = useState(null);
   const isMobile = useIsMobile();
 
