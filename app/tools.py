@@ -18,7 +18,7 @@ from app.config import (
     IRIS_URL,
     UPLOADS_DIR,
 )
-from app import db, documents, music, planner_db
+from app import db, documents, music, planner_db, tone_analysis
 
 
 def search_vault(query: str) -> str:
@@ -380,6 +380,24 @@ def analyze_chords(filename: str | None = None, conversation_id: str | None = No
     return result or (
         "Couldn't detect a clear chord progression in that audio — it may be too short, too quiet, "
         "or not tonal/harmonic content (e.g. pure drums or noise)."
+    )
+
+
+
+def suggest_pod_go_tone(filename: str | None = None, conversation_id: str | None = None) -> str:
+    # A best-guess starting point, not a precise match — measures real
+    # acoustic characteristics (brightness, gain, compression, modulation,
+    # echo, reverb tail) from the audio and hands them to you alongside
+    # real POD Go model names so you reason from measured data to a real
+    # signal chain, instead of guessing blind or inventing plausible-
+    # sounding fake model names.
+    local_path, error = _resolve_audio_attachment(filename, conversation_id)
+    if error:
+        return error
+    result = tone_analysis.analyze_tone(local_path)
+    return result or (
+        "Couldn't extract usable tone characteristics from that audio — it may be too short, too quiet, "
+        "or too noisy to measure."
     )
 
 
@@ -933,6 +951,34 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "suggest_pod_go_tone",
+            "description": (
+                "Analyze a recorded guitar/bass tone the user attached and suggest real "
+                "Line 6 POD Go amp, cab, and effect models to get a similar sound — a "
+                "best-guess starting point to dial in from, not an exact match. Use when "
+                "the user asks things like 'what amp is this', 'how would I get this tone "
+                "on my POD Go', 'help me recreate this sound'. Always use the real model "
+                "names given in the tool's result — never invent a plausible-sounding one."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filename": {
+                        "type": "string",
+                        "description": (
+                            "The audio file's filename, or a fragment of it, if known. "
+                            "Omit to use the most recently attached audio, or a list to "
+                            "choose from if more than one is attached in this conversation."
+                        ),
+                    }
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 TOOL_HANDLERS = {
@@ -958,4 +1004,70 @@ TOOL_HANDLERS = {
     "read_attachment": read_attachment,
     "analyze_chords": analyze_chords,
     "transcribe_melody": transcribe_melody,
+    "suggest_pod_go_tone": suggest_pod_go_tone,
 }
+
+
+# --- Dynamic tool scoping -------------------------------------------------
+# Every tool's JSON schema goes into the model's own prompt context on
+# every single call — that's how OpenAI-style function calling works
+# regardless of whether the tool is implemented here or fetched from an
+# MCP server; moving tools to a server doesn't shrink what has to be
+# described to the model. At the full 23-tool catalog, confirmed live:
+# analyze_chords' short result answers fine, but suggest_pod_go_tone's
+# chunkier one reliably broke gemma4:12b's ability to continue the
+# conversation (it either fell back to a generic greeting or hallucinated
+# a call to an unrelated tool). Cutting the *number of tool schemas
+# actually sent on a given turn* is the fix that matters, not where the
+# Python code implementing them lives.
+#
+# Keyword-matched against recent message text, not a second LLM call — a
+# router model call would add latency and its own failure mode, ironically
+# the same kind of unreliability this exists to work around. False
+# negatives (a real request whose wording doesn't hit any keyword) just
+# mean the model answers without that tool this turn, same as if the tool
+# never existed at all — a much milder failure than the full-catalog
+# hallucinated-tool-call behavior this replaces.
+TOOL_GROUPS: dict[str, list[str]] = {
+    "vault": ["search_vault", "list_notes", "write_vault_note"],
+    "vst_memory": ["save_project_memory", "recall_project_memory"],
+    "board": ["add_task", "list_tasks", "complete_task"],
+    "habits": ["log_habit", "habit_status"],
+    "todo": ["add_todo_item", "list_todo_items", "complete_todo_item"],
+    "scratch_notes": ["add_scratch_note", "search_scratch_notes", "list_recent_scratch_notes"],
+    "repo_research": ["research_repo", "forget_repo"],
+    "image": ["generate_image"],
+    "attachments": ["read_attachment", "analyze_chords", "transcribe_melody", "suggest_pod_go_tone"],
+}
+
+GROUP_KEYWORDS: dict[str, list[str]] = {
+    "vault": ["note", "notes", "vault", "obsidian", "folder"],
+    "vst_memory": ["vst", "plugin", "project memory"],
+    "board": ["board", "task", "quadrant", "backlog"],
+    "habits": ["habit", "streak", "meditat", "exercis"],
+    "todo": ["todo", "to-do", "to do", "grocery", "groceries", "errand", "remind me", "checklist"],
+    "scratch_notes": ["scratch", "jot", "write down", "wrote down", "jotted"],
+    "repo_research": ["repo", "repository", "github", "codebase", "clone"],
+    "image": ["image", "picture", "photo", "draw", "generate a"],
+    "attachments": [
+        "chord", "melody", "riff", "transcribe", "notes in this", "tab",
+        "amp", "tone", "pod go", "attached", "attachment", "voice memo",
+        "that pdf", "that document", "that file", "recording", "song",
+    ],
+}
+
+
+def select_tools(recent_texts: list[str], has_attachments: bool) -> list[dict]:
+    """Picks the subset of TOOLS whose group matches recent conversation
+    text, instead of always sending the full catalog. `recent_texts` is
+    typically [previous assistant reply, current user message] — checking
+    the prior turn too catches a short follow-up ("yes, add it") that has
+    no keywords of its own but responds to something the assistant just
+    proposed. `has_attachments` is checked separately (not keyword-based)
+    since it's a hard fact about the conversation, not a guess."""
+    haystack = " ".join(t.lower() for t in recent_texts if t)
+    matched_groups = {group for group, keywords in GROUP_KEYWORDS.items() if any(kw in haystack for kw in keywords)}
+    if has_attachments:
+        matched_groups.add("attachments")
+    matched_names = {name for group in matched_groups for name in TOOL_GROUPS[group]}
+    return [t for t in TOOLS if t["function"]["name"] in matched_names]

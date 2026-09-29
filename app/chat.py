@@ -4,7 +4,7 @@ import logging
 import httpx
 
 from app.config import CHAT_MODEL, CODEBASE_SEARCHER_URL, IRIS_URL, OLLAMA_HOST, SYSTEM_PROMPT
-from app.tools import TOOL_HANDLERS, TOOLS
+from app.tools import TOOL_HANDLERS, select_tools
 
 MAX_TOOL_ITERATIONS = 5
 
@@ -56,7 +56,7 @@ async def _unload_codebase_searcher() -> None:
         logger.exception("Failed to unload CodebaseSearcher model after research_repo")
 
 
-async def _stream_ollama(messages: list[dict], model: str, think: bool):
+async def _stream_ollama(messages: list[dict], model: str, think: bool, tools: list[dict]):
     """Yields ('content', str) for each text chunk, and ('tool_calls', list)
     once a message carrying tool calls completes. Streaming a closed/
     cancelled consumer (client aborts) closes this httpx stream too, via
@@ -70,12 +70,11 @@ async def _stream_ollama(messages: list[dict], model: str, think: bool):
     a one-sentence reply, far worse under a real tool-decision prompt).
     Ignored harmlessly by models with no thinking mode (verified against
     qwen2.5), so it's safe to pass regardless of which model is active."""
+    payload = {"model": model, "messages": messages, "stream": True, "think": think}
+    if tools:
+        payload["tools"] = tools
     async with httpx.AsyncClient(timeout=120.0) as client:
-        async with client.stream(
-            "POST",
-            f"{OLLAMA_HOST}/api/chat",
-            json={"model": model, "messages": messages, "tools": TOOLS, "stream": True, "think": think},
-        ) as response:
+        async with client.stream("POST", f"{OLLAMA_HOST}/api/chat", json=payload) as response:
             response.raise_for_status()
             tool_calls = None
             async for line in response.aiter_lines():
@@ -143,12 +142,19 @@ async def run_chat_stream(
     else:
         messages = list(messages)
 
+    # Computed once for the whole turn (not re-checked per tool-call
+    # iteration) from the last couple of real conversation messages — the
+    # previous assistant reply is included too so a short follow-up like
+    # "yes, add it" still matches whatever the assistant just proposed.
+    has_attachments = any(m.get("attachments") for m in messages)
+    active_tools = select_tools([m.get("content", "") for m in messages[-2:]], has_attachments)
+
     for _ in range(MAX_TOOL_ITERATIONS):
         accumulated_content = ""
         tool_calls = None
 
         try:
-            async for event_type, data in _stream_ollama(messages, model, think):
+            async for event_type, data in _stream_ollama(messages, model, think, active_tools):
                 if event_type == "content":
                     accumulated_content += data
                     yield ("content", data)
@@ -204,7 +210,7 @@ async def run_chat_stream(
                         # holding ~9GB of stale CUDA allocator cache because
                         # this unload never ran on the exception path.
                         await _unload_codebase_searcher()
-                elif name in ("write_vault_note", "read_attachment", "analyze_chords", "transcribe_melody"):
+                elif name in ("write_vault_note", "read_attachment", "analyze_chords", "transcribe_melody", "suggest_pod_go_tone"):
                     # No GPU handoff needed for any of these — chord/melody
                     # analysis runs on CPU inside this same container (see
                     # app/music.py), not on the shared GPU. All four just
