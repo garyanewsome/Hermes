@@ -112,3 +112,56 @@ a { color: inherit; }
   border-color: var(--accent);
   color: var(--accent) !important;
 }
+
+/* Todo reads dark and small by default (the global dim/faint greys are tuned
+   for chat's dense layout) — a brighter, higher-contrast set scoped to the
+   Todo view's own root, not [data-view="todo"], so the nav drawer (a sibling
+   inside the same wrapper) doesn't change shade depending on which view is
+   open. Modals rendered inside TodoView inherit it too. */
+.todo-surface {
+  --text: #f3f3f6;
+  --text-dim: #b4b6bf;
+  --text-faint: #8e9099;
+  --border: rgba(255, 255, 255, 0.13);
+  --border-strong: rgba(255, 255, 255, 0.26);
+  --panel-2: #1a1b21;
+}
+
+.todo-row {
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.todo-row:hover {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.icon-btn {
+  transition: color 0.12s ease, background 0.12s ease;
+}
+.icon-btn:hover {
+  color: var(--accent) !important;
+  background: var(--accent-wash) !important;
+}
+
+.dp-day:hover,
+.dp-nav:hover,
+.dp-chip:hover {
+  background: var(--accent-wash) !important;
+  border-color: var(--accent) !important;
+}
+.dp-nav {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.icon-btn.danger:hover {
+  color: #ff6b6b !important;
+  background: rgba(255, 107, 107, 0.12) !important;
+}

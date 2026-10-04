@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
+import DatePickerPopover from '../components/DatePickerPopover.jsx';
+import { DUE_COLORS, dueTone, formatDue } from '../lib/dates.js';
 import {
   listTodoLists,
   createTodoList,
@@ -38,7 +40,7 @@ function OverdueMark({ title }) {
 
 function MoveIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <svg width="17" height="17" viewBox="0 0 14 14" fill="none">
       <path d="M1.5 4.2V3a1 1 0 0 1 1-1h3l1.2 1.4h4.8a1 1 0 0 1 1 1V10a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V4.2z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
       <path d="M5 7.2h4.2M7.6 5.6l1.6 1.6-1.6 1.6" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
@@ -104,9 +106,9 @@ function MoveToListPopover({ item, lists, onPick, onClose }) {
   );
 }
 
-function RepeatIcon() {
+function RepeatIcon({ size = 16 }) {
   return (
-    <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+    <svg width={size} height={size} viewBox="0 0 14 14" fill="none">
       <path d="M2 6.5V5a3 3 0 0 1 3-3h5.5M12 2v3h-3M12 7.5V9a3 3 0 0 1-3 3H3.5M2 12v-3h3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
@@ -569,10 +571,10 @@ function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onReorder, 
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 6,
-                    padding: '9px 10px',
-                    borderRadius: 8,
-                    fontSize: 13,
+                    gap: 8,
+                    padding: '12px 12px',
+                    borderRadius: 10,
+                    fontSize: 15,
                     color: list.id === activeId ? 'var(--text)' : 'var(--text-dim)',
                     cursor: 'grab',
                     background: itemDropId === list.id ? 'var(--accent-glow)' : list.id === activeId ? 'rgba(255,255,255,0.06)' : 'transparent',
@@ -595,7 +597,7 @@ function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onReorder, 
                     {list.name}
                   </div>
                   {list.open_count > 0 && (
-                    <div style={{ fontSize: 11, color: 'var(--text-faint)', flexShrink: 0 }}>{list.open_count}</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-faint)', flexShrink: 0 }}>{list.open_count}</div>
                   )}
                   <button
                     onClick={(e) => {
@@ -644,6 +646,7 @@ function TodoItemRow({ item, otherLists, onMove, onToggle, onUpdate, onDelete, o
   const [pickingDate, setPickingDate] = useState(false);
   const [pickingRecurrence, setPickingRecurrence] = useState(false);
   const [pickingList, setPickingList] = useState(false);
+  const isMobile = useIsMobile();
 
   function commitEdit() {
     const trimmed = editValue.trim();
@@ -653,6 +656,7 @@ function TodoItemRow({ item, otherLists, onMove, onToggle, onUpdate, onDelete, o
 
   return (
     <div
+      className="todo-row"
       draggable
       onDragStart={(e) => onDragStart(e, item.id)}
       onDragOver={onDragOverRow}
@@ -662,26 +666,28 @@ function TodoItemRow({ item, otherLists, onMove, onToggle, onUpdate, onDelete, o
         display: 'flex',
         flexWrap: 'wrap',
         alignItems: 'center',
-        gap: 10,
-        background: 'var(--bg)',
+        gap: 12,
+        background: 'var(--panel-2)',
         border: '1px solid var(--border)',
         borderTop: isDragOver ? '2px solid var(--accent)' : '1px solid var(--border)',
-        borderRadius: 8,
-        padding: '10px 12px',
-        fontSize: 14,
+        borderRadius: 12,
+        padding: '12px 14px',
+        fontSize: 15.5,
+        lineHeight: 1.4,
         cursor: 'grab',
+        opacity: item.done ? 0.7 : 1,
       }}
     >
       <button
         onClick={() => onToggle(item.id, !item.done)}
         aria-label={item.done ? 'Mark not done' : 'Mark done'}
         style={{
-          width: 18,
-          height: 18,
+          width: 22,
+          height: 22,
           flexShrink: 0,
-          borderRadius: 5,
-          background: 'transparent',
-          border: `1px solid ${item.done ? 'var(--accent)' : 'var(--border-strong)'}`,
+          borderRadius: 7,
+          background: item.done ? 'var(--accent)' : 'transparent',
+          border: `1.5px solid ${item.done ? 'var(--accent)' : 'var(--text-dim)'}`,
           padding: 0,
           display: 'flex',
           alignItems: 'center',
@@ -689,8 +695,8 @@ function TodoItemRow({ item, otherLists, onMove, onToggle, onUpdate, onDelete, o
         }}
       >
         {item.done && (
-          <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-            <path d="M2.3 6.2l2.3 2.3 4.7-5" stroke="var(--accent)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+          <svg width="14" height="14" viewBox="0 0 12 12" fill="none">
+            <path d="M2.3 6.2l2.3 2.3 4.7-5" stroke="var(--accent-text)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         )}
       </button>
@@ -710,9 +716,9 @@ function TodoItemRow({ item, otherLists, onMove, onToggle, onUpdate, onDelete, o
             background: 'var(--panel-2)',
             border: '1px solid var(--accent)',
             color: 'var(--text)',
-            borderRadius: 5,
-            padding: '4px 6px',
-            fontSize: 14,
+            borderRadius: 6,
+            padding: '5px 8px',
+            fontSize: 15.5,
             fontFamily: 'inherit',
             outline: 'none',
           }}
@@ -733,64 +739,78 @@ function TodoItemRow({ item, otherLists, onMove, onToggle, onUpdate, onDelete, o
         </div>
       )}
 
-      {pickingDate ? (
-        <input
-          type="date"
-          autoFocus
-          defaultValue={item.due_date || ''}
-          onChange={(e) => {
-            onUpdate(item.id, { due_date: e.target.value });
-            setPickingDate(false);
-          }}
-          onBlur={() => setPickingDate(false)}
-          style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 6, padding: '4px 6px', fontSize: 12 }}
-        />
-      ) : item.due_date ? (
+      {/* On a phone the title gets the row's full width and every control
+          drops into one consistent line beneath it; on desktop this wrapper
+          is invisible (display: contents) so the controls stay inline. */}
+      <div
+        style={
+          isMobile
+            ? { flex: '0 0 100%', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginLeft: 34 }
+            : { display: 'contents' }
+        }
+      >
+      {item.due_date ? (
         <button
           onClick={() => setPickingDate(true)}
-          style={{ flexShrink: 0, background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-dim)', borderRadius: 6, padding: '3px 8px', fontSize: 11 }}
+          title="Change due date"
+          style={{
+            flexShrink: 0,
+            background: 'transparent',
+            border: `1px solid ${dueTone(item.due_date) === 'later' ? 'var(--border-strong)' : DUE_COLORS[dueTone(item.due_date)]}`,
+            color: DUE_COLORS[dueTone(item.due_date)],
+            borderRadius: 999,
+            padding: '4px 12px',
+            fontSize: 13,
+            fontWeight: dueTone(item.due_date) === 'later' ? 400 : 600,
+          }}
         >
-          due {item.due_date}
+          {formatDue(item.due_date)}
         </button>
       ) : (
         <button
+          className="icon-btn"
           onClick={() => setPickingDate(true)}
           aria-label="Set due date"
           title="Set due date"
-          style={{ flexShrink: 0, width: 22, height: 22, background: 'transparent', border: 'none', color: 'var(--text-dim)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 8, background: 'transparent', border: 'none', color: 'var(--text-dim)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <svg width="17" height="17" viewBox="0 0 14 14" fill="none">
             <rect x="1.5" y="2.5" width="11" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.1" />
             <path d="M1.5 5.5h11M4 1.3v2M10 1.3v2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
           </svg>
         </button>
       )}
-      {item.due_date && !pickingDate && (
-        <button
-          onClick={() => onUpdate(item.id, { due_date: '' })}
-          aria-label="Clear due date"
-          title="Clear due date"
-          style={{ flexShrink: 0, background: 'transparent', border: 'none', color: 'var(--text-dim)', fontSize: 12, padding: 0 }}
-        >
-          ×
-        </button>
+      {pickingDate && (
+        <DatePickerPopover
+          value={item.due_date || ''}
+          onPick={(iso) => {
+            setPickingDate(false);
+            onUpdate(item.id, { due_date: iso });
+          }}
+          onClear={() => {
+            setPickingDate(false);
+            onUpdate(item.id, { due_date: '' });
+          }}
+          onClose={() => setPickingDate(false)}
+        />
       )}
 
       {formatRecurrence(item) ? (
         <button
           onClick={() => setPickingRecurrence(true)}
           title="Repeats — click to change"
-          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-dim)', borderRadius: 6, padding: '5px 10px', fontSize: 11 }}
+          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-dim)', borderRadius: 999, padding: '4px 12px', fontSize: 13 }}
         >
-          <RepeatIcon />
+          <RepeatIcon size={14} />
           {formatRecurrence(item)}
         </button>
       ) : (
         <button
+          className="icon-btn"
           onClick={() => setPickingRecurrence(true)}
           aria-label="Make recurring"
           title="Make recurring"
-          style={{ flexShrink: 0, width: 22, height: 22, background: 'transparent', border: 'none', color: 'var(--text-dim)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 8, background: 'transparent', border: 'none', color: 'var(--text-dim)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         >
           <RepeatIcon />
         </button>
@@ -812,10 +832,11 @@ function TodoItemRow({ item, otherLists, onMove, onToggle, onUpdate, onDelete, o
 
       {otherLists.length > 0 && (
         <button
+          className="icon-btn"
           onClick={() => setPickingList(true)}
           aria-label="Move to another list"
           title="Move to another list"
-          style={{ flexShrink: 0, width: 22, height: 22, background: 'transparent', border: 'none', color: 'var(--text-dim)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 8, background: 'transparent', border: 'none', color: 'var(--text-dim)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         >
           <MoveIcon />
         </button>
@@ -833,15 +854,17 @@ function TodoItemRow({ item, otherLists, onMove, onToggle, onUpdate, onDelete, o
       )}
 
       <button
+        className="icon-btn danger"
         onClick={() => onDelete(item.id)}
         aria-label="Delete item"
         title="Delete item"
-        style={{ flexShrink: 0, width: 20, height: 20, background: 'transparent', border: 'none', color: 'var(--text-dim)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 8, background: 'transparent', border: 'none', color: 'var(--text-dim)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       >
-        <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+        <svg width="16" height="16" viewBox="0 0 14 14" fill="none">
           <path d="M2.5 3.5H11.5M5.5 3.5V2.2C5.5 1.9 5.7 1.7 6 1.7H8C8.3 1.7 8.5 1.9 8.5 2.2V3.5M5.8 6V10M8.2 6V10M3.3 3.5L3.8 11.3C3.8 11.7 4.2 12 4.6 12H9.4C9.8 12 10.2 11.7 10.2 11.3L10.7 3.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
+      </div>
     </div>
   );
 }
@@ -865,7 +888,12 @@ export default function TodoView({ onOpenDrawer, onAttentionChange }) {
     // drawer's "due today" star fresh while you're looking at Chat/Notes/
     // whatever else — not just when Todo happens to be the active view.
     const interval = setInterval(refreshLists, TODO_POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
+    // Refresh immediately when the tab wakes from idle (see App.jsx).
+    window.addEventListener('hermes:wake', refreshLists);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('hermes:wake', refreshLists);
+    };
   }, []);
 
   useEffect(() => {
@@ -1054,7 +1082,7 @@ export default function TodoView({ onOpenDrawer, onAttentionChange }) {
   const activeList = lists.find((l) => l.id === activeId);
 
   return (
-    <div style={{ flex: 1, display: 'flex', minWidth: 0 }}>
+    <div className="todo-surface" style={{ flex: 1, display: 'flex', minWidth: 0 }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <TopBar title="Todo" subtitle={activeList ? activeList.name : undefined} onOpenDrawer={onOpenDrawer}>
           {isMobile && (
@@ -1092,26 +1120,26 @@ export default function TodoView({ onOpenDrawer, onAttentionChange }) {
                 value={newItemText}
                 onChange={(e) => setNewItemText(e.target.value)}
                 placeholder="Add an item..."
-                style={{ flex: 1, background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 8, padding: '10px 12px', fontSize: 14 }}
+                style={{ flex: 1, minWidth: 0, background: 'var(--panel-2)', border: '1px solid var(--border-strong)', color: 'var(--text)', borderRadius: 12, padding: '14px 16px', fontSize: 16 }}
               />
               <button
                 type="submit"
-                style={{ background: 'var(--accent)', color: 'var(--accent-text)', border: 'none', borderRadius: 8, padding: '0 18px', fontSize: 14, fontWeight: 600, boxShadow: '0 0 14px var(--accent-glow)' }}
+                style={{ background: 'var(--accent)', color: 'var(--accent-text)', border: 'none', borderRadius: 12, padding: '0 24px', fontSize: 16, fontWeight: 600, boxShadow: '0 0 14px var(--accent-glow)' }}
               >
                 Add
               </button>
             </form>
 
             {items.some((i) => i.done) && (
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-dim)', alignSelf: 'flex-start' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: 'var(--text-dim)', alignSelf: 'flex-start' }}>
                 <input type="checkbox" checked={hideDone} onChange={(e) => setHideDone(e.target.checked)} />
                 Hide done
               </label>
             )}
 
-            {items.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>Nothing on this list yet.</div>}
+            {items.length === 0 && <div style={{ fontSize: 14, color: 'var(--text-faint)' }}>Nothing on this list yet.</div>}
             <div
-              style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}
+              style={{ display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDropAtEndOfItems}
             >

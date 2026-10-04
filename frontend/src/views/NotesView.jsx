@@ -98,7 +98,7 @@ function NoteList({ notes, activeId, onSelect, onCreate, onDelete, isMobile, mob
                 paddingTop: 'env(safe-area-inset-top)',
               }
             : {
-                width: 260,
+                width: 290,
                 flexShrink: 0,
                 background: 'var(--panel)',
                 borderLeft: '1px solid var(--border)',
@@ -149,10 +149,10 @@ function NoteList({ notes, activeId, onSelect, onCreate, onDelete, isMobile, mob
                 if (isMobile) onMobileClose();
               }}
               style={{
-                padding: '10px 10px',
-                borderRadius: 8,
+                padding: '12px 12px',
+                borderRadius: 10,
                 cursor: 'pointer',
-                marginBottom: 2,
+                marginBottom: 3,
                 background: note.id === activeId ? 'rgba(255,255,255,0.06)' : 'transparent',
                 boxShadow: note.id === activeId ? 'inset 2px 0 0 var(--accent)' : 'none',
               }}
@@ -162,9 +162,9 @@ function NoteList({ notes, activeId, onSelect, onCreate, onDelete, isMobile, mob
                   style={{
                     flex: 1,
                     minWidth: 0,
-                    fontSize: 13.5,
+                    fontSize: 16.5,
                     fontWeight: 600,
-                    color: note.id === activeId ? 'var(--text)' : '#c7c8cc',
+                    color: note.id === activeId ? 'var(--text)' : '#d6d7db',
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
@@ -180,7 +180,7 @@ function NoteList({ notes, activeId, onSelect, onCreate, onDelete, isMobile, mob
                   }}
                   aria-label="Delete note"
                   title="Delete note"
-                  style={{ flexShrink: 0, width: 16, height: 16, background: 'transparent', border: 'none', color: 'var(--text-faint)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  style={{ flexShrink: 0, width: 24, height: 24, background: 'transparent', border: 'none', color: 'var(--text-faint)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 >
                   <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
                     <path d="M2.5 3.5H11.5M5.5 3.5V2.2C5.5 1.9 5.7 1.7 6 1.7H8C8.3 1.7 8.5 1.9 8.5 2.2V3.5M5.8 6V10M8.2 6V10M3.3 3.5L3.8 11.3C3.8 11.7 4.2 12 4.6 12H9.4C9.8 12 10.2 11.7 10.2 11.3L10.7 3.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
@@ -188,11 +188,11 @@ function NoteList({ notes, activeId, onSelect, onCreate, onDelete, isMobile, mob
                 </button>
               </div>
               {notePreview(note.content) && (
-                <div style={{ fontSize: 12, color: 'var(--text-faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontSize: 13.5, color: 'var(--text-faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>
                   {notePreview(note.content)}
                 </div>
               )}
-              <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>{timeAgo(note.updated_at)}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 3 }}>{timeAgo(note.updated_at)}</div>
             </div>
           ))}
         </div>
@@ -227,6 +227,21 @@ export default function NotesView({ onOpenDrawer }) {
   // actually open by the time a later poll fires.
   const activeIdRef = useRef(null);
   activeIdRef.current = activeId;
+  // Guards against a poll overwriting what's being typed. The old check
+  // ("no save timer pending") ran only AFTER the poll's network round trip,
+  // and a save that had already fired but not finished leaves the timer
+  // null — so a poll that read the note before that save landed came back
+  // with the previous text and replaced the textarea with it, dropping the
+  // last few words typed. Now: editSeqRef bumps on every keystroke and on
+  // every save start/finish, so any poll that overlapped local activity is
+  // thrown away; savesInFlightRef/dirtyRef cover a save still on the wire
+  // or one that failed and hasn't been retried.
+  const editSeqRef = useRef(0);
+  const savesInFlightRef = useRef(0);
+  const dirtyRef = useRef(false);
+  const typedSeqRef = useRef(0);
+  const draftRef = useRef('');
+  draftRef.current = draft;
 
   useEffect(() => {
     refresh();
@@ -234,23 +249,45 @@ export default function NotesView({ onOpenDrawer }) {
     // notes jotted down on the phone at the gym used to need a manual
     // page refresh here to show up at all.
     const interval = setInterval(refresh, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
+    // Coming back from idle: refresh right away instead of showing whatever
+    // was on screen until the next 20s tick.
+    window.addEventListener('hermes:wake', refresh);
+
+    // Push out an unsaved edit the moment the tab is hidden or closed —
+    // otherwise a refresh/discard inside the 600ms debounce loses it.
+    const flushPending = () => {
+      if (saveTimerRef.current && activeIdRef.current != null) {
+        flushSave(activeIdRef.current, draftRef.current, true);
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flushPending();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', flushPending);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('hermes:wake', refresh);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', flushPending);
+    };
   }, []);
 
   async function refresh() {
+    const seqAtStart = editSeqRef.current;
     const fetched = await listNotes();
+    if (editSeqRef.current !== seqAtStart || savesInFlightRef.current > 0) return;
     setNotes(fetched);
 
     const currentActiveId = activeIdRef.current;
     const stillExists = currentActiveId != null && fetched.some((n) => n.id === currentActiveId);
     if (!stillExists) {
       setActiveId(fetched[0]?.id ?? null);
-    } else if (!saveTimerRef.current) {
-      // Nothing unsaved locally right now — safe to pick up a remote edit
-      // to the note that's currently open. If there IS a pending save,
-      // leave draft alone rather than risk clobbering in-progress typing.
+    } else if (!saveTimerRef.current && !dirtyRef.current) {
+      // Nothing unsaved locally — safe to pick up a remote edit to the note
+      // that's currently open.
       const updated = fetched.find((n) => n.id === currentActiveId);
-      if (updated) setDraft(updated.content || '');
+      if (updated && updated.content !== draftRef.current) setDraft(updated.content || '');
     }
   }
 
@@ -259,13 +296,30 @@ export default function NotesView({ onOpenDrawer }) {
     setDraft(note ? note.content : '');
   }, [activeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function flushSave(id, content) {
+  function flushSave(id, content, keepalive = false) {
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
     if (id == null) return;
-    updateNote(id, content);
+    const typedAt = typedSeqRef.current;
+    editSeqRef.current += 1;
+    savesInFlightRef.current += 1;
+    updateNote(id, content, { keepalive })
+      .then(() => {
+        // Only "clean" if nothing was typed while this was in flight.
+        if (typedSeqRef.current === typedAt) dirtyRef.current = false;
+      })
+      .catch((err) => {
+        // Stay dirty (so polls can't overwrite the unsaved text) and try
+        // again shortly instead of silently dropping the edit.
+        console.error('Note save failed, will retry', err);
+        if (!saveTimerRef.current) saveTimerRef.current = setTimeout(() => flushSave(id, draftRef.current), 3000);
+      })
+      .finally(() => {
+        savesInFlightRef.current -= 1;
+        editSeqRef.current += 1;
+      });
     setNotes((prev) => {
       const updated = prev.map((n) => (n.id === id ? { ...n, content, updated_at: new Date().toISOString() } : n));
       return [...updated].sort((a, b) => (a.id === id ? -1 : b.id === id ? 1 : 0));
@@ -280,6 +334,9 @@ export default function NotesView({ onOpenDrawer }) {
   function handleChange(e) {
     const content = e.target.value;
     setDraft(content);
+    dirtyRef.current = true;
+    typedSeqRef.current += 1;
+    editSeqRef.current += 1;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => flushSave(activeId, content), SAVE_DEBOUNCE_MS);
   }

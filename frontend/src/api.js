@@ -1,4 +1,11 @@
 const REQUEST_TIMEOUT_MS = 15000;
+// Reads are idempotent and answered in milliseconds, so a read that hasn't
+// come back in a few seconds is a dead pooled connection (a phone's NAT or a
+// sleeping laptop dropped it silently), not a slow server — waiting the full
+// 15s before retrying on a fresh connection was most of the "lag coming back
+// from idle." Writes keep the long first attempt: retrying a write that the
+// server actually did receive risks applying it twice.
+const READ_FIRST_ATTEMPT_TIMEOUT_MS = 4000;
 
 // Thin wrapper around fetch so every API call reacts the same way to a
 // 401 (session cookie missing or expired) — dispatching an event App.jsx
@@ -14,7 +21,9 @@ const REQUEST_TIMEOUT_MS = 15000;
 // one retry on a fresh connection is the right response, not an error.
 async function apiFetch(url, opts, _attempt = 1) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const isRead = !opts || !opts.method || opts.method === 'GET';
+  const timeoutMs = isRead && _attempt === 1 ? READ_FIRST_ATTEMPT_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, { ...opts, signal: controller.signal });
     if (res.status === 401) {
@@ -252,12 +261,32 @@ export async function createNote() {
   return res.json();
 }
 
-export async function updateNote(noteId, content) {
+// keepalive lets the request outlive the page — used when flushing a pending
+// edit as the tab is being hidden or closed, where a normal fetch can be
+// cancelled with the last few typed words still unsent.
+export async function updateNote(noteId, content, { keepalive = false } = {}) {
   await apiFetch(`/notes/${noteId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content }),
+    keepalive,
   });
+}
+
+// A throwaway request to /health with a short timeout, sent when the tab
+// wakes from idle: if the pooled connections went stale, this one burns the
+// dead connection quickly (and fails fast) so the real requests that follow
+// get a fresh one instead of each hanging on its own dead socket.
+export async function pingHealth() {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3000);
+  try {
+    await fetch('/health', { signal: controller.signal, cache: 'no-store' });
+  } catch {
+    // Timed out or offline — the follow-up requests have their own retry.
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function deleteNote(noteId) {

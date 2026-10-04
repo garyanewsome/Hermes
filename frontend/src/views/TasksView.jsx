@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
 import { completeTask, createTask, deleteTask, listTasks, reopenTask, updateTask } from '../api.js';
 import useIsMobile from '../hooks/useIsMobile.js';
+import DatePickerPopover from '../components/DatePickerPopover.jsx';
+import { DUE_COLORS, dueTone, formatDue } from '../lib/dates.js';
 
 const QUADRANTS = [
   { key: 'do', label: 'TODO', color: '#3bffa0', glow: 'rgba(59,255,160,0.35)' },
@@ -24,7 +26,7 @@ function timeAgo(isoString) {
   return `${days}d ago`;
 }
 
-function TaskRow({ task, quadrant, isDragOver, onDragStart, onDragOverRow, onDragLeaveRow, onDropOnRow, onComplete, onDelete, onOpen }) {
+function TaskRow({ task, quadrant, isMobile, isDragOver, onDragStart, onDragOverRow, onDragLeaveRow, onDropOnRow, onComplete, onDelete, onOpen }) {
   return (
     <div
       draggable
@@ -33,19 +35,39 @@ function TaskRow({ task, quadrant, isDragOver, onDragStart, onDragOverRow, onDra
       onDragLeave={onDragLeaveRow}
       onDrop={onDropOnRow}
       onClick={() => onOpen(task)}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        background: 'var(--bg)',
-        border: `1px solid ${quadrant.color}`,
-        borderTop: isDragOver ? `2px solid ${quadrant.color}` : `1px solid ${quadrant.color}`,
-        boxShadow: quadrant.dim ? 'none' : `0 0 6px ${quadrant.glow}`,
-        borderRadius: 8,
-        padding: '8px 10px',
-        fontSize: 13,
-        cursor: 'pointer',
-      }}
+      style={
+        isMobile
+          ? {
+              // Quieter than desktop on purpose: the quadrant box around
+              // these already carries the colored border + glow, so a
+              // second glowing outline on every card was just noise. A
+              // thin color bar on the left keeps the quadrant readable.
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 12,
+              background: 'var(--panel-2)',
+              border: '1px solid var(--border-strong)',
+              borderLeft: `4px solid ${quadrant.color}`,
+              borderRadius: 12,
+              padding: '14px 14px 14px 12px',
+              fontSize: 16,
+              lineHeight: 1.35,
+              cursor: 'pointer',
+            }
+          : {
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              background: 'var(--bg)',
+              border: `1px solid ${quadrant.color}`,
+              borderTop: isDragOver ? `2px solid ${quadrant.color}` : `1px solid ${quadrant.color}`,
+              boxShadow: quadrant.dim ? 'none' : `0 0 6px ${quadrant.glow}`,
+              borderRadius: 8,
+              padding: '8px 10px',
+              fontSize: 13,
+              cursor: 'pointer',
+            }
+      }
     >
       <button
         onClick={(e) => {
@@ -55,16 +77,23 @@ function TaskRow({ task, quadrant, isDragOver, onDragStart, onDragOverRow, onDra
         aria-label="Mark done"
         title="Mark done"
         style={{
-          width: 16,
-          height: 16,
+          width: isMobile ? 26 : 16,
+          height: isMobile ? 26 : 16,
           flexShrink: 0,
-          borderRadius: 4,
+          marginTop: isMobile ? 0 : undefined,
+          borderRadius: isMobile ? 9 : 4,
           background: 'transparent',
-          border: `1px solid ${quadrant.color}`,
+          border: `${isMobile ? 2 : 1}px solid ${quadrant.color}`,
           padding: 0,
         }}
       />
-      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <div
+        style={
+          isMobile
+            ? { flex: 1, minWidth: 0, overflowWrap: 'anywhere' }
+            : { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+        }
+      >
         {task.title}
         {task.notes && (
           <svg width="11" height="11" viewBox="0 0 11 11" fill="none" style={{ marginLeft: 6, verticalAlign: -1 }}>
@@ -72,8 +101,26 @@ function TaskRow({ task, quadrant, isDragOver, onDragStart, onDragOverRow, onDra
             <path d="M3 4h5M3 6h3" stroke="var(--text-faint)" strokeWidth="1" strokeLinecap="round" />
           </svg>
         )}
-        {task.due_date && <span style={{ color: 'var(--text-faint)', fontSize: 11, marginLeft: 8 }}>due {task.due_date}</span>}
+        {task.due_date && (
+          <span
+            style={{
+              display: isMobile ? 'block' : 'inline',
+              marginTop: isMobile ? 6 : 0,
+              marginLeft: isMobile ? 0 : 8,
+              color: DUE_COLORS[dueTone(task.due_date)],
+              fontWeight: dueTone(task.due_date) === 'later' ? 400 : 600,
+              fontSize: isMobile ? 14 : 11,
+            }}
+          >
+            {isMobile ? '' : 'due '}
+            {formatDue(task.due_date)}
+          </span>
+        )}
       </div>
+      {/* Hidden on phones: a 20px trash can right beside a tappable row,
+          with no confirmation, is one slip away from losing a task — the
+          task sheet has a Delete (with a second tap to confirm) instead. */}
+      {!isMobile && (
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -87,11 +134,15 @@ function TaskRow({ task, quadrant, isDragOver, onDragStart, onDragOverRow, onDra
           <path d="M2.5 3.5H11.5M5.5 3.5V2.2C5.5 1.9 5.7 1.7 6 1.7H8C8.3 1.7 8.5 1.9 8.5 2.2V3.5M5.8 6V10M8.2 6V10M3.3 3.5L3.8 11.3C3.8 11.7 4.2 12 4.6 12H9.4C9.8 12 10.2 11.7 10.2 11.3L10.7 3.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
+      )}
     </div>
   );
 }
 
-function TaskModal({ task, quadrant, onClose, onSave, onMove }) {
+function TaskModal({ task, quadrant, onClose, onSave, onMove, onDelete }) {
+  const isMobile = useIsMobile();
+  const [pickingDate, setPickingDate] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes || '');
   const [dueDate, setDueDate] = useState(task.due_date || '');
@@ -108,79 +159,120 @@ function TaskModal({ task, quadrant, onClose, onSave, onMove }) {
       onKeyDown={(e) => {
         if (e.key === 'Escape') onClose();
       }}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', zIndex: 50 }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: 440,
-          maxWidth: '90vw',
+          width: isMobile ? '100%' : 440,
+          maxWidth: isMobile ? '100%' : '90vw',
+          maxHeight: isMobile ? '92vh' : 'none',
+          overflowY: 'auto',
           background: 'var(--bg)',
           border: `1px solid ${quadrant.color}`,
           boxShadow: `0 0 20px ${quadrant.glow}`,
-          borderRadius: 12,
-          padding: 20,
+          borderRadius: isMobile ? '18px 18px 0 0' : 12,
+          padding: isMobile ? '20px 18px calc(20px + env(safe-area-inset-bottom))' : 20,
           display: 'flex',
           flexDirection: 'column',
-          gap: 12,
+          gap: 14,
         }}
       >
         <input
-          autoFocus
+          // Not auto-focused on a phone: tapping a card to change its date
+          // or move it would otherwise pop the keyboard over the sheet.
+          autoFocus={!isMobile}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          style={{ background: 'transparent', border: 'none', borderBottom: '1px solid var(--border)', color: 'var(--text)', fontSize: 16, fontWeight: 600, padding: '4px 0' }}
+          style={{ background: 'transparent', border: 'none', borderBottom: '1px solid var(--border)', color: 'var(--text)', fontSize: isMobile ? 18 : 16, fontWeight: 600, padding: '4px 0', fontFamily: 'inherit', outline: 'none' }}
         />
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Add a description..."
           rows={5}
-          style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 8, padding: '10px 12px', fontSize: 13, resize: 'vertical', fontFamily: 'inherit' }}
+          style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 8, padding: '10px 12px', fontSize: isMobile ? 16 : 13, resize: 'vertical', fontFamily: 'inherit' }}
         />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <label style={{ fontSize: 12, color: 'var(--text-dim)' }}>Due</label>
-          <input
-            type="date"
-            value={dueDate}
-            onChange={(e) => setDueDate(e.target.value)}
-            style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 6, padding: '5px 8px', fontSize: 13 }}
-          />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <label style={{ fontSize: isMobile ? 14 : 12, color: 'var(--text-dim)' }}>Due</label>
+          <button
+            type="button"
+            onClick={() => setPickingDate(true)}
+            style={{
+              background: 'var(--panel-2)',
+              border: `1px solid ${dueDate ? DUE_COLORS[dueTone(dueDate)] : 'var(--border-strong)'}`,
+              color: dueDate ? DUE_COLORS[dueTone(dueDate)] : 'var(--text-dim)',
+              borderRadius: 8,
+              padding: isMobile ? '9px 14px' : '5px 10px',
+              fontSize: isMobile ? 15 : 13,
+            }}
+          >
+            {dueDate ? formatDue(dueDate) : 'Set date'}
+          </button>
           {dueDate && (
             <button
               type="button"
               onClick={() => setDueDate('')}
-              style={{ background: 'transparent', border: 'none', color: 'var(--text-faint)', fontSize: 12, textDecoration: 'underline', padding: 0 }}
+              style={{ background: 'transparent', border: 'none', color: 'var(--text-faint)', fontSize: isMobile ? 14 : 12, textDecoration: 'underline', padding: 0 }}
             >
               Clear
             </button>
           )}
         </div>
+        {pickingDate && (
+          <DatePickerPopover
+            value={dueDate}
+            onPick={(iso) => {
+              setDueDate(iso);
+              setPickingDate(false);
+            }}
+            onClear={() => {
+              setDueDate('');
+              setPickingDate(false);
+            }}
+            onClose={() => setPickingDate(false)}
+          />
+        )}
         <div>
           {/* Dragging cards between quadrants uses the HTML5 drag API,
               which doesn't fire from touch input at all — this is the
               only way to recategorize a task on a phone/tablet. */}
-          <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 6 }}>Move to</div>
+          <div style={{ fontSize: isMobile ? 13 : 11, color: 'var(--text-faint)', marginBottom: 8 }}>Move to</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {QUADRANTS.filter((q) => q.key !== task.quadrant).map((q) => (
               <button
                 key={q.key}
                 type="button"
                 onClick={() => onMove(q.key)}
-                style={{ fontSize: 11, padding: '5px 10px', borderRadius: 6, background: 'transparent', border: `1px solid ${q.color}`, color: q.color }}
+                style={{ fontSize: isMobile ? 14 : 11, padding: isMobile ? '9px 14px' : '5px 10px', borderRadius: isMobile ? 10 : 6, background: 'transparent', border: `1px solid ${q.color}`, color: q.color }}
               >
                 {q.label}
               </button>
             ))}
           </div>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button onClick={onClose} style={{ background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-dim)', borderRadius: 8, padding: '7px 14px', fontSize: 13 }}>
-            Cancel
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => {
+              if (confirmingDelete) onDelete(task.id);
+              else {
+                setConfirmingDelete(true);
+                setTimeout(() => setConfirmingDelete(false), 3000);
+              }
+            }}
+            style={{ background: confirmingDelete ? '#ff6b6b' : 'transparent', border: 'none', color: confirmingDelete ? '#2b0808' : '#ff6b6b', borderRadius: 8, padding: isMobile ? '10px 12px' : '7px 10px', fontSize: isMobile ? 15 : 13, fontWeight: confirmingDelete ? 600 : 400 }}
+          >
+            {confirmingDelete ? 'Tap again to delete' : 'Delete'}
           </button>
-          <button onClick={handleSave} style={{ background: quadrant.color, border: 'none', color: 'var(--bg)', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 600 }}>
-            Save
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={onClose} style={{ background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-dim)', borderRadius: 8, padding: isMobile ? '10px 16px' : '7px 14px', fontSize: isMobile ? 15 : 13 }}>
+              Cancel
+            </button>
+            <button onClick={handleSave} style={{ background: quadrant.color, border: 'none', color: 'var(--bg)', borderRadius: 8, padding: isMobile ? '10px 18px' : '7px 14px', fontSize: isMobile ? 15 : 13, fontWeight: 600 }}>
+              Save
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -227,32 +319,39 @@ function QuadrantBox({
         border: `1px solid ${isDragOver ? quadrant.color : quadrant.dim ? 'var(--border)' : quadrant.color}`,
         boxShadow: isDragOver || quadrant.dim ? 'none' : `0 0 10px ${quadrant.glow}`,
         borderStyle: isDragOver ? 'dashed' : 'solid',
-        borderRadius: 12,
-        padding: isMobile ? '14px 14px' : '18px 20px',
+        borderRadius: isMobile ? 16 : 12,
+        padding: isMobile ? '18px 16px' : '18px 20px',
         display: 'flex',
         flexDirection: 'column',
-        gap: 10,
-        overflowY: 'auto',
-        maxHeight: isMobile ? '42vh' : 'none',
+        gap: isMobile ? 12 : 10,
+        // Desktop boxes scroll internally (a fixed 2x2 grid has to); on a
+        // phone that same inner scroll nested inside the page's own scroll
+        // trapped the thumb — a flick over a box scrolled the box, not the
+        // page. Let each box grow to fit instead and just scroll the page,
+        // which means flexShrink:0 so the column doesn't squash them back.
+        overflowY: isMobile ? 'visible' : 'auto',
+        flexShrink: isMobile ? 0 : undefined,
+        minHeight: isMobile ? 120 : undefined,
         transition: 'border-color 0.1s ease',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: quadrant.dim ? 'var(--text-faint)' : quadrant.color, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        <div style={{ fontSize: isMobile ? 16 : 13, fontWeight: 700, color: quadrant.dim ? 'var(--text-dim)' : quadrant.color, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
           {quadrant.label}
+          <span style={{ marginLeft: 10, fontSize: isMobile ? 14 : 12, fontWeight: 400, color: 'var(--text-faint)', letterSpacing: 0 }}>{items.length || ''}</span>
         </div>
         <button
           onClick={() => setAdding((v) => !v)}
           aria-label={`Add task to ${quadrant.label}`}
           style={{
-            width: 22,
-            height: 22,
-            borderRadius: 6,
+            width: isMobile ? 38 : 22,
+            height: isMobile ? 38 : 22,
+            borderRadius: isMobile ? 10 : 6,
             background: 'transparent',
             border: '1px solid var(--border-strong)',
-            color: 'var(--text-faint)',
-            fontSize: 14,
-            lineHeight: '20px',
+            color: 'var(--text-dim)',
+            fontSize: isMobile ? 22 : 14,
+            lineHeight: isMobile ? '34px' : '20px',
             padding: 0,
           }}
         >
@@ -276,17 +375,18 @@ function QuadrantBox({
               if (!title.trim()) setAdding(false);
             }}
             placeholder="Task title"
-            style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 6, padding: '6px 10px', fontSize: 13 }}
+            style={{ flex: 1, minWidth: 0, background: 'var(--bg)', border: '1px solid var(--border-strong)', color: 'var(--text)', borderRadius: isMobile ? 10 : 6, padding: isMobile ? '12px 14px' : '6px 10px', fontSize: isMobile ? 16 : 13 }}
           />
         </form>
       )}
 
-      {items.length === 0 && !adding && <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>Nothing here.</div>}
+      {items.length === 0 && !adding && <div style={{ fontSize: isMobile ? 15 : 12, color: 'var(--text-faint)' }}>Nothing here.</div>}
       {items.map((t) => (
         <TaskRow
           key={t.id}
           task={t}
           quadrant={quadrant}
+          isMobile={isMobile}
           isDragOver={dragOverTaskId === t.id}
           onDragStart={onDragStart}
           onDragOverRow={(e) => onDragOverRow(e, t.id)}
@@ -301,9 +401,9 @@ function QuadrantBox({
   );
 }
 
-function DoneList({ tasks, onReopen, onDelete }) {
+function DoneList({ tasks, onReopen, onDelete, isMobile }) {
   return (
-    <div style={{ flex: 1, minHeight: 0, padding: 24, display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
+    <div style={{ flex: 1, minHeight: 0, padding: isMobile ? 14 : 24, display: 'flex', flexDirection: 'column', gap: isMobile ? 10 : 8, overflowY: 'auto' }}>
       {tasks.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>Nothing completed yet.</div>}
       {tasks.map((t) => {
         const quadrant = QUADRANT_BY_KEY[t.quadrant] || QUADRANTS[0];
@@ -314,15 +414,15 @@ function DoneList({ tasks, onReopen, onDelete }) {
               display: 'flex',
               alignItems: 'center',
               gap: 10,
-              background: 'var(--bg)',
+              background: isMobile ? 'var(--panel-2)' : 'var(--bg)',
               border: '1px solid var(--border)',
-              borderRadius: 8,
-              padding: '10px 12px',
-              fontSize: 13,
+              borderRadius: isMobile ? 12 : 8,
+              padding: isMobile ? '14px 14px' : '10px 12px',
+              fontSize: isMobile ? 15.5 : 13,
             }}
           >
             <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: quadrant.color }} />
-            <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-dim)', textDecoration: 'line-through' }}>
+            <div style={{ flex: 1, minWidth: 0, ...(isMobile ? { overflowWrap: 'anywhere' } : { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }), color: 'var(--text-dim)', textDecoration: 'line-through' }}>
               {t.title}
             </div>
             <div style={{ color: 'var(--text-faint)', fontSize: 11, flexShrink: 0 }}>{timeAgo(t.completed_at)}</div>
@@ -504,7 +604,7 @@ export default function TasksView({ onOpenDrawer }) {
         <div
           style={
             isMobile
-              ? { flex: 1, minHeight: 0, padding: 12, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }
+              ? { flex: 1, minHeight: 0, padding: 14, display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto', paddingBottom: 'calc(28px + env(safe-area-inset-bottom))' }
               : { flex: 1, minHeight: 0, padding: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: 16 }
           }
         >
@@ -538,7 +638,7 @@ export default function TasksView({ onOpenDrawer }) {
           ))}
         </div>
       ) : (
-        <DoneList tasks={doneTasks} onReopen={handleReopen} onDelete={handleDeleteDone} />
+        <DoneList tasks={doneTasks} onReopen={handleReopen} onDelete={handleDeleteDone} isMobile={isMobile} />
       )}
 
       {openTask && (
@@ -549,6 +649,10 @@ export default function TasksView({ onOpenDrawer }) {
           onSave={handleSaveTask}
           onMove={(quadrantKey) => {
             moveTaskToQuadrant(openTask.id, quadrantKey);
+            setOpenTaskId(null);
+          }}
+          onDelete={(id) => {
+            handleDelete(id);
             setOpenTaskId(null);
           }}
         />

@@ -7,7 +7,7 @@ import HabitsView from './views/HabitsView.jsx';
 import TodoView from './views/TodoView.jsx';
 import NotesView from './views/NotesView.jsx';
 import SketchView from './views/SketchView.jsx';
-import { checkAuth } from './api.js';
+import { checkAuth, pingHealth } from './api.js';
 
 const VIEWS = ['chat', 'tasks', 'habits', 'todo', 'notes', 'sketch'];
 const LAST_VIEW_KEY = 'hermes:lastView';
@@ -63,6 +63,38 @@ export default function App() {
     const onUnauthorized = () => setAuthenticated(false);
     window.addEventListener('hermes:unauthorized', onUnauthorized);
     return () => window.removeEventListener('hermes:unauthorized', onUnauthorized);
+  }, []);
+
+  useEffect(() => {
+    // Coming back to the tab after being idle/backgrounded: every view that
+    // polls wakes at once and its first requests go out on connections the
+    // network may have silently dropped. Send one cheap, short-timeout
+    // request first to burn any dead connection, then tell the views to
+    // refresh right away rather than waiting out their own interval.
+    let hiddenAt = null;
+    const wake = () => {
+      pingHealth().then(() => window.dispatchEvent(new Event('hermes:wake')));
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+        return;
+      }
+      const wasIdle = hiddenAt !== null && Date.now() - hiddenAt > 30000;
+      hiddenAt = null;
+      if (wasIdle) wake();
+    };
+    const onPageShow = (e) => {
+      if (e.persisted) wake();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pageshow', onPageShow);
+    window.addEventListener('online', wake);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pageshow', onPageShow);
+      window.removeEventListener('online', wake);
+    };
   }, []);
 
   if (authenticated === null) {
