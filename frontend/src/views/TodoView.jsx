@@ -12,6 +12,7 @@ import {
   createTodoItem,
   updateTodoItem,
   deleteTodoItem,
+  skipTodoItem,
 } from '../api.js';
 
 function StarIcon() {
@@ -103,6 +104,15 @@ function MoveToListPopover({ item, lists, onPick, onClose }) {
         </button>
       </div>
     </div>
+  );
+}
+
+function SkipIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 14 14" fill="none">
+      <path d="M2.5 3.2v7.6L8 7 2.5 3.2z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+      <path d="M10.5 3v8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
   );
 }
 
@@ -640,7 +650,7 @@ function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onReorder, 
   );
 }
 
-function TodoItemRow({ item, otherLists, onMove, onToggle, onUpdate, onDelete, onDragStart, isDragOver, onDragOverRow, onDragLeaveRow, onDropOnRow }) {
+function TodoItemRow({ item, otherLists, onMove, onSkip, onToggle, onUpdate, onDelete, onDragStart, isDragOver, onDragOverRow, onDragLeaveRow, onDropOnRow }) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(item.text);
   const [pickingDate, setPickingDate] = useState(false);
@@ -813,6 +823,17 @@ function TodoItemRow({ item, otherLists, onMove, onToggle, onUpdate, onDelete, o
           style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 8, background: 'transparent', border: 'none', color: 'var(--text-dim)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         >
           <RepeatIcon />
+        </button>
+      )}
+      {formatRecurrence(item) && (
+        <button
+          className="icon-btn"
+          onClick={() => onSkip(item.id)}
+          aria-label="Skip this occurrence"
+          title="Skip this occurrence — move to the next one without marking this done"
+          style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 8, background: 'transparent', border: 'none', color: 'var(--text-dim)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <SkipIcon />
         </button>
       )}
       {pickingRecurrence && (
@@ -999,6 +1020,17 @@ export default function TodoView({ onOpenDrawer, onAttentionChange }) {
     if ('due_date' in updates) refreshLists();
   }
 
+  async function handleSkipItem(itemId) {
+    try {
+      const updated = await skipTodoItem(itemId);
+      setItems((prev) => prev.map((i) => (i.id === itemId ? updated : i)));
+    } catch (err) {
+      console.error('Skip failed', err);
+    }
+    // due-today/overdue counts depend on the due date that just moved.
+    refreshLists();
+  }
+
   async function handleDeleteItem(itemId) {
     const item = items.find((i) => i.id === itemId);
     setItems((prev) => prev.filter((i) => i.id !== itemId));
@@ -1150,6 +1182,7 @@ export default function TodoView({ onOpenDrawer, onAttentionChange }) {
                   otherLists={lists.filter((l) => l.id !== activeId)}
                   onMove={handleMoveItem}
                   onToggle={handleToggle}
+                  onSkip={handleSkipItem}
                   onUpdate={handleUpdateItem}
                   onDelete={handleDeleteItem}
                   onDragStart={handleItemDragStart}

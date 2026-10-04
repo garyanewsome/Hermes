@@ -523,6 +523,17 @@ def patch_todo_item(item_id: int, request: TodoItemUpdateRequest):
         raise HTTPException(status_code=404, detail=str(exc))
 
 
+@app.post("/todo-items/{item_id}/skip")
+def skip_todo_item(item_id: int):
+    try:
+        item = planner_db.skip_todo_item(item_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if item is None:
+        raise HTTPException(status_code=404, detail="No such todo item")
+    return item
+
+
 @app.delete("/todo-items/{item_id}")
 def remove_todo_item(item_id: int):
     planner_db.delete_todo_item(item_id)

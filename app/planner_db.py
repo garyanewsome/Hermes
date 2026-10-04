@@ -684,6 +684,46 @@ def update_todo_item(
     return dict(row)
 
 
+def skip_todo_item(item_id: int) -> dict | None:
+    """Skips the current occurrence of a recurring item: moves it on to its
+    next occurrence without treating this one as done. Returns None if the
+    item doesn't exist; raises ValueError if it isn't recurring.
+
+    The next date is counted from whichever is later, the current due date
+    or today. Skipping something already due or overdue starts a fresh
+    interval from today — the same as completing it would (see
+    update_todo_item), so skip and complete only differ in intent, never in
+    when the item comes back. Skipping one that's still in the future (an
+    early skip) keeps the schedule intact instead of pulling it forward:
+    the occurrence after the one on the calendar, not "today plus N."
+    """
+    with _connect() as conn:
+        item = conn.execute(
+            "SELECT due_date, recurrence_days, recurrence_weekdays FROM todo_items WHERE id = %s", (item_id,)
+        ).fetchone()
+    if item is None:
+        return None
+
+    today = _today()
+    base = max(item["due_date"], today) if item["due_date"] else today
+    if item["recurrence_days"]:
+        next_due = base + timedelta(days=item["recurrence_days"])
+    elif item["recurrence_weekdays"]:
+        next_due = _next_weekday_occurrence(base, _parse_weekdays(item["recurrence_weekdays"]))
+    else:
+        raise ValueError("Item isn't recurring, so there's no occurrence to skip.")
+
+    with _connect() as conn:
+        row = conn.execute(
+            """
+            UPDATE todo_items SET due_date = %s, done = false WHERE id = %s
+            RETURNING id, list_id, text, done, due_date, position, recurrence_days, recurrence_weekdays, created_at
+            """,
+            (next_due, item_id),
+        ).fetchone()
+    return dict(row)
+
+
 def delete_todo_item(item_id: int) -> None:
     with _connect() as conn:
         conn.execute("DELETE FROM todo_items WHERE id = %s", (item_id,))

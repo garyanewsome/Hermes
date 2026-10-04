@@ -250,6 +250,14 @@ export async function deleteTodoItem(itemId) {
   await apiFetch(`/todo-items/${itemId}`, { method: 'DELETE' });
 }
 
+// Moves a recurring item on to its next occurrence without marking this one
+// done. Returns the updated item (its due date is now the next occurrence).
+export async function skipTodoItem(itemId) {
+  const res = await apiFetch(`/todo-items/${itemId}/skip`, { method: 'POST' });
+  if (!res.ok) throw new Error(`Skip failed (${res.status})`);
+  return res.json();
+}
+
 export async function listNotes() {
   const res = await apiFetch('/notes');
   const data = await res.json();
