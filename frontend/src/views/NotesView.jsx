@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
 import { listNotes, createNote, updateNote, deleteNote } from '../api.js';
@@ -211,6 +211,172 @@ function NoteList({ notes, activeId, onSelect, onCreate, onDelete, isMobile, mob
   );
 }
 
+// A note is still one string whose first line is its title (the list, search
+// and saving all rely on that) — this just edits it as two fields so the
+// title can be styled larger, which a single <textarea> can't do for one line.
+function splitNote(content) {
+  const i = content.indexOf('\n');
+  return i === -1
+    ? { title: content, body: '', hasBody: false }
+    : { title: content.slice(0, i), body: content.slice(i + 1), hasBody: true };
+}
+
+function NoteEditor({ noteId, value, onChange, isMobile }) {
+  const titleRef = useRef(null);
+  const bodyRef = useRef(null);
+  // Where to put the caret once the state change from a key press (Enter,
+  // Backspace at the join) has rendered — focus can't move until the new
+  // text is actually in the fields.
+  const pendingCaret = useRef(null);
+  const { title, body, hasBody } = splitNote(value);
+  const join = (t, b) => (b === '' ? t : `${t}\n${b}`);
+
+  // Keep the title field exactly as tall as its text (it wraps if long).
+  function fitTitle() {
+    const el = titleRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }
+  useLayoutEffect(fitTitle, [title, isMobile, noteId]);
+  useEffect(() => {
+    window.addEventListener('resize', fitTitle);
+    return () => window.removeEventListener('resize', fitTitle);
+  }, []);
+
+  function applyCaret(field, pos) {
+    const el = field === 'title' ? titleRef.current : bodyRef.current;
+    if (el) {
+      el.focus();
+      el.setSelectionRange(pos, pos);
+    }
+  }
+  useLayoutEffect(() => {
+    const p = pendingCaret.current;
+    if (!p) return;
+    pendingCaret.current = null;
+    applyCaret(p.field, p.pos);
+  });
+
+  // Change the content and then put the caret somewhere. When the content
+  // genuinely changes, the caret has to wait for the render that puts the new
+  // text in the fields (pendingCaret). When it doesn't — an arrow-key hop
+  // between the fields, or a Backspace that joins nothing — React won't
+  // re-render for an identical value, so a "pending" caret would never be
+  // applied and would instead fire on some later unrelated render. Focus
+  // right away in that case.
+  function commit(newContent, caret) {
+    if (newContent === value) {
+      applyCaret(caret.field, caret.pos);
+      return;
+    }
+    pendingCaret.current = caret;
+    onChange(newContent);
+  }
+
+  // A brand-new empty note: start typing straight into the title.
+  useEffect(() => {
+    if (value === '') titleRef.current?.focus();
+  }, [noteId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleTitleInput(e) {
+    const v = e.target.value;
+    const nl = v.indexOf('\n');
+    if (nl === -1) {
+      onChange(hasBody ? `${v}\n${body}` : v);
+      return;
+    }
+    // Multi-line paste into the title: first line stays the title, the rest
+    // flows into the body, caret at the end of what was pasted.
+    const rest = v.slice(nl + 1);
+    commit(`${v.slice(0, nl)}\n${rest}${hasBody ? `\n${body}` : ''}`, { field: 'body', pos: rest.length });
+  }
+
+  function handleTitleKeyDown(e) {
+    const el = e.target;
+    const atEnd = el.selectionStart === title.length && el.selectionEnd === title.length;
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      // Splits the title at the caret; whatever followed it becomes the
+      // first line of the body, same as pressing Enter mid-line anywhere.
+      const before = title.slice(0, el.selectionStart);
+      const after = title.slice(el.selectionEnd);
+      commit(`${before}\n${after}${hasBody ? `\n${body}` : ''}`, { field: 'body', pos: 0 });
+    } else if (e.key === 'ArrowDown' && atEnd) {
+      e.preventDefault();
+      applyCaret('body', 0);
+    } else if (e.key === 'Delete' && atEnd && hasBody) {
+      e.preventDefault();
+      commit(title + body, { field: 'title', pos: title.length });
+    }
+  }
+
+  function handleBodyKeyDown(e) {
+    const el = e.target;
+    const atStart = el.selectionStart === 0 && el.selectionEnd === 0;
+    if (e.key === 'Backspace' && atStart) {
+      // Backspace at the very start of the body joins it back onto the title.
+      e.preventDefault();
+      commit(title + body, { field: 'title', pos: title.length });
+    } else if (e.key === 'ArrowUp' && atStart) {
+      e.preventDefault();
+      applyCaret('title', title.length);
+    }
+  }
+
+  const sidePad = isMobile ? 16 : 28;
+  return (
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
+      <textarea
+        ref={titleRef}
+        rows={1}
+        value={title}
+        onChange={handleTitleInput}
+        onKeyDown={handleTitleKeyDown}
+        placeholder="Title"
+        aria-label="Note title"
+        style={{
+          flexShrink: 0,
+          maxHeight: '35vh',
+          overflowY: 'auto',
+          resize: 'none',
+          background: 'transparent',
+          border: 'none',
+          outline: 'none',
+          color: 'var(--accent)',
+          textShadow: '0 0 14px var(--accent-glow)',
+          fontSize: isMobile ? 24 : 28,
+          fontWeight: 700,
+          lineHeight: 1.25,
+          fontFamily: 'inherit',
+          padding: `${isMobile ? 18 : 26}px ${sidePad}px 6px`,
+        }}
+      />
+      <textarea
+        ref={bodyRef}
+        value={body}
+        onChange={(e) => onChange(join(title, e.target.value))}
+        onKeyDown={handleBodyKeyDown}
+        placeholder="Start typing..."
+        aria-label="Note body"
+        style={{
+          flex: 1,
+          minHeight: 0,
+          resize: 'none',
+          background: 'transparent',
+          border: 'none',
+          outline: 'none',
+          color: 'var(--accent)',
+          fontSize: isMobile ? 16 : 15,
+          lineHeight: 1.6,
+          fontFamily: 'inherit',
+          padding: `6px ${sidePad}px ${isMobile ? 16 : 28}px`,
+        }}
+      />
+    </div>
+  );
+}
+
 const POLL_INTERVAL_MS = 20000;
 
 export default function NotesView({ onOpenDrawer }) {
@@ -331,8 +497,7 @@ export default function NotesView({ onOpenDrawer }) {
     setActiveId(id);
   }
 
-  function handleChange(e) {
-    const content = e.target.value;
+  function handleChange(content) {
     setDraft(content);
     dirtyRef.current = true;
     typedSeqRef.current += 1;
@@ -394,23 +559,7 @@ export default function NotesView({ onOpenDrawer }) {
             {notes.length === 0 ? 'No notes yet — create one to get started.' : 'Pick a note.'}
           </div>
         ) : (
-          <textarea
-            value={draft}
-            onChange={handleChange}
-            placeholder="Start typing..."
-            style={{
-              flex: 1,
-              background: 'var(--bg)',
-              border: 'none',
-              color: 'var(--accent)',
-              padding: isMobile ? 16 : 28,
-              fontSize: 15,
-              lineHeight: 1.6,
-              resize: 'none',
-              fontFamily: 'inherit',
-              outline: 'none',
-            }}
-          />
+          <NoteEditor noteId={activeNote.id} value={draft} onChange={handleChange} isMobile={isMobile} />
         )}
       </div>
 
