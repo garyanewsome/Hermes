@@ -602,9 +602,7 @@ adding ? (
               }
         }
       >
-        {isMobile && <div style={{ padding: 12 }}>{newListControl}</div>}
-
-        <div style={{ padding: isMobile ? '0 8px 8px' : '12px 8px 8px', borderBottom: '1px solid var(--border)', marginBottom: 8 }}>
+        <div style={{ padding: '12px 8px 8px', borderBottom: '1px solid var(--border)', marginBottom: 8 }}>
           <SmartListRow
             icon={<TodayIcon />}
             label="Today"
@@ -739,10 +737,12 @@ adding ? (
           ))}
         </div>
 
-        {/* Desktop: the new-list control lives at the bottom of the column
-            so the pinned Today/Tomorrow views and the lists start at the
-            top. The phone drawer keeps it at the top, where it's reachable. */}
-        {!isMobile && <div style={{ padding: 12, borderTop: '1px solid var(--border)', flexShrink: 0 }}>{newListControl}</div>}
+        {/* At the bottom of the column (desktop and the phone drawer) so the
+            pinned Today/Tomorrow views and the lists start at the top; the
+            extra padding keeps it clear of a phone's home-indicator area. */}
+        <div style={{ padding: 12, paddingBottom: 'calc(12px + env(safe-area-inset-bottom))', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+          {newListControl}
+        </div>
       </div>
 
       {confirmingDelete && (
