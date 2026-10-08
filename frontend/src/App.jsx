@@ -9,7 +9,7 @@ import NotesView from './views/NotesView.jsx';
 import SketchView from './views/SketchView.jsx';
 import { checkAuth, pingHealth } from './api.js';
 
-const VIEWS = ['chat', 'tasks', 'habits', 'todo', 'notes', 'sketch'];
+const VIEWS = ['chat', 'tasks', 'todo', 'notes', 'habits', 'sketch'];
 const LAST_VIEW_KEY = 'hermes:lastView';
 
 function initialView() {

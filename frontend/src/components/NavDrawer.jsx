@@ -21,20 +21,6 @@ const ITEMS = [
     ),
   },
   {
-    key: 'habits',
-    label: 'Habits',
-    icon: (color) => (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <path
-          d="M8 1c1 2.5-1 3.2-1 5.2A2.8 2.8 0 0 0 8 12a2.6 2.6 0 0 0 1.6-4.7c1.4 1 1.9 2.2 1.4 3.7A4 4 0 0 1 4 9.5C4 6.7 6.5 5.5 8 1z"
-          stroke={color}
-          strokeWidth="1.2"
-          strokeLinejoin="round"
-        />
-      </svg>
-    ),
-  },
-  {
     key: 'todo',
     label: 'Todo',
     icon: (color) => (
@@ -54,6 +40,20 @@ const ITEMS = [
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
         <rect x="2" y="2" width="12" height="12" rx="2" stroke={color} strokeWidth="1.3" />
         <path d="M4.7 5.8h6.6M4.7 8h6.6M4.7 10.2h4" stroke={color} strokeWidth="1.1" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    key: 'habits',
+    label: 'Habits',
+    icon: (color) => (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path
+          d="M8 1c1 2.5-1 3.2-1 5.2A2.8 2.8 0 0 0 8 12a2.6 2.6 0 0 0 1.6-4.7c1.4 1 1.9 2.2 1.4 3.7A4 4 0 0 1 4 9.5C4 6.7 6.5 5.5 8 1z"
+          stroke={color}
+          strokeWidth="1.2"
+          strokeLinejoin="round"
+        />
       </svg>
     ),
   },
