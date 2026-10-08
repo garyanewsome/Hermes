@@ -13,6 +13,7 @@ import {
   updateTodoItem,
   deleteTodoItem,
   skipTodoItem,
+  getTodoAgenda,
 } from '../api.js';
 
 function StarIcon() {
@@ -380,7 +381,80 @@ function ConfirmDeleteList({ list, onCancel, onConfirm }) {
   );
 }
 
-function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onReorder, onMoveItem, onDelete, isMobile, mobileOpen, onMobileClose }) {
+function TodayIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TomorrowIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 16 16" fill="none">
+      <rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M2 6.5h12M5 1.8v2.4M11 1.8v2.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path d="M5.8 10.2h4M8.6 8.6l1.6 1.6-1.6 1.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// "Today" and "Tomorrow" aren't lists — they're views over every list's items
+// by due date. Pinned above the real lists, outside their scroll area.
+function SmartListRow({ icon, label, count, overdueCount = 0, active, onClick }) {
+  return (
+    <div
+      onClick={onClick}
+      role="button"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '12px 12px',
+        borderRadius: 10,
+        fontSize: 15,
+        cursor: 'pointer',
+        color: active ? 'var(--text)' : 'var(--text-dim)',
+        background: active ? 'rgba(255,255,255,0.06)' : 'transparent',
+        boxShadow: active ? 'inset 2px 0 0 var(--accent)' : 'none',
+      }}
+    >
+      <span style={{ display: 'flex', color: active || count > 0 ? 'var(--accent)' : 'var(--text-dim)' }}>{icon}</span>
+      <div style={{ flex: 1, minWidth: 0, fontWeight: 600 }}>{label}</div>
+      {overdueCount > 0 && <OverdueMark title={`${overdueCount} item${overdueCount === 1 ? '' : 's'} overdue`} />}
+      {count > 0 && <div style={{ fontSize: 13, color: 'var(--text-faint)', flexShrink: 0 }}>{count}</div>}
+    </div>
+  );
+}
+
+function AgendaView({ sections, emptyText, renderRow, isMobile }) {
+  const nonEmpty = sections.filter((section) => section.items.length > 0);
+  if (nonEmpty.length === 0) {
+    return (
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-faint)', fontSize: 15, padding: 24, textAlign: 'center' }}>
+        {emptyText}
+      </div>
+    );
+  }
+  return (
+    <div style={{ flex: 1, minHeight: 0, padding: isMobile ? 14 : 24, display: 'flex', flexDirection: 'column', gap: 24, overflowY: 'auto' }}>
+      {nonEmpty.map((section) => (
+        <div key={section.key} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {nonEmpty.length > 1 && (
+            <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: section.color || 'var(--text-dim)' }}>
+              {section.title}
+              <span style={{ marginLeft: 8, fontWeight: 400, color: 'var(--text-faint)', letterSpacing: 0 }}>{section.items.length}</span>
+            </div>
+          )}
+          {section.items.map(renderRow)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ListPicker({ agendaCounts, lists, activeId, onSelect, onCreate, onRename, onReorder, onMoveItem, onDelete, isMobile, mobileOpen, onMobileClose }) {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [renamingId, setRenamingId] = useState(null);
@@ -528,6 +602,30 @@ function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onReorder, 
           )}
         </div>
 
+        <div style={{ padding: '0 8px 8px', borderBottom: '1px solid var(--border)', marginBottom: 8 }}>
+          <SmartListRow
+            icon={<TodayIcon />}
+            label="Today"
+            count={agendaCounts.today}
+            overdueCount={agendaCounts.overdue}
+            active={activeId === 'today'}
+            onClick={() => {
+              onSelect('today');
+              if (isMobile) onMobileClose();
+            }}
+          />
+          <SmartListRow
+            icon={<TomorrowIcon />}
+            label="Tomorrow"
+            count={agendaCounts.tomorrow}
+            active={activeId === 'tomorrow'}
+            onClick={() => {
+              onSelect('tomorrow');
+              if (isMobile) onMobileClose();
+            }}
+          />
+        </div>
+
         <div
           style={{ flex: 1, overflowY: 'auto', padding: '0 8px' }}
           onDragOver={(e) => e.preventDefault()}
@@ -650,7 +748,7 @@ function ListPicker({ lists, activeId, onSelect, onCreate, onRename, onReorder, 
   );
 }
 
-function TodoItemRow({ item, otherLists, onMove, onSkip, onToggle, onUpdate, onDelete, onDragStart, isDragOver, onDragOverRow, onDragLeaveRow, onDropOnRow }) {
+function TodoItemRow({ item, listName, otherLists, onMove, onSkip, onToggle, onUpdate, onDelete, onDragStart, isDragOver, onDragOverRow, onDragLeaveRow, onDropOnRow }) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(item.text);
   const [pickingDate, setPickingDate] = useState(false);
@@ -746,6 +844,7 @@ function TodoItemRow({ item, otherLists, onMove, onSkip, onToggle, onUpdate, onD
           }}
         >
           {item.text}
+          {listName && <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2 }}>{listName}</span>}
         </div>
       )}
 
@@ -900,6 +999,7 @@ export default function TodoView({ onOpenDrawer, onAttentionChange }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [hideDone, setHideDone] = useState(true);
   const [dragOverItemId, setDragOverItemId] = useState(null);
+  const [agenda, setAgenda] = useState({ overdue: [], due_today: [], tomorrow: [] });
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -918,7 +1018,8 @@ export default function TodoView({ onOpenDrawer, onAttentionChange }) {
   }, []);
 
   useEffect(() => {
-    if (activeId != null) refreshItems(activeId);
+    // 'today' / 'tomorrow' are views over all lists, not a list to fetch.
+    if (typeof activeId === 'number') refreshItems(activeId);
   }, [activeId]);
 
   // Numbers, not an object, as the effect's dependencies — the 30s poll
@@ -930,10 +1031,23 @@ export default function TodoView({ onOpenDrawer, onAttentionChange }) {
     onAttentionChange?.({ dueToday, overdue });
   }, [dueToday, overdue, onAttentionChange]);
 
+  async function refreshAgenda() {
+    try {
+      setAgenda(await getTodoAgenda());
+    } catch {
+      // The lists themselves still work without the Today/Tomorrow views.
+    }
+  }
+
+  // Anything that moves an item between due-date buckets also changes the
+  // sidebar counts, and the places that already call this after a mutation
+  // are exactly those — so the agenda refreshes alongside them.
   async function refreshLists() {
+    refreshAgenda();
     const fetched = await listTodoLists();
     setLists(fetched);
     setActiveId((current) => {
+      if (current === 'today' || current === 'tomorrow') return current;
       if (current != null && fetched.some((l) => l.id === current)) return current;
       return fetched[0]?.id ?? null;
     });
@@ -1052,7 +1166,52 @@ export default function TodoView({ onOpenDrawer, onAttentionChange }) {
     await updateTodoItem(itemId, { position });
   }
 
+  // Rows on the Today/Tomorrow views each belong to some other list, so these
+  // change the item on the server and then re-fetch, rather than patching
+  // list-local state: a new due date, a completion, or a move can shift an
+  // item to a different section or off the view entirely.
+  function patchAgenda(itemId, fn) {
+    setAgenda((prev) => ({
+      overdue: fn(prev.overdue),
+      due_today: fn(prev.due_today),
+      tomorrow: fn(prev.tomorrow),
+    }));
+  }
+  const dropFromAgenda = (itemId) => patchAgenda(itemId, (rows) => rows.filter((i) => i.id !== itemId));
+
+  async function handleAgendaToggle(itemId, done) {
+    if (done) dropFromAgenda(itemId);
+    await updateTodoItem(itemId, { done });
+    refreshLists();
+  }
+
+  async function handleAgendaUpdate(itemId, updates) {
+    patchAgenda(itemId, (rows) => rows.map((i) => (i.id === itemId ? { ...i, ...updates } : i)));
+    await updateTodoItem(itemId, updates);
+    refreshLists();
+  }
+
+  async function handleAgendaDelete(itemId) {
+    dropFromAgenda(itemId);
+    await deleteTodoItem(itemId);
+    refreshLists();
+  }
+
+  async function handleAgendaSkip(itemId) {
+    try {
+      await skipTodoItem(itemId);
+    } catch (err) {
+      console.error('Skip failed', err);
+    }
+    refreshLists();
+  }
+
   async function handleMoveItem(itemId, targetListId) {
+    if (activeId === 'today' || activeId === 'tomorrow') {
+      await updateTodoItem(itemId, { list_id: targetListId });
+      refreshLists();
+      return;
+    }
     if (targetListId === activeId) return;
     const item = items.find((i) => i.id === itemId);
     if (!item) return;
@@ -1112,11 +1271,39 @@ export default function TodoView({ onOpenDrawer, onAttentionChange }) {
   }
 
   const activeList = lists.find((l) => l.id === activeId);
+  const isAgenda = activeId === 'today' || activeId === 'tomorrow';
+  const agendaCounts = {
+    today: agenda.overdue.length + agenda.due_today.length,
+    overdue: agenda.overdue.length,
+    tomorrow: agenda.tomorrow.length,
+  };
+  const renderAgendaRow = (item) => (
+    <TodoItemRow
+      key={item.id}
+      item={item}
+      listName={item.list_name}
+      otherLists={lists.filter((l) => l.id !== item.list_id)}
+      onMove={handleMoveItem}
+      onToggle={handleAgendaToggle}
+      onSkip={handleAgendaSkip}
+      onUpdate={handleAgendaUpdate}
+      onDelete={handleAgendaDelete}
+      onDragStart={handleItemDragStart}
+      isDragOver={false}
+      onDragOverRow={(e) => e.preventDefault()}
+      onDragLeaveRow={() => {}}
+      onDropOnRow={(e) => {
+        // No manual ordering on a view that spans lists.
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+    />
+  );
 
   return (
     <div className="todo-surface" style={{ flex: 1, display: 'flex', minWidth: 0 }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <TopBar title="Todo" subtitle={activeList ? activeList.name : undefined} onOpenDrawer={onOpenDrawer}>
+        <TopBar title="Todo" subtitle={isAgenda ? (activeId === 'today' ? 'Today' : 'Tomorrow') : activeList ? activeList.name : undefined} onOpenDrawer={onOpenDrawer}>
           {isMobile && (
             <button
               onClick={() => setPickerOpen(true)}
@@ -1141,7 +1328,21 @@ export default function TodoView({ onOpenDrawer, onAttentionChange }) {
           )}
         </TopBar>
 
-        {!activeList ? (
+        {isAgenda ? (
+          <AgendaView
+            isMobile={isMobile}
+            renderRow={renderAgendaRow}
+            emptyText={activeId === 'today' ? "Nothing due today — you're clear." : 'Nothing due tomorrow.'}
+            sections={
+              activeId === 'today'
+                ? [
+                    { key: 'overdue', title: 'Overdue', color: '#ff6b6b', items: agenda.overdue },
+                    { key: 'today', title: 'Due today', items: agenda.due_today },
+                  ]
+                : [{ key: 'tomorrow', title: 'Tomorrow', items: agenda.tomorrow }]
+            }
+          />
+        ) : !activeList ? (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-faint)', fontSize: 13, padding: 24, textAlign: 'center' }}>
             {lists.length === 0 ? 'No lists yet — create one to get started.' : 'Pick a list.'}
           </div>
@@ -1201,6 +1402,7 @@ export default function TodoView({ onOpenDrawer, onAttentionChange }) {
       </div>
 
       <ListPicker
+        agendaCounts={agendaCounts}
         lists={lists}
         activeId={activeId}
         onSelect={setActiveId}

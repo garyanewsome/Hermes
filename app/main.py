@@ -523,6 +523,11 @@ def patch_todo_item(item_id: int, request: TodoItemUpdateRequest):
         raise HTTPException(status_code=404, detail=str(exc))
 
 
+@app.get("/todo-items/agenda")
+def get_todo_agenda():
+    return planner_db.list_agenda_items()
+
+
 @app.post("/todo-items/{item_id}/skip")
 def skip_todo_item(item_id: int):
     try:

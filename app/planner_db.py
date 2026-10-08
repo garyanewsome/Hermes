@@ -684,6 +684,40 @@ def update_todo_item(
     return dict(row)
 
 
+def list_agenda_items() -> dict:
+    """Open items across ALL lists that need attention soon, for the Today
+    and Tomorrow views: overdue, due today, and due tomorrow. Bucketed here
+    (not in the browser) against the app's own timezone-aware today, so it
+    agrees with the due_today_count/overdue_count on the list sidebar — the
+    pod's/DB's clock and the user's device clock can disagree about which
+    day it is for hours each evening. Each item carries list_name so a
+    combined view can say where it came from."""
+    today = _today()
+    tomorrow = today + timedelta(days=1)
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT i.id, i.list_id, l.name AS list_name, i.text, i.done, i.due_date, i.position,
+                   i.recurrence_days, i.recurrence_weekdays, i.created_at
+            FROM todo_items i
+            JOIN todo_lists l ON l.id = i.list_id
+            WHERE NOT i.done AND i.due_date IS NOT NULL AND i.due_date <= %s
+            ORDER BY i.due_date, l.position, i.position
+            """,
+            (tomorrow,),
+        ).fetchall()
+    overdue, due_today, due_tomorrow = [], [], []
+    for row in rows:
+        item = dict(row)
+        if item["due_date"] < today:
+            overdue.append(item)
+        elif item["due_date"] == today:
+            due_today.append(item)
+        else:
+            due_tomorrow.append(item)
+    return {"today": today.isoformat(), "overdue": overdue, "due_today": due_today, "tomorrow": due_tomorrow}
+
+
 def skip_todo_item(item_id: int) -> dict | None:
     """Skips the current occurrence of a recurring item: moves it on to its
     next occurrence without treating this one as done. Returns None if the

@@ -250,6 +250,13 @@ export async function deleteTodoItem(itemId) {
   await apiFetch(`/todo-items/${itemId}`, { method: 'DELETE' });
 }
 
+// Open items from every list that are overdue, due today, or due tomorrow —
+// the data behind the Today and Tomorrow views.
+export async function getTodoAgenda() {
+  const res = await apiFetch('/todo-items/agenda');
+  return res.json();
+}
+
 // Moves a recurring item on to its next occurrence without marking this one
 // done. Returns the updated item (its due date is now the next occurrence).
 export async function skipTodoItem(itemId) {
