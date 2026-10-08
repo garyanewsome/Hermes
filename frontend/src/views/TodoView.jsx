@@ -526,39 +526,8 @@ function ListPicker({ agendaCounts, lists, activeId, onSelect, onCreate, onRenam
     onReorder(draggedId, last.position + 1);
   }
 
-  return (
-    <>
-      {isMobile && (
-        <div onClick={onMobileClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 40 }} />
-      )}
-      <div
-        style={
-          isMobile
-            ? {
-                position: 'fixed',
-                top: 0,
-                right: 0,
-                bottom: 0,
-                width: 'min(280px, 85vw)',
-                background: 'var(--panel)',
-                borderLeft: '1px solid var(--border)',
-                display: 'flex',
-                flexDirection: 'column',
-                zIndex: 41,
-                paddingTop: 'env(safe-area-inset-top)',
-              }
-            : {
-                width: 220,
-                flexShrink: 0,
-                background: 'var(--panel)',
-                borderLeft: '1px solid var(--border)',
-                display: 'flex',
-                flexDirection: 'column',
-              }
-        }
-      >
-        <div style={{ padding: 12 }}>
-          {adding ? (
+  const newListControl = (
+adding ? (
             <form onSubmit={submitCreate} style={{ display: 'flex', gap: 6 }}>
               <input
                 autoFocus
@@ -599,10 +568,43 @@ function ListPicker({ agendaCounts, lists, activeId, onSelect, onCreate, onRenam
             >
               + New list
             </button>
-          )}
-        </div>
+          )
+  );
 
-        <div style={{ padding: '0 8px 8px', borderBottom: '1px solid var(--border)', marginBottom: 8 }}>
+  return (
+    <>
+      {isMobile && (
+        <div onClick={onMobileClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 40 }} />
+      )}
+      <div
+        style={
+          isMobile
+            ? {
+                position: 'fixed',
+                top: 0,
+                right: 0,
+                bottom: 0,
+                width: 'min(280px, 85vw)',
+                background: 'var(--panel)',
+                borderLeft: '1px solid var(--border)',
+                display: 'flex',
+                flexDirection: 'column',
+                zIndex: 41,
+                paddingTop: 'env(safe-area-inset-top)',
+              }
+            : {
+                width: 220,
+                flexShrink: 0,
+                background: 'var(--panel)',
+                borderLeft: '1px solid var(--border)',
+                display: 'flex',
+                flexDirection: 'column',
+              }
+        }
+      >
+        {isMobile && <div style={{ padding: 12 }}>{newListControl}</div>}
+
+        <div style={{ padding: isMobile ? '0 8px 8px' : '12px 8px 8px', borderBottom: '1px solid var(--border)', marginBottom: 8 }}>
           <SmartListRow
             icon={<TodayIcon />}
             label="Today"
@@ -736,6 +738,11 @@ function ListPicker({ agendaCounts, lists, activeId, onSelect, onCreate, onRenam
             </div>
           ))}
         </div>
+
+        {/* Desktop: the new-list control lives at the bottom of the column
+            so the pinned Today/Tomorrow views and the lists start at the
+            top. The phone drawer keeps it at the top, where it's reachable. */}
+        {!isMobile && <div style={{ padding: 12, borderTop: '1px solid var(--border)', flexShrink: 0 }}>{newListControl}</div>}
       </div>
 
       {confirmingDelete && (
