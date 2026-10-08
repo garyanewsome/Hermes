@@ -690,9 +690,6 @@ function ListPicker({ agendaCounts, lists, activeId, onSelect, onCreate, onRenam
                     borderTop: dragOverId === list.id ? '2px solid var(--accent)' : '2px solid transparent',
                   }}
                 >
-                  {list.overdue_count > 0 && (
-                    <OverdueMark title={`${list.overdue_count} item${list.overdue_count === 1 ? '' : 's'} overdue`} />
-                  )}
                   {list.due_today_count > 0 && (
                     <div
                       title={`${list.due_today_count} item${list.due_today_count === 1 ? '' : 's'} due today`}
