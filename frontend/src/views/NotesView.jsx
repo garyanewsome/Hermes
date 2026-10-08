@@ -486,14 +486,27 @@ export default function NotesView({ onOpenDrawer }) {
         savesInFlightRef.current -= 1;
         editSeqRef.current += 1;
       });
+    bumpNote(id, content);
+  }
+
+  // Moves a note to the top of the list with its current text and an
+  // "edited now" stamp — only ever for a note that was actually edited.
+  function bumpNote(id, content) {
     setNotes((prev) => {
       const updated = prev.map((n) => (n.id === id ? { ...n, content, updated_at: new Date().toISOString() } : n));
       return [...updated].sort((a, b) => (a.id === id ? -1 : b.id === id ? 1 : 0));
     });
   }
 
+  // Switching notes (or starting a new one) only needs to save the note
+  // you're leaving if it has an edit that hasn't been sent yet (that's what
+  // a pending save timer means). Doing it unconditionally was the "list is
+  // one click behind" bug: every note you merely looked at got re-saved,
+  // stamped "just edited", and bumped to the top as you left it — so the
+  // list showed the previous click's note on top, and "+ New note" landed
+  // below the note you'd been on.
   function handleSelect(id) {
-    flushSave(activeId, draft);
+    if (saveTimerRef.current) flushSave(activeId, draft);
     setActiveId(id);
   }
 
@@ -502,12 +515,15 @@ export default function NotesView({ onOpenDrawer }) {
     dirtyRef.current = true;
     typedSeqRef.current += 1;
     editSeqRef.current += 1;
+    // Reorder (and refresh the list's title/preview) as you type, not
+    // ~600ms later when the debounced save fires.
+    bumpNote(activeId, content);
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => flushSave(activeId, content), SAVE_DEBOUNCE_MS);
   }
 
   async function handleCreate() {
-    flushSave(activeId, draft);
+    if (saveTimerRef.current) flushSave(activeId, draft);
     const note = await createNote();
     setNotes((prev) => [note, ...prev]);
     return note;
