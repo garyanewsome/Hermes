@@ -139,6 +139,10 @@ class NoteUpdateRequest(BaseModel):
     content: str
 
 
+class NotesOrderRequest(BaseModel):
+    ids: list[int]
+
+
 class SketchCreateRequest(BaseModel):
     width: int
     height: int
@@ -553,6 +557,12 @@ def get_notes():
 @app.post("/notes")
 def post_note():
     return planner_db.create_note()
+
+
+@app.put("/notes/order")
+def put_notes_order(request: NotesOrderRequest):
+    planner_db.reorder_notes(request.ids)
+    return {"status": "ok"}
 
 
 @app.patch("/notes/{note_id}")

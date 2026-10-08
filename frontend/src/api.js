@@ -276,6 +276,16 @@ export async function createNote() {
   return res.json();
 }
 
+// `ids` is every note id in its new top-to-bottom order.
+export async function reorderNotes(ids) {
+  const res = await apiFetch('/notes/order', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  });
+  if (!res.ok) throw new Error(`Reorder failed (${res.status})`);
+}
+
 // keepalive lets the request outlive the page — used when flushing a pending
 // edit as the tab is being hidden or closed, where a normal fetch can be
 // cancelled with the last few typed words still unsent.

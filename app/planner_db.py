@@ -176,6 +176,18 @@ def init_planner_db() -> None:
             )
             """
         )
+        # Hand-arranged order for the notes list (lowest first). Additive and
+        # backfilled from the old "most recently edited first" order, so the
+        # list looks exactly the same the moment this ships. Editing a note no
+        # longer moves it — only dragging does, and new notes go to the top.
+        conn.execute("ALTER TABLE notes ADD COLUMN IF NOT EXISTS position DOUBLE PRECISION")
+        conn.execute(
+            """
+            UPDATE notes SET position = sub.rn
+            FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY updated_at DESC, id DESC) AS rn FROM notes) sub
+            WHERE notes.id = sub.id AND notes.position IS NULL
+            """
+        )
         # A fixed logical canvas size (width/height, independent of whatever
         # device you're drawing on) so a sketch's coordinate space — and its
         # exports — stay consistent whether it was started on the tablet or
@@ -769,17 +781,37 @@ def delete_todo_item(item_id: int) -> None:
 def list_notes() -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT id, content, created_at, updated_at FROM notes ORDER BY updated_at DESC"
+            "SELECT id, content, created_at, updated_at FROM notes ORDER BY position, id DESC"
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+# New notes go to the top of the hand-arranged order.
+_TOP_POSITION = "COALESCE((SELECT MIN(position) FROM notes) - 1, 0)"
 
 
 def create_note() -> dict:
     with _connect() as conn:
         row = conn.execute(
-            "INSERT INTO notes DEFAULT VALUES RETURNING id, content, created_at, updated_at"
+            f"INSERT INTO notes (position) VALUES ({_TOP_POSITION}) "
+            "RETURNING id, content, created_at, updated_at"
         ).fetchone()
     return dict(row)
+
+
+def reorder_notes(ids: list[int]) -> None:
+    # `ids` is the full list in its new top-to-bottom order. Notes created on
+    # another device since this client last loaded aren't in it; they keep
+    # their own (top-of-list) position rather than being pushed anywhere.
+    with _connect() as conn:
+        conn.execute(
+            """
+            UPDATE notes SET position = v.pos
+            FROM unnest(%s::int[]) WITH ORDINALITY AS v(id, pos)
+            WHERE notes.id = v.id
+            """,
+            (ids,),
+        )
 
 
 def create_note_with_content(content: str) -> dict:
@@ -789,7 +821,8 @@ def create_note_with_content(content: str) -> dict:
     # a blank note immediately followed by an update.
     with _connect() as conn:
         row = conn.execute(
-            "INSERT INTO notes (content) VALUES (%s) RETURNING id, content, created_at, updated_at",
+            f"INSERT INTO notes (content, position) VALUES (%s, {_TOP_POSITION}) "
+            "RETURNING id, content, created_at, updated_at",
             (content,),
         ).fetchone()
     return dict(row)

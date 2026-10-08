@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
-import { listNotes, createNote, updateNote, deleteNote } from '../api.js';
+import { listNotes, createNote, updateNote, deleteNote, reorderNotes } from '../api.js';
 
 const SAVE_DEBOUNCE_MS = 600;
 
@@ -66,15 +66,109 @@ function ConfirmDeleteNote({ onCancel, onConfirm }) {
   );
 }
 
-function NoteList({ notes, activeId, onSelect, onCreate, onDelete, isMobile, mobileOpen, onMobileClose }) {
+function GripIcon() {
+  return (
+    <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
+      <circle cx="2.5" cy="3" r="1.3" />
+      <circle cx="7.5" cy="3" r="1.3" />
+      <circle cx="2.5" cy="8" r="1.3" />
+      <circle cx="7.5" cy="8" r="1.3" />
+      <circle cx="2.5" cy="13" r="1.3" />
+      <circle cx="7.5" cy="13" r="1.3" />
+    </svg>
+  );
+}
+
+function NoteList({ notes, activeId, onSelect, onCreate, onDelete, onReorder, isMobile, mobileOpen, onMobileClose }) {
   const [search, setSearch] = useState('');
   const [confirmingDeleteId, setConfirmingDeleteId] = useState(null);
+  // While a row is being dragged: its id, and the ids in the order the list
+  // would take if it were dropped right now (the list reshuffles live).
+  const [drag, setDrag] = useState(null);
+  const scrollRef = useRef(null);
+  const rowEls = useRef(new Map());
+  const dragRef = useRef(null);
+  dragRef.current = drag;
 
   if (isMobile && !mobileOpen) return null;
 
-  const filtered = search.trim()
+  const searching = search.trim() !== '';
+  const filtered = searching
     ? notes.filter((n) => (n.content || '').toLowerCase().includes(search.trim().toLowerCase()))
     : notes;
+  // The rows stay in the same DOM order for the whole drag (moving a node
+  // mid-gesture can drop the pointer); the live reshuffle is CSS `order`.
+  const visualIndex = drag ? new Map(drag.order.map((id, i) => [id, i])) : null;
+
+  // Drag by the grip (not the whole row) so tapping, scrolling and swiping
+  // the list keep working on a phone — the grip alone opts out of scrolling
+  // (touch-action: none). Pointer events cover mouse, finger and pen alike;
+  // HTML5 drag-and-drop doesn't fire from touch on iOS.
+  function startDrag(e, id) {
+    if (searching || e.button > 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const handle = e.currentTarget;
+    handle.setPointerCapture?.(e.pointerId);
+    const startOrder = notes.map((n) => n.id);
+    let order = startOrder;
+    let lastY = e.clientY;
+    let raf = null;
+
+    const reflow = () => {
+      // Insertion point = how many *other* rows have their midpoint above
+      // the pointer. Rows' DOM rects already reflect the live preview order.
+      let above = 0;
+      for (const [rid, el] of rowEls.current) {
+        if (rid === id || !el) continue;
+        const r = el.getBoundingClientRect();
+        if (lastY > r.top + r.height / 2) above += 1;
+      }
+      const others = order.filter((x) => x !== id);
+      const next = [...others.slice(0, above), id, ...others.slice(above)];
+      if (next.join() !== order.join()) {
+        order = next;
+        setDrag({ id, order });
+      }
+    };
+    // Scroll the list when the pointer nears its top/bottom edge.
+    const autoScroll = () => {
+      const box = scrollRef.current;
+      if (box) {
+        const r = box.getBoundingClientRect();
+        const zone = 48;
+        if (lastY < r.top + zone) box.scrollTop -= 10;
+        else if (lastY > r.bottom - zone) box.scrollTop += 10;
+        reflow();
+      }
+      raf = requestAnimationFrame(autoScroll);
+    };
+    const onMove = (ev) => {
+      lastY = ev.clientY;
+      reflow();
+    };
+    const finish = (commit) => {
+      cancelAnimationFrame(raf);
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', onUp);
+      handle.removeEventListener('pointercancel', onCancel);
+      window.removeEventListener('keydown', onKey);
+      setDrag(null);
+      if (commit && order.join() !== startOrder.join()) onReorder(order);
+    };
+    const onUp = () => finish(true);
+    const onCancel = () => finish(false);
+    const onKey = (ev) => {
+      if (ev.key === 'Escape') finish(false);
+    };
+
+    setDrag({ id, order });
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointercancel', onCancel);
+    window.addEventListener('keydown', onKey);
+    raf = requestAnimationFrame(autoScroll);
+  }
 
   return (
     <>
@@ -135,7 +229,7 @@ function NoteList({ notes, activeId, onSelect, onCreate, onDelete, isMobile, mob
           />
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px' }}>
+        <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '0 8px', display: 'flex', flexDirection: 'column' }}>
           {filtered.length === 0 && (
             <div style={{ padding: '10px', fontSize: 12, color: 'var(--text-faint)' }}>
               {notes.length === 0 ? 'No notes yet.' : 'No matches.'}
@@ -144,7 +238,12 @@ function NoteList({ notes, activeId, onSelect, onCreate, onDelete, isMobile, mob
           {filtered.map((note) => (
             <div
               key={note.id}
+              ref={(el) => {
+                if (el) rowEls.current.set(note.id, el);
+                else rowEls.current.delete(note.id);
+              }}
               onClick={() => {
+                if (dragRef.current) return;
                 onSelect(note.id);
                 if (isMobile) onMobileClose();
               }}
@@ -153,11 +252,45 @@ function NoteList({ notes, activeId, onSelect, onCreate, onDelete, isMobile, mob
                 borderRadius: 10,
                 cursor: 'pointer',
                 marginBottom: 3,
-                background: note.id === activeId ? 'rgba(255,255,255,0.06)' : 'transparent',
-                boxShadow: note.id === activeId ? 'inset 2px 0 0 var(--accent)' : 'none',
+                background: drag?.id === note.id ? 'var(--panel-2)' : note.id === activeId ? 'rgba(255,255,255,0.06)' : 'transparent',
+                boxShadow:
+                  drag?.id === note.id
+                    ? '0 0 0 1px var(--accent), 0 6px 18px rgba(0,0,0,0.5)'
+                    : note.id === activeId
+                      ? 'inset 2px 0 0 var(--accent)'
+                      : 'none',
+                position: 'relative',
+                flexShrink: 0,
+                order: visualIndex ? visualIndex.get(note.id) ?? 0 : 0,
+                zIndex: drag?.id === note.id ? 2 : 'auto',
+                userSelect: drag ? 'none' : 'auto',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                {!searching && (
+                  <span
+                    role="button"
+                    aria-label="Drag to reorder"
+                    title="Drag to reorder"
+                    onPointerDown={(e) => startDrag(e, note.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      flexShrink: 0,
+                      alignSelf: 'center',
+                      width: 22,
+                      height: 28,
+                      margin: '-4px 0 -4px -6px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: drag?.id === note.id ? 'var(--accent)' : 'var(--text-faint)',
+                      cursor: drag ? 'grabbing' : 'grab',
+                      touchAction: 'none',
+                    }}
+                  >
+                    <GripIcon />
+                  </span>
+                )}
                 <div
                   style={{
                     flex: 1,
@@ -486,25 +619,34 @@ export default function NotesView({ onOpenDrawer }) {
         savesInFlightRef.current -= 1;
         editSeqRef.current += 1;
       });
-    bumpNote(id, content);
+    touchNote(id, content);
   }
 
-  // Moves a note to the top of the list with its current text and an
-  // "edited now" stamp — only ever for a note that was actually edited.
-  function bumpNote(id, content) {
-    setNotes((prev) => {
-      const updated = prev.map((n) => (n.id === id ? { ...n, content, updated_at: new Date().toISOString() } : n));
-      return [...updated].sort((a, b) => (a.id === id ? -1 : b.id === id ? 1 : 0));
-    });
+  // Updates a note's text and "edited now" stamp in place. The list order is
+  // hand-arranged (drag to reorder), so editing never moves a note.
+  function touchNote(id, content) {
+    setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, content, updated_at: new Date().toISOString() } : n)));
+  }
+
+  async function handleReorder(ids) {
+    setNotes((prev) => ids.map((id) => prev.find((n) => n.id === id)).filter(Boolean));
+    // Keep polls from putting the old order back while this is on the wire.
+    editSeqRef.current += 1;
+    savesInFlightRef.current += 1;
+    try {
+      await reorderNotes(ids);
+    } catch (err) {
+      console.error('Note reorder failed', err);
+    } finally {
+      savesInFlightRef.current -= 1;
+      editSeqRef.current += 1;
+    }
   }
 
   // Switching notes (or starting a new one) only needs to save the note
   // you're leaving if it has an edit that hasn't been sent yet (that's what
-  // a pending save timer means). Doing it unconditionally was the "list is
-  // one click behind" bug: every note you merely looked at got re-saved,
-  // stamped "just edited", and bumped to the top as you left it — so the
-  // list showed the previous click's note on top, and "+ New note" landed
-  // below the note you'd been on.
+  // a pending save timer means). Saving unconditionally re-stamped every
+  // note you merely looked at as "just edited".
   function handleSelect(id) {
     if (saveTimerRef.current) flushSave(activeId, draft);
     setActiveId(id);
@@ -515,9 +657,9 @@ export default function NotesView({ onOpenDrawer }) {
     dirtyRef.current = true;
     typedSeqRef.current += 1;
     editSeqRef.current += 1;
-    // Reorder (and refresh the list's title/preview) as you type, not
-    // ~600ms later when the debounced save fires.
-    bumpNote(activeId, content);
+    // Refresh the list's title/preview as you type, not ~600ms later when
+    // the debounced save fires.
+    touchNote(activeId, content);
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => flushSave(activeId, content), SAVE_DEBOUNCE_MS);
   }
@@ -585,6 +727,7 @@ export default function NotesView({ onOpenDrawer }) {
         onSelect={handleSelect}
         onCreate={handleCreate}
         onDelete={handleDelete}
+        onReorder={handleReorder}
         isMobile={isMobile}
         mobileOpen={pickerOpen}
         onMobileClose={() => setPickerOpen(false)}
