@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
 import DatePickerPopover from '../components/DatePickerPopover.jsx';
@@ -1005,6 +1005,8 @@ export default function TodoView({ onOpenDrawer, onAttentionChange }) {
   const [dragOverItemId, setDragOverItemId] = useState(null);
   const [agenda, setAgenda] = useState({ overdue: [], due_today: [], tomorrow: [] });
   const isMobile = useIsMobile();
+  const activeIdRef = useRef(null);
+  activeIdRef.current = activeId;
 
   useEffect(() => {
     refreshLists();
@@ -1015,9 +1017,17 @@ export default function TodoView({ onOpenDrawer, onAttentionChange }) {
     const interval = setInterval(refreshLists, TODO_POLL_INTERVAL_MS);
     // Refresh immediately when the tab wakes from idle (see App.jsx).
     window.addEventListener('hermes:wake', refreshLists);
+    // The Today page can complete/skip items; pick that up, including the
+    // open list's own items (the poll above only refreshes lists + agenda).
+    const onChanged = () => {
+      refreshLists();
+      if (typeof activeIdRef.current === 'number') refreshItems(activeIdRef.current);
+    };
+    window.addEventListener('hermes:data-changed', onChanged);
     return () => {
       clearInterval(interval);
       window.removeEventListener('hermes:wake', refreshLists);
+      window.removeEventListener('hermes:data-changed', onChanged);
     };
   }, []);
 

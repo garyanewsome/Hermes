@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import audio, auth, documents
+from app import audio, auth, documents, weather
 from app.chat import list_models, run_chat_stream
 from app.config import UPLOADS_DIR
 from app.db import (
@@ -141,6 +141,12 @@ class NoteUpdateRequest(BaseModel):
 
 class NotesOrderRequest(BaseModel):
     ids: list[int]
+
+
+class WeatherLocationRequest(BaseModel):
+    name: str
+    latitude: float
+    longitude: float
 
 
 class SketchCreateRequest(BaseModel):
@@ -547,6 +553,33 @@ def skip_todo_item(item_id: int):
 def remove_todo_item(item_id: int):
     planner_db.delete_todo_item(item_id)
     return {"status": "ok"}
+
+
+@app.get("/weather")
+def get_weather():
+    try:
+        return weather.get_weather()
+    except Exception as exc:
+        logger.warning("Weather fetch failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Weather is unavailable right now")
+
+
+@app.get("/weather/search")
+def search_weather_locations(q: str = ""):
+    try:
+        return {"results": weather.search_locations(q)}
+    except Exception as exc:
+        logger.warning("Location search failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Location search is unavailable right now")
+
+
+@app.put("/weather/location")
+def put_weather_location(request: WeatherLocationRequest):
+    if not request.name.strip():
+        raise HTTPException(status_code=400, detail="Location needs a name")
+    if not (-90 <= request.latitude <= 90 and -180 <= request.longitude <= 180):
+        raise HTTPException(status_code=400, detail="Coordinates out of range")
+    return weather.set_location(request.name, request.latitude, request.longitude)
 
 
 @app.get("/notes")

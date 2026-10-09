@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import NavDrawer from './components/NavDrawer.jsx';
 import LoginScreen from './components/LoginScreen.jsx';
+import TodayView from './views/TodayView.jsx';
 import ChatView from './views/ChatView.jsx';
 import TasksView from './views/TasksView.jsx';
 import HabitsView from './views/HabitsView.jsx';
@@ -9,7 +10,7 @@ import NotesView from './views/NotesView.jsx';
 import SketchView from './views/SketchView.jsx';
 import { checkAuth, pingHealth } from './api.js';
 
-const VIEWS = ['chat', 'tasks', 'todo', 'notes', 'habits', 'sketch'];
+const VIEWS = ['today', 'chat', 'tasks', 'todo', 'notes', 'habits', 'sketch'];
 const LAST_VIEW_KEY = 'hermes:lastView';
 
 function initialView() {
@@ -17,9 +18,9 @@ function initialView() {
     const saved = localStorage.getItem(LAST_VIEW_KEY);
     if (VIEWS.includes(saved)) return saved;
   } catch {
-    // Private-browsing / storage-blocked — fine, just default to chat.
+    // Private-browsing / storage-blocked — fine, just default to Today.
   }
-  return 'chat';
+  return 'today';
 }
 
 export default function App() {
@@ -115,6 +116,9 @@ export default function App() {
           (and its state) alive; display:contents on the active one makes
           this wrapper invisible to the outer flex layout, so the view's own
           flex:1 root behaves exactly as if it were a direct child. */}
+      <div style={{ display: view === 'today' ? 'contents' : 'none' }}>
+        <TodayView onOpenDrawer={() => setDrawerOpen(true)} onNavigate={setView} active={view === 'today'} />
+      </div>
       <div style={{ display: view === 'chat' ? 'contents' : 'none' }}>
         <ChatView onOpenDrawer={() => setDrawerOpen(true)} />
       </div>

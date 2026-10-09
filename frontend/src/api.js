@@ -265,6 +265,28 @@ export async function skipTodoItem(itemId) {
   return res.json();
 }
 
+export async function getWeather() {
+  const res = await apiFetch('/weather');
+  if (!res.ok) throw new Error(`Weather failed (${res.status})`);
+  return res.json();
+}
+
+export async function searchWeatherLocations(q) {
+  const res = await apiFetch(`/weather/search?q=${encodeURIComponent(q)}`);
+  if (!res.ok) throw new Error(`Search failed (${res.status})`);
+  return (await res.json()).results;
+}
+
+export async function setWeatherLocation({ name, latitude, longitude }) {
+  const res = await apiFetch('/weather/location', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, latitude, longitude }),
+  });
+  if (!res.ok) throw new Error(`Save failed (${res.status})`);
+  return res.json();
+}
+
 export async function listNotes() {
   const res = await apiFetch('/notes');
   const data = await res.json();

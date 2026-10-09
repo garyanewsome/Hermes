@@ -176,6 +176,18 @@ def init_planner_db() -> None:
             )
             """
         )
+        # Small key/value store for app-level preferences (the weather
+        # location so far) — server-side so a change made on the phone shows
+        # up on the desktop too, which localStorage couldn't do.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value JSONB NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
         # Hand-arranged order for the notes list (lowest first). Additive and
         # backfilled from the old "most recently edited first" order, so the
         # list looks exactly the same the moment this ships. Editing a note no
@@ -773,6 +785,26 @@ def skip_todo_item(item_id: int) -> dict | None:
 def delete_todo_item(item_id: int) -> None:
     with _connect() as conn:
         conn.execute("DELETE FROM todo_items WHERE id = %s", (item_id,))
+
+
+# ---- App settings ---------------------------------------------------------
+
+
+def get_setting(key: str, default=None):
+    with _connect() as conn:
+        row = conn.execute("SELECT value FROM app_settings WHERE key = %s", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def set_setting(key: str, value) -> None:
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO app_settings (key, value) VALUES (%s, %s)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+            """,
+            (key, Jsonb(value)),
+        )
 
 
 # ---- Notes ----------------------------------------------------------------

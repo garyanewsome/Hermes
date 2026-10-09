@@ -72,6 +72,12 @@ export default function HabitsView({ onOpenDrawer }) {
 
   useEffect(() => {
     refresh();
+    // The Today page can log habits; pick that up.
+    const onChanged = () => {
+      refresh();
+    };
+    window.addEventListener('hermes:data-changed', onChanged);
+    return () => window.removeEventListener('hermes:data-changed', onChanged);
   }, []);
 
   async function refresh() {

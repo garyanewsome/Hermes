@@ -12,6 +12,13 @@
   --text-faint: #6a6b70;
 }
 
+[data-view="today"] {
+  --accent: #ffcf4a;
+  --accent-text: #332600;
+  --accent-glow: rgba(255, 207, 74, 0.35);
+  --accent-wash: rgba(255, 207, 74, 0.1);
+}
+
 [data-view="chat"] {
   --accent: #2ee6ff;
   --accent-text: #04222b;
