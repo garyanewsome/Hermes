@@ -129,11 +129,23 @@ function CheckCircle({ checked, color, onClick, label }) {
   );
 }
 
-function Card({ title, color, count, onOpen, children }) {
+function Card({ title, color, count, onOpen, desktop, children }) {
   return (
-    <section style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 14, padding: '14px 14px 6px' }}>
+    <section
+      style={{
+        background: 'var(--panel)',
+        border: '1px solid var(--border)',
+        borderRadius: 14,
+        padding: desktop ? '18px 18px 8px' : '14px 14px 6px',
+        // Keep a card whole inside its column and space the stack.
+        breakInside: desktop ? 'avoid' : undefined,
+        marginBottom: desktop ? 18 : undefined,
+        // Desktop: a neon rule along the top edge in the section's own color.
+        boxShadow: desktop ? `inset 0 2px 0 0 ${color}, 0 0 24px -12px ${color}` : undefined,
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 6, padding: '0 2px' }}>
-        <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color }}>{title}</div>
+        <div style={{ fontSize: desktop ? 14 : 13, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color }}>{title}</div>
         {count != null && <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>{count}</div>}
         {onOpen && (
           <button
@@ -243,6 +255,91 @@ function WeatherCard({ weather, error, onEditLocation }) {
         >
           <GearIcon />
         </button>
+      </div>
+    </section>
+  );
+}
+
+// Wide-screen version of the weather card: current conditions on the left,
+// the next days as tiles on the right. Phones keep WeatherCard.
+function WeatherHero({ weather, error, onEditLocation }) {
+  if (!weather) return <WeatherCard weather={weather} error={error} onEditLocation={onEditLocation} />;
+  const { current, days, location } = weather;
+  const today = days[0];
+  const upcoming = days.slice(1, 4);
+  return (
+    <section
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'stretch',
+        justifyContent: 'space-between',
+        gap: 24,
+        padding: 24,
+        borderRadius: 16,
+        border: '1px solid var(--border-strong)',
+        background: 'linear-gradient(120deg, var(--accent-wash), var(--panel) 55%)',
+        boxShadow: '0 0 40px -18px var(--accent-glow)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 22, minWidth: 0 }}>
+        <div style={{ color: 'var(--accent)', filter: 'drop-shadow(0 0 10px var(--accent-glow))' }}>
+          <WeatherIcon kind={current.icon} size={76} />
+        </div>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 14 }}>
+            <div style={{ fontSize: 64, fontWeight: 700, lineHeight: 1, color: 'var(--text)' }}>{current.temp}°</div>
+            <div style={{ fontSize: 20, color: 'var(--text)' }}>{current.label}</div>
+          </div>
+          <div style={{ fontSize: 14, color: 'var(--text-dim)', marginTop: 10 }}>
+            Feels {current.feels_like}° · Wind {current.wind_mph} mph
+          </div>
+          <div style={{ fontSize: 15, color: 'var(--text)', fontWeight: 600, marginTop: 6 }}>
+            H {today.high}° · L {today.low}°
+            {today.precip_chance != null && <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}> · {today.precip_chance}% rain</span>}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, fontSize: 13, color: 'var(--text-faint)' }}>
+            <span>{location.name}</span>
+            {weather.stale && <span>· may be out of date</span>}
+            <button
+              type="button"
+              onClick={onEditLocation}
+              aria-label="Change weather location"
+              title="Change location"
+              style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', padding: 4, display: 'flex' }}
+            >
+              <GearIcon />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'stretch' }}>
+        {upcoming.map((d) => (
+          <div
+            key={d.date}
+            style={{
+              minWidth: 112,
+              padding: '14px 16px',
+              borderRadius: 12,
+              background: 'rgba(0,0,0,0.28)',
+              border: '1px solid var(--border)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{parseISODate(d.date).toLocaleDateString(undefined, { weekday: 'short' })}</div>
+            <div style={{ color: 'var(--accent)' }}>
+              <WeatherIcon kind={d.icon} size={32} />
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>
+              {d.high}° <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>/ {d.low}°</span>
+            </div>
+            <div style={{ fontSize: 12.5, color: d.precip_chance >= 30 ? 'var(--text-dim)' : 'var(--text-faint)' }}>{d.precip_chance}% rain</div>
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -489,10 +586,24 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
       </TopBar>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: `${pad}px ${pad}px calc(${pad}px + env(safe-area-inset-bottom))` }}>
-        <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <WeatherCard weather={weather} error={weatherError} onEditLocation={() => setEditingLocation(true)} />
+        <div style={{ maxWidth: isMobile ? 720 : 1240, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: isMobile ? 14 : 18 }}>
+          {isMobile ? (
+            <WeatherCard weather={weather} error={weatherError} onEditLocation={() => setEditingLocation(true)} />
+          ) : (
+            <WeatherHero weather={weather} error={weatherError} onEditLocation={() => setEditingLocation(true)} />
+          )}
 
-          <Card title="Todo" color={TODO_COLOR} count={todoItems ? todoItems.length : null} onOpen={() => onNavigate('todo')}>
+          {/* On a wide screen the sections sit side by side as CSS columns
+              (cards stack under each other without leaving holes when one
+              is taller than its neighbour); on a phone they stack. */}
+          <div
+            style={
+              isMobile
+                ? { display: 'flex', flexDirection: 'column', gap: 14 }
+                : { columnWidth: 300, columnGap: 18 }
+            }
+          >
+          <Card desktop={!isMobile} title="Todo" color={TODO_COLOR} count={todoItems ? todoItems.length : null} onOpen={() => onNavigate('todo')}>
             {!todoItems ? (
               <Empty>Loading…</Empty>
             ) : todoItems.length === 0 ? (
@@ -529,7 +640,7 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
           {/* Nothing to show means no card at all — an empty "nothing here"
               box is just noise on a page meant for a quick read. */}
           {boardTasks && boardTasks.length > 0 && (
-          <Card title="The Board" color={BOARD_COLOR} count={boardTasks.length} onOpen={() => onNavigate('tasks')}>
+          <Card desktop={!isMobile} title="The Board" color={BOARD_COLOR} count={boardTasks.length} onOpen={() => onNavigate('tasks')}>
             {boardTasks.map((task) => {
                 const q = QUADRANT_BY_KEY[task.quadrant] || QUADRANTS[0];
                 return (
@@ -538,7 +649,9 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
                       <div style={{ fontSize: 16, lineHeight: 1.3, color: 'var(--text)', overflowWrap: 'anywhere' }}>{task.title}</div>
                       <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', marginTop: 2 }}>
                         <DueTag iso={task.due_date} />
-                        <span style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>{q.label}</span>
+                        {/* The quadrant only needs naming when it isn't the
+                            TODO one (the color bar already says it). */}
+                        {task.quadrant !== 'do' && <span style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>{q.label}</span>}
                       </div>
                     </div>
                   </Row>
@@ -547,7 +660,7 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
           </Card>
           )}
 
-          <Card title="Habits" color={HABIT_COLOR} count={habits ? `${habitsDone}/${habits.length}` : null} onOpen={() => onNavigate('habits')}>
+          <Card desktop={!isMobile} title="Habits" color={HABIT_COLOR} count={habits ? `${habitsDone}/${habits.length}` : null} onOpen={() => onNavigate('habits')}>
             {!habits ? (
               <Empty>Loading…</Empty>
             ) : habits.length === 0 ? (
@@ -568,6 +681,7 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
               })
             )}
           </Card>
+          </div>
         </div>
       </div>
 
