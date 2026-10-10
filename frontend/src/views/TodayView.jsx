@@ -402,12 +402,16 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
   // Todo items: overdue first, then today's (the agenda is already ordered).
   const todoItems = agenda ? [...agenda.overdue, ...agenda.due_today] : null;
 
-  // Board tasks due today or earlier, overdue first, then by quadrant order.
-  const quadrantRank = Object.fromEntries(QUADRANTS.map((q, i) => [q.key, i]));
+  // Board tasks worth seeing today: everything in the TODO quadrant (that's
+  // the "doing now" list, and most of its tasks never get a due date), plus
+  // a task from any quadrant that's due today or overdue. Overdue first,
+  // then due today, then the rest of the TODO quadrant in board order.
   const boardTasks = tasks
     ? tasks
-        .filter((t) => t.due_date && t.due_date <= today)
-        .sort((a, b) => (a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : (quadrantRank[a.quadrant] ?? 9) - (quadrantRank[b.quadrant] ?? 9)))
+        .filter((t) => t.quadrant === 'do' || (t.due_date && t.due_date <= today))
+        .map((t, i) => ({ t, i, rank: t.due_date && t.due_date < today ? 0 : t.due_date === today ? 1 : 2 }))
+        .sort((a, b) => a.rank - b.rank || (a.rank === 0 && a.t.due_date !== b.t.due_date ? (a.t.due_date < b.t.due_date ? -1 : 1) : a.i - b.i))
+        .map((x) => x.t)
     : null;
 
   async function handleTodoDone(item) {
@@ -522,28 +526,26 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
             )}
           </Card>
 
-          <Card title="The Board" color={BOARD_COLOR} count={boardTasks ? boardTasks.length : null} onOpen={() => onNavigate('tasks')}>
-            {!boardTasks ? (
-              <Empty>Loading…</Empty>
-            ) : boardTasks.length === 0 ? (
-              <Empty>No board tasks due today.</Empty>
-            ) : (
-              boardTasks.map((task) => {
+          {/* Nothing to show means no card at all — an empty "nothing here"
+              box is just noise on a page meant for a quick read. */}
+          {boardTasks && boardTasks.length > 0 && (
+          <Card title="The Board" color={BOARD_COLOR} count={boardTasks.length} onOpen={() => onNavigate('tasks')}>
+            {boardTasks.map((task) => {
                 const q = QUADRANT_BY_KEY[task.quadrant] || QUADRANTS[0];
                 return (
                   <Row key={task.id} left={<CheckCircle checked={false} color={q.color} label={`Complete: ${task.title}`} onClick={() => handleTaskDone(task)} />}>
                     <div style={{ flex: 1, minWidth: 0, borderLeft: `3px solid ${q.color}`, paddingLeft: 10 }}>
                       <div style={{ fontSize: 16, lineHeight: 1.3, color: 'var(--text)', overflowWrap: 'anywhere' }}>{task.title}</div>
                       <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', marginTop: 2 }}>
-                        {task.due_date < today && <DueTag iso={task.due_date} />}
+                        <DueTag iso={task.due_date} />
                         <span style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>{q.label}</span>
                       </div>
                     </div>
                   </Row>
                 );
-              })
-            )}
+              })}
           </Card>
+          )}
 
           <Card title="Habits" color={HABIT_COLOR} count={habits ? `${habitsDone}/${habits.length}` : null} onOpen={() => onNavigate('habits')}>
             {!habits ? (
