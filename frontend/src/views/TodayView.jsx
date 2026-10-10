@@ -581,8 +581,10 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      <TopBar title="Today" subtitle={subtitle} subtitleStyle={dateStyle} onOpenDrawer={onOpenDrawer}>
-        {isMobile && <div style={dateStyle}>{subtitle}</div>}
+      {/* Phone: the date sits on its own line under the title. Wide screen:
+          it's pushed to the far side of the header, same size as the title. */}
+      <TopBar title="Today" onOpenDrawer={onOpenDrawer}>
+        <div style={isMobile ? dateStyle : { ...dateStyle, fontSize: 18, letterSpacing: '0.02em', textShadow: '0 0 12px var(--accent-glow)' }}>{subtitle}</div>
       </TopBar>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: `${pad}px ${pad}px calc(${pad}px + env(safe-area-inset-bottom))` }}>
