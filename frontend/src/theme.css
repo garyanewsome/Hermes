@@ -13,10 +13,10 @@
 }
 
 [data-view="today"] {
-  --accent: #ffcf4a;
-  --accent-text: #332600;
-  --accent-glow: rgba(255, 207, 74, 0.35);
-  --accent-wash: rgba(255, 207, 74, 0.1);
+  --accent: #ffe81a;
+  --accent-text: #2b2600;
+  --accent-glow: rgba(255, 232, 26, 0.45);
+  --accent-wash: rgba(255, 232, 26, 0.1);
 }
 
 [data-view="chat"] {

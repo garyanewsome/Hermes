@@ -474,11 +474,14 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
   const habitsDone = habits ? habits.filter((h) => h.last_7_days[h.last_7_days.length - 1]?.logged).length : 0;
   const subtitle = parseISODate(today).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   const pad = isMobile ? 14 : 24;
+  // The date is the page's headline, not a caption: accent-colored and
+  // sized up so it reads as part of the title.
+  const dateStyle = { fontSize: 16, fontWeight: 600, color: 'var(--accent)', textShadow: '0 0 10px var(--accent-glow)' };
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      <TopBar title="Today" subtitle={subtitle} onOpenDrawer={onOpenDrawer}>
-        {isMobile && <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>{subtitle}</div>}
+      <TopBar title="Today" subtitle={subtitle} subtitleStyle={dateStyle} onOpenDrawer={onOpenDrawer}>
+        {isMobile && <div style={dateStyle}>{subtitle}</div>}
       </TopBar>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: `${pad}px ${pad}px calc(${pad}px + env(safe-area-inset-bottom))` }}>

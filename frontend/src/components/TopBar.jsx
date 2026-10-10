@@ -1,6 +1,6 @@
 import useIsMobile from '../hooks/useIsMobile.js';
 
-export default function TopBar({ title, subtitle, onOpenDrawer, children }) {
+export default function TopBar({ title, subtitle, subtitleStyle, onOpenDrawer, children }) {
   const isMobile = useIsMobile();
   return (
     <div
@@ -46,7 +46,7 @@ export default function TopBar({ title, subtitle, onOpenDrawer, children }) {
       >
         {title}
       </div>
-      {subtitle && !isMobile && <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{subtitle}</div>}
+      {subtitle && !isMobile && <div style={{ fontSize: 12, color: 'var(--text-dim)', ...subtitleStyle }}>{subtitle}</div>}
       <div style={{ marginLeft: isMobile ? 0 : 'auto', width: isMobile ? '100%' : 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
         {children}
       </div>
