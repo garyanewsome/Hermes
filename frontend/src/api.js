@@ -171,6 +171,13 @@ export async function listHabits() {
   return data.habits;
 }
 
+// Every logged date for one habit ({id, name, today, dates: ['YYYY-MM-DD']}).
+export async function getHabitHistory(habitId) {
+  const res = await apiFetch(`/habits/${habitId}/history`);
+  if (!res.ok) throw new Error(`History failed (${res.status})`);
+  return res.json();
+}
+
 export async function logHabit(name) {
   const res = await apiFetch('/habits/log', {
     method: 'POST',

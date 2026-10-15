@@ -460,6 +460,14 @@ def get_habits():
     return {"habits": planner_db.list_habits_with_streaks()}
 
 
+@app.get("/habits/{habit_id}/history")
+def get_habit_history(habit_id: int):
+    history = planner_db.habit_history(habit_id)
+    if history is None:
+        raise HTTPException(status_code=404, detail="No such habit")
+    return history
+
+
 @app.post("/habits/log")
 def post_habit_log(request: HabitLogRequest):
     planner_db.log_habit(request.name)

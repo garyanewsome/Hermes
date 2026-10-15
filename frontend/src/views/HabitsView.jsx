@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
 import { deleteHabit, listHabits, logHabit, setHabitDay } from '../api.js';
 import useIsMobile from '../hooks/useIsMobile.js';
+import HabitCalendarPopover from '../components/HabitCalendarPopover.jsx';
 
 function Dot({ day, onToggle }) {
   return (
@@ -68,6 +69,7 @@ export default function HabitsView({ onOpenDrawer }) {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(null); // habit, or null
+  const [calendarHabit, setCalendarHabit] = useState(null); // habit whose history is open, or null
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -133,7 +135,32 @@ export default function HabitsView({ onOpenDrawer }) {
               gap: isMobile ? 10 : 16,
             }}
           >
-            <div style={{ width: isMobile ? '100%' : 140, fontSize: 14, fontWeight: 600, color: h.streak > 0 ? 'var(--text)' : '#c7c8cc' }}>{h.name}</div>
+            <button
+              type="button"
+              onClick={() => setCalendarHabit(h)}
+              aria-label={`${h.name}: view history`}
+              title="View history"
+              style={{
+                width: isMobile ? '100%' : 140,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                background: 'transparent',
+                border: 'none',
+                padding: 0,
+                textAlign: 'left',
+                fontSize: 14,
+                fontWeight: 600,
+                color: h.streak > 0 ? 'var(--text)' : '#c7c8cc',
+                cursor: 'pointer',
+              }}
+            >
+              <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{h.name}</span>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, color: 'var(--text-faint)' }} aria-hidden="true">
+                <rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.3" />
+                <path d="M2 6.5h12M5.5 1.8v2.4M10.5 1.8v2.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              </svg>
+            </button>
             <div style={{ display: 'flex', gap: 6 }}>
               {h.last_7_days.map((day) => (
                 <Dot key={day.date} day={day} onToggle={(date, logged) => handleToggleDay(h.id, date, logged)} />
@@ -205,6 +232,8 @@ export default function HabitsView({ onOpenDrawer }) {
           </button>
         )}
       </div>
+
+      {calendarHabit && <HabitCalendarPopover habit={calendarHabit} onClose={() => setCalendarHabit(null)} onChanged={refresh} />}
 
       {confirmingDelete && (
         <ConfirmDeleteHabit habit={confirmingDelete} onCancel={() => setConfirmingDelete(null)} onConfirm={handleConfirmDelete} />

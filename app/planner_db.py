@@ -390,6 +390,26 @@ def habit_streak(name: str) -> int:
     return streak
 
 
+def habit_history(habit_id: int) -> dict | None:
+    """Every date this habit was logged, for the calendar popup. `today` is
+    the app's own timezone-aware date so the calendar agrees with the streak
+    about which day it is. None if the habit doesn't exist."""
+    with _connect() as conn:
+        habit = conn.execute("SELECT id, name FROM habits WHERE id = %s", (habit_id,)).fetchone()
+        if habit is None:
+            return None
+        rows = conn.execute(
+            "SELECT logged_date FROM habit_logs WHERE habit_id = %s ORDER BY logged_date",
+            (habit_id,),
+        ).fetchall()
+    return {
+        "id": habit["id"],
+        "name": habit["name"],
+        "today": _today().isoformat(),
+        "dates": [row["logged_date"].isoformat() for row in rows],
+    }
+
+
 def habit_last_n_days(habit_id: int, days: int = 7) -> list[dict]:
     """Real per-day history, oldest to newest (last element is today) — not
     derived from the streak, so a gap earlier in the week shows correctly
