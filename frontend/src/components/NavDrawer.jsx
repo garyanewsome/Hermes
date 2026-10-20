@@ -77,6 +77,24 @@ const ITEMS = [
       </svg>
     ),
   },
+  {
+    // Not a Hermes view: opens the Kavita library (books/PDFs) in a new tab.
+    // Same host you reached Hermes on, so it works unchanged on the LAN and
+    // over Tailscale. (The .home.local ingress name only routes Hermes
+    // itself, so fall back to the server's LAN address for that one.)
+    key: 'library',
+    label: 'Library',
+    external: () => {
+      const host = window.location.hostname.endsWith('.home.local') ? '192.168.1.157' : window.location.hostname;
+      return `http://${host}:5000`;
+    },
+    icon: (color) => (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M2.5 3.2c1.9-.5 3.7-.3 5.5.8v9c-1.8-1.1-3.6-1.3-5.5-.8v-9z" stroke={color} strokeWidth="1.3" strokeLinejoin="round" />
+        <path d="M13.5 3.2c-1.9-.5-3.7-.3-5.5.8v9c1.8-1.1 3.6-1.3 5.5-.8v-9z" stroke={color} strokeWidth="1.3" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
 ];
 
 function StarIcon({ color }) {
@@ -126,7 +144,11 @@ export default function NavDrawer({ open, activeView, onNavigate, onClose, todoA
             <button
               key={item.key}
               onClick={() => {
-                onNavigate(item.key);
+                if (item.external) {
+                  window.open(item.external(), '_blank', 'noopener');
+                } else {
+                  onNavigate(item.key);
+                }
                 onClose();
               }}
               style={{
@@ -147,6 +169,11 @@ export default function NavDrawer({ open, activeView, onNavigate, onClose, todoA
             >
               {item.icon(color)}
               {item.label}
+              {item.external && (
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true" style={{ marginLeft: -4, opacity: 0.6 }}>
+                  <path d="M4.5 2.5H2.5v7h7v-2M6.5 2.5h3v3M9.5 2.5L5.5 6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
               {item.key === 'todo' && todoAttention.overdue > 0 && (
                 <span
                   title={`${todoAttention.overdue} item${todoAttention.overdue === 1 ? '' : 's'} overdue`}

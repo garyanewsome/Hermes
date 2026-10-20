@@ -1,0 +1,30 @@
+# Kavita — self-hosted reader for the books/PDFs you keep on the homelab
+# (EPUB, PDF, comics). Reading progress follows you between devices.
+#
+# Runs on the host (like SearXNG/Hindsight), not in K3s. Reachable at
+# http://homelab:5000 (or http://100.110.64.46:5000) from any device on the
+# tailnet, at home or away, and at http://192.168.1.157:5000 on the LAN.
+# Never port-forward it to the internet.
+#
+# Books live in /mnt/storage/books — the same Samba share you already mount
+# (\\homelab\storage\books), so adding a book is just copying a file in.
+# Kavita's own database/covers live in /mnt/storage/kavita-data.
+#
+# Setup on the homelab:
+#   mkdir -p ~/kavita /mnt/storage/books /mnt/storage/kavita-data
+#   cp docker-compose.yml ~/kavita/ && cd ~/kavita && docker compose up -d
+# Then open http://homelab:5000, create the admin account, and add a library
+# pointing at /books.
+services:
+  kavita:
+    image: jvmilazz0/kavita:latest
+    container_name: kavita
+    restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      - TZ=America/New_York
+    ports:
+      - "5000:5000"
+    volumes:
+      - /mnt/storage/books:/books
+      - /mnt/storage/kavita-data:/kavita/config
