@@ -1,0 +1,32 @@
+# systemd unit for homelab_status.py (read-only status JSON for Hermes'
+# System page, port 8190, LAN/tailnet only).
+#
+# One-time setup on the homelab (needs sudo once; nothing after that):
+#
+#   mkdir -p ~/statusd && cp homelab_status.py ~/statusd/
+#   sudo cp homelab-status.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now homelab-status
+#
+# Optional, for the K3s pod/cronjob view: allow exactly these two read-only
+# commands without a password (nothing else):
+#
+#   sudo tee /etc/sudoers.d/homelab-status >/dev/null <<'RULE'
+#   garyanewsome ALL=(root) NOPASSWD: /usr/local/bin/k3s kubectl get pods -A -o json, /usr/local/bin/k3s kubectl get cronjobs -A -o json
+#   RULE
+#   sudo chmod 440 /etc/sudoers.d/homelab-status && sudo visudo -cf /etc/sudoers.d/homelab-status
+[Unit]
+Description=Homelab status endpoint for Hermes
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=garyanewsome
+Group=garyanewsome
+SupplementaryGroups=docker
+ExecStart=/usr/bin/python3 /home/garyanewsome/statusd/homelab_status.py
+Restart=on-failure
+RestartSec=5
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

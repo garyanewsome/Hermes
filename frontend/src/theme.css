@@ -19,6 +19,13 @@
   --accent-wash: rgba(255, 232, 26, 0.1);
 }
 
+[data-view="system"] {
+  --accent: #4da3ff;
+  --accent-text: #021a33;
+  --accent-glow: rgba(77, 163, 255, 0.4);
+  --accent-wash: rgba(77, 163, 255, 0.1);
+}
+
 [data-view="chat"] {
   --accent: #2ee6ff;
   --accent-text: #04222b;

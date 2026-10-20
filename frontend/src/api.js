@@ -272,6 +272,13 @@ export async function skipTodoItem(itemId) {
   return res.json();
 }
 
+// Host + service status for the System page.
+export async function getSystem() {
+  const res = await apiFetch('/system');
+  if (!res.ok) throw new Error(`System status failed (${res.status})`);
+  return res.json();
+}
+
 export async function getWeather() {
   const res = await apiFetch('/weather');
   if (!res.ok) throw new Error(`Weather failed (${res.status})`);

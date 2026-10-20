@@ -8,9 +8,10 @@ import HabitsView from './views/HabitsView.jsx';
 import TodoView from './views/TodoView.jsx';
 import NotesView from './views/NotesView.jsx';
 import SketchView from './views/SketchView.jsx';
+import SystemView from './views/SystemView.jsx';
 import { checkAuth, pingHealth } from './api.js';
 
-const VIEWS = ['today', 'chat', 'tasks', 'todo', 'notes', 'habits', 'sketch'];
+const VIEWS = ['today', 'chat', 'tasks', 'todo', 'notes', 'habits', 'sketch', 'system'];
 const LAST_VIEW_KEY = 'hermes:lastView';
 
 function initialView() {
@@ -136,6 +137,9 @@ export default function App() {
       </div>
       <div style={{ display: view === 'sketch' ? 'contents' : 'none' }}>
         <SketchView onOpenDrawer={() => setDrawerOpen(true)} />
+      </div>
+      <div style={{ display: view === 'system' ? 'contents' : 'none' }}>
+        <SystemView onOpenDrawer={() => setDrawerOpen(true)} active={view === 'system'} />
       </div>
 
       <NavDrawer open={drawerOpen} activeView={view} onNavigate={setView} onClose={() => setDrawerOpen(false)} todoAttention={todoAttention} />

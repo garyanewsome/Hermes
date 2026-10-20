@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import audio, auth, documents, weather
+from app import audio, auth, documents, system_status, weather
 from app.chat import list_models, run_chat_stream
 from app.config import UPLOADS_DIR
 from app.db import (
@@ -561,6 +561,11 @@ def skip_todo_item(item_id: int):
 def remove_todo_item(item_id: int):
     planner_db.delete_todo_item(item_id)
     return {"status": "ok"}
+
+
+@app.get("/system")
+def get_system():
+    return system_status.get_system()
 
 
 @app.get("/weather")

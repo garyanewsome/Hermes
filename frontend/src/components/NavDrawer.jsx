@@ -78,6 +78,17 @@ const ITEMS = [
     ),
   },
   {
+    key: 'system',
+    label: 'System',
+    icon: (color) => (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="1.8" y="2.5" width="12.4" height="8.2" rx="1.6" stroke={color} strokeWidth="1.3" />
+        <path d="M4 7.6h1.7l1.1-2 1.6 3.4 1.1-1.4H12" stroke={color} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M5.5 13.5h5M8 10.7v2.8" stroke={color} strokeWidth="1.3" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
     // Not a Hermes view: opens the Kavita library (books/PDFs) in a new tab.
     // Same host you reached Hermes on, so it works unchanged on the LAN and
     // over Tailscale. (The .home.local ingress name only routes Hermes

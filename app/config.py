@@ -36,6 +36,13 @@ HINDSIGHT_BANK_ID = os.environ.get("HINDSIGHT_BANK_ID", "vst-test")
 # works from a local run and from the pod.
 SEARXNG_URL = os.environ.get("SEARXNG_URL", "http://192.168.1.157:8180")
 
+# The read-only host status service (statusd/homelab_status.py) behind the
+# System page, plus Kavita and images-after-dark, which the page only
+# health-checks.
+SYSTEM_STATUS_URL = os.environ.get("SYSTEM_STATUS_URL", "http://192.168.1.157:8190")
+KAVITA_URL = os.environ.get("KAVITA_URL", "http://192.168.1.157:5000")
+IMAGES_AFTER_DARK_URL = os.environ.get("IMAGES_AFTER_DARK_URL", "http://192.168.1.157:8200")
+
 DB_PATH = os.environ.get("DB_PATH", "./hermes.db")
 
 # Chat attachments (images, later documents) — reuses the same PVC as the
