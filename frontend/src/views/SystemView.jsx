@@ -46,6 +46,17 @@ function cronPeriodSeconds(schedule) {
   return 7 * 86400;
 }
 
+// A failed pod left behind by a scheduled job (K3s keeps the last failed run
+// around) stops being a problem once a later run of the same job has
+// succeeded. Job pods are named <cronjob>-<scheduled minute>-<suffix>.
+function isPastFailure(pod, cronjobs = []) {
+  if (pod.ok) return false;
+  const m = /^(.*)-\d{6,}-[a-z0-9]+$/.exec(pod.name);
+  if (!m) return false;
+  const job = cronjobs.find((j) => j.namespace === pod.namespace && j.name === m[1]);
+  return Boolean(job && job.last_success_age_seconds != null && job.last_success_age_seconds < pod.age_seconds);
+}
+
 // ---- derived health -------------------------------------------------------
 
 function findIssues(data) {
@@ -76,7 +87,7 @@ function findIssues(data) {
       else if (c.unhealthy) issues.push({ level: 'bad', text: `Container ${c.name} is unhealthy` });
     }
     for (const p of k3s?.pods || []) {
-      if (!p.ok) issues.push({ level: 'bad', text: `Pod ${p.name} is ${p.reason || p.phase}` });
+      if (!p.ok && !isPastFailure(p, k3s.cronjobs)) issues.push({ level: 'bad', text: `Pod ${p.name} is ${p.reason || p.phase}` });
     }
     for (const j of k3s?.cronjobs || []) {
       if (j.suspended) continue;
@@ -329,15 +340,22 @@ function ContainersCard({ agent, desktop }) {
         <Muted>Pod view needs a one-time setup: {k3s.error}.</Muted>
       ) : k3s?.pods?.length ? (
         <div>
-          {k3s.pods.map((p) => (
-            <Row
-              key={`${p.namespace}/${p.name}`}
-              left={p.name}
-              sub={`${p.namespace}${p.reason ? ` · ${p.reason}` : ''}${p.restarts ? ` · ${p.restarts} restarts` : ''}`}
-              color={p.ok ? GOOD : BAD}
-              right={`${p.phase} ${p.ready} · ${fmtDuration(p.age_seconds)}`}
-            />
-          ))}
+          {k3s.pods.map((p) => {
+            const past = isPastFailure(p, k3s.cronjobs);
+            return (
+              <Row
+                key={`${p.namespace}/${p.name}`}
+                left={p.name}
+                sub={
+                  past
+                    ? `${p.namespace} · failed earlier; later runs succeeded`
+                    : `${p.namespace}${p.reason ? ` · ${p.reason}` : ''}${p.restarts ? ` · ${p.restarts} restarts` : ''}`
+                }
+                color={p.ok ? GOOD : past ? 'var(--text-faint)' : BAD}
+                right={`${p.phase} ${p.ready} · ${fmtDuration(p.age_seconds)}`}
+              />
+            );
+          })}
         </div>
       ) : (
         <Muted>No pods.</Muted>
@@ -460,24 +478,56 @@ export default function SystemView({ onOpenDrawer, active }) {
             </section>
           )}
 
-          {data && (
-            <div style={desktop ? { columnWidth: 320, columnGap: 18 } : { display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {agent ? (
-                <>
-                  <OverviewCard agent={agent} desktop={desktop} />
-                  <StorageCard agent={agent} desktop={desktop} />
-                  <GpuCard agent={agent} ollamaLoaded={data.ollama_loaded} desktop={desktop} />
-                </>
-              ) : (
+          {data && (() => {
+            const small = agent ? (
+              <>
+                <OverviewCard agent={agent} desktop={desktop} />
+                <StorageCard agent={agent} desktop={desktop} />
+                <GpuCard agent={agent} ollamaLoaded={data.ollama_loaded} desktop={desktop} />
+                <ServicesCard agent={agent} probes={data.probes} desktop={desktop} />
+                <BackupsCard agent={agent} desktop={desktop} />
+              </>
+            ) : (
+              <>
                 <Card title="Server" desktop={desktop}>
                   <Muted>No host details: the status service on the homelab isn’t answering, so only the checks below are available.</Muted>
                 </Card>
-              )}
-              <ServicesCard agent={agent} probes={data.probes} desktop={desktop} />
-              {agent && <ContainersCard agent={agent} desktop={desktop} />}
-              {agent && <BackupsCard agent={agent} desktop={desktop} />}
-            </div>
-          )}
+                <ServicesCard agent={agent} probes={data.probes} desktop={desktop} />
+              </>
+            );
+            if (!desktop) {
+              // Phone: one column, in reading order.
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {agent ? (
+                    <>
+                      <OverviewCard agent={agent} desktop={false} />
+                      <StorageCard agent={agent} desktop={false} />
+                      <GpuCard agent={agent} ollamaLoaded={data.ollama_loaded} desktop={false} />
+                      <ServicesCard agent={agent} probes={data.probes} desktop={false} />
+                      <ContainersCard agent={agent} desktop={false} />
+                      <BackupsCard agent={agent} desktop={false} />
+                    </>
+                  ) : (
+                    small
+                  )}
+                </div>
+              );
+            }
+            // Wide screen: the smaller cards flow through two columns on the
+            // left, and Containers (the tall one) gets the right-hand column
+            // to itself. The right column drops below when there isn't room.
+            return (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'flex-start' }}>
+                <div style={{ flex: '2 1 640px', minWidth: 0, columnWidth: 300, columnGap: 18 }}>{small}</div>
+                {agent && (
+                  <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+                    <ContainersCard agent={agent} desktop />
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {data && loadedAt && <Muted>Updated {fmtAge((Date.now() - loadedAt) / 1000)} · refreshes every 15 seconds while this page is open.</Muted>}
         </div>
