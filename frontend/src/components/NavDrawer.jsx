@@ -80,6 +80,7 @@ const ITEMS = [
   {
     key: 'system',
     label: 'System',
+    pinned: true,
     icon: (color) => (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
         <rect x="1.8" y="2.5" width="12.4" height="8.2" rx="1.6" stroke={color} strokeWidth="1.3" />
@@ -126,6 +127,67 @@ function OverdueMark({ color }) {
 
 export default function NavDrawer({ open, activeView, onNavigate, onClose, todoAttention }) {
   if (!open) return null;
+  const renderItem = (item) => {
+      const active = item.key === activeView;
+      const color = active ? 'var(--accent)' : '#c7c8cc';
+      return (
+        <button
+          key={item.key}
+          onClick={() => {
+            if (item.external) {
+              window.open(item.external(), '_blank', 'noopener');
+            } else {
+              onNavigate(item.key);
+            }
+            onClose();
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '12px 20px',
+            background: active ? 'var(--accent-wash)' : 'transparent',
+            borderLeft: active ? '2px solid var(--accent)' : '2px solid transparent',
+            borderTop: 'none',
+            borderRight: 'none',
+            borderBottom: 'none',
+            color,
+            fontSize: 14,
+            fontWeight: active ? 600 : 400,
+            textAlign: 'left',
+          }}
+        >
+          {item.icon(color)}
+          {item.label}
+          {item.external && (
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true" style={{ marginLeft: -4, opacity: 0.6 }}>
+              <path d="M4.5 2.5H2.5v7h7v-2M6.5 2.5h3v3M9.5 2.5L5.5 6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+          {item.key === 'todo' && todoAttention.overdue > 0 && (
+            <span
+              title={`${todoAttention.overdue} item${todoAttention.overdue === 1 ? '' : 's'} overdue`}
+              style={{ display: 'flex', marginLeft: -4 }}
+            >
+              <OverdueMark color="#ff6b6b" />
+            </span>
+          )}
+          {item.key === 'todo' && todoAttention.dueToday > 0 && (
+            <span
+              title={`${todoAttention.dueToday} item${todoAttention.dueToday === 1 ? '' : 's'} due today`}
+              style={{ display: 'flex', marginLeft: todoAttention.overdue > 0 ? -6 : -4 }}
+            >
+              {/* Hardcoded to Todo's own accent (not the `color` var
+                  above, which tracks whichever view is currently
+                  active) so it reads as "Todo" branded regardless of
+                  what you're looking at right now. */}
+              <StarIcon color="#b46bff" />
+            </span>
+          )}
+        </button>
+      );
+  };
+
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 40 }} />
@@ -148,66 +210,13 @@ export default function NavDrawer({ open, activeView, onNavigate, onClose, todoA
         <div style={{ padding: '0 20px 16px', fontSize: 12, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
           Views
         </div>
-        {ITEMS.map((item) => {
-          const active = item.key === activeView;
-          const color = active ? 'var(--accent)' : '#c7c8cc';
-          return (
-            <button
-              key={item.key}
-              onClick={() => {
-                if (item.external) {
-                  window.open(item.external(), '_blank', 'noopener');
-                } else {
-                  onNavigate(item.key);
-                }
-                onClose();
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: '12px 20px',
-                background: active ? 'var(--accent-wash)' : 'transparent',
-                borderLeft: active ? '2px solid var(--accent)' : '2px solid transparent',
-                borderTop: 'none',
-                borderRight: 'none',
-                borderBottom: 'none',
-                color,
-                fontSize: 14,
-                fontWeight: active ? 600 : 400,
-                textAlign: 'left',
-              }}
-            >
-              {item.icon(color)}
-              {item.label}
-              {item.external && (
-                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true" style={{ marginLeft: -4, opacity: 0.6 }}>
-                  <path d="M4.5 2.5H2.5v7h7v-2M6.5 2.5h3v3M9.5 2.5L5.5 6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              )}
-              {item.key === 'todo' && todoAttention.overdue > 0 && (
-                <span
-                  title={`${todoAttention.overdue} item${todoAttention.overdue === 1 ? '' : 's'} overdue`}
-                  style={{ display: 'flex', marginLeft: -4 }}
-                >
-                  <OverdueMark color="#ff6b6b" />
-                </span>
-              )}
-              {item.key === 'todo' && todoAttention.dueToday > 0 && (
-                <span
-                  title={`${todoAttention.dueToday} item${todoAttention.dueToday === 1 ? '' : 's'} due today`}
-                  style={{ display: 'flex', marginLeft: todoAttention.overdue > 0 ? -6 : -4 }}
-                >
-                  {/* Hardcoded to Todo's own accent (not the `color` var
-                      above, which tracks whichever view is currently
-                      active) so it reads as "Todo" branded regardless of
-                      what you're looking at right now. */}
-                  <StarIcon color="#b46bff" />
-                </span>
-              )}
-            </button>
-          );
-        })}
+        {ITEMS.filter((item) => !item.pinned).map(renderItem)}
+
+        {/* Pinned to the bottom, like a settings link: marginTop:auto pushes
+            it to the end of the drawer, below a thin divider. */}
+        <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border)', paddingTop: 8, paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          {ITEMS.filter((item) => item.pinned).map(renderItem)}
+        </div>
       </div>
     </>
   );
