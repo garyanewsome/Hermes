@@ -311,75 +311,149 @@ function ServicesCard({ agent, probes, desktop }) {
   );
 }
 
+const EXPANDED_KEY = 'hermes:systemContainersExpanded';
+
+function readExpanded() {
+  try {
+    return localStorage.getItem(EXPANDED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function SectionHeader({ label, summary, color }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
+      <div style={{ fontSize: 12, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
+      <div style={{ fontSize: 12.5, color: color || 'var(--text-dim)' }}>{summary}</div>
+    </div>
+  );
+}
+
+// Shows what needs a look by default (a down container, a failing pod, an
+// overdue job) with a one-line summary per section, and everything on
+// request — the full pod list is long and almost always all green.
 function ContainersCard({ agent, desktop }) {
+  const [expanded, setExpanded] = useState(readExpanded);
   const docker = agent.docker;
   const k3s = agent.k3s;
+
+  function toggle() {
+    const next = !expanded;
+    setExpanded(next);
+    try {
+      localStorage.setItem(EXPANDED_KEY, next ? '1' : '0');
+    } catch {
+      // Storage blocked — the toggle still works for this visit.
+    }
+  }
+
+  const containers = docker?.containers || [];
+  const dockerBad = (c) => c.state !== 'running' || c.unhealthy;
+  const dockerShown = expanded ? containers : containers.filter(dockerBad);
+
+  const pods = k3s?.pods || [];
+  const cronjobs = k3s?.cronjobs || [];
+  const past = pods.filter((p) => isPastFailure(p, cronjobs));
+  const podBad = (p) => !p.ok && !isPastFailure(p, cronjobs);
+  const podsShown = expanded ? pods : pods.filter(podBad);
+  const podProblems = pods.filter(podBad).length;
+
+  const cronStale = (j) => {
+    const limit = cronPeriodSeconds(j.schedule) * 2.5;
+    return !j.suspended && (j.last_success_age_seconds == null ? j.last_schedule_age_seconds != null : j.last_success_age_seconds > limit);
+  };
+  const cronShown = expanded ? cronjobs : cronjobs.filter(cronStale);
+  const cronProblems = cronjobs.filter(cronStale).length;
+
+  const dockerProblems = containers.filter(dockerBad).length;
+  const hiddenCount = containers.length - dockerShown.length + (pods.length - podsShown.length) + (cronjobs.length - cronShown.length);
+
   return (
     <Card title="Containers" desktop={desktop}>
-      <div style={{ fontSize: 12, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Docker</div>
+      <SectionHeader
+        label="Docker"
+        summary={docker?.error ? '' : dockerProblems ? `${dockerProblems} of ${containers.length} need attention` : `all ${containers.length} running`}
+        color={dockerProblems ? BAD : GOOD}
+      />
       {docker?.error ? (
         <Muted>{docker.error}</Muted>
-      ) : docker?.containers?.length ? (
-        <div>
-          {docker.containers.map((c) => (
-            <Row
-              key={c.name}
-              left={c.name}
-              sub={c.image}
-              color={c.state === 'running' && !c.unhealthy ? GOOD : BAD}
-              right={c.status}
-            />
-          ))}
-        </div>
       ) : (
-        <Muted>No containers.</Muted>
+        dockerShown.length > 0 && (
+          <div>
+            {dockerShown.map((c) => (
+              <Row key={c.name} left={c.name} sub={c.image} color={dockerBad(c) ? BAD : GOOD} right={c.status} />
+            ))}
+          </div>
+        )
       )}
 
-      <div style={{ fontSize: 12, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 4 }}>K3s pods</div>
+      <SectionHeader
+        label="K3s pods"
+        summary={
+          k3s?.error
+            ? ''
+            : `${podProblems ? `${podProblems} of ${pods.length} need attention` : past.length ? `${pods.length - past.length} healthy` : `all ${pods.length} healthy`}${past.length ? ` · ${past.length} earlier failure${past.length === 1 ? '' : 's'} (since succeeded)` : ''}`
+        }
+        color={podProblems ? BAD : GOOD}
+      />
       {k3s?.error ? (
         <Muted>Pod view needs a one-time setup: {k3s.error}.</Muted>
-      ) : k3s?.pods?.length ? (
-        <div>
-          {k3s.pods.map((p) => {
-            const past = isPastFailure(p, k3s.cronjobs);
-            return (
-              <Row
-                key={`${p.namespace}/${p.name}`}
-                left={p.name}
-                sub={
-                  past
-                    ? `${p.namespace} · failed earlier; later runs succeeded`
-                    : `${p.namespace}${p.reason ? ` · ${p.reason}` : ''}${p.restarts ? ` · ${p.restarts} restarts` : ''}`
-                }
-                color={p.ok ? GOOD : past ? 'var(--text-faint)' : BAD}
-                right={`${p.phase} ${p.ready} · ${fmtDuration(p.age_seconds)}`}
-              />
-            );
-          })}
-        </div>
       ) : (
-        <Muted>No pods.</Muted>
-      )}
-
-      {k3s?.cronjobs?.length > 0 && (
-        <>
-          <div style={{ fontSize: 12, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 4 }}>Scheduled jobs</div>
+        podsShown.length > 0 && (
           <div>
-            {k3s.cronjobs.map((j) => {
-              const limit = cronPeriodSeconds(j.schedule) * 2.5;
-              const stale = !j.suspended && (j.last_success_age_seconds == null ? j.last_schedule_age_seconds != null : j.last_success_age_seconds > limit);
+            {podsShown.map((p) => {
+              const wasFailure = isPastFailure(p, cronjobs);
               return (
                 <Row
-                  key={`${j.namespace}/${j.name}`}
-                  left={j.name}
-                  sub={j.schedule}
-                  color={j.suspended ? 'var(--text-faint)' : stale ? WARN : GOOD}
-                  right={j.suspended ? 'suspended' : `ok ${fmtAge(j.last_success_age_seconds)}`}
+                  key={`${p.namespace}/${p.name}`}
+                  left={p.name}
+                  sub={
+                    wasFailure
+                      ? `${p.namespace} · failed earlier; later runs succeeded`
+                      : `${p.namespace}${p.reason ? ` · ${p.reason}` : ''}${p.restarts ? ` · ${p.restarts} restarts` : ''}`
+                  }
+                  color={p.ok ? GOOD : wasFailure ? 'var(--text-faint)' : BAD}
+                  right={`${p.phase} ${p.ready} · ${fmtDuration(p.age_seconds)}`}
                 />
               );
             })}
           </div>
+        )
+      )}
+
+      {cronjobs.length > 0 && (
+        <>
+          <SectionHeader
+            label="Scheduled jobs"
+            summary={cronProblems ? `${cronProblems} of ${cronjobs.length} overdue` : `all ${cronjobs.length} on time`}
+            color={cronProblems ? WARN : GOOD}
+          />
+          {cronShown.length > 0 && (
+            <div>
+              {cronShown.map((j) => (
+                <Row
+                  key={`${j.namespace}/${j.name}`}
+                  left={j.name}
+                  sub={j.schedule}
+                  color={j.suspended ? 'var(--text-faint)' : cronStale(j) ? WARN : GOOD}
+                  right={j.suspended ? 'suspended' : `ok ${fmtAge(j.last_success_age_seconds)}`}
+                />
+              ))}
+            </div>
+          )}
         </>
+      )}
+
+      {(expanded || hiddenCount > 0) && (
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={expanded}
+          style={{ alignSelf: 'flex-start', background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--accent)', borderRadius: 8, padding: '6px 12px', fontSize: 13.5 }}
+        >
+          {expanded ? 'Show only what needs attention' : `Show all (${hiddenCount} more)`}
+        </button>
       )}
     </Card>
   );
