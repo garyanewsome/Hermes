@@ -23,7 +23,7 @@ import tempfile
 import httpx
 import numpy as np
 
-from app.audio import transcode_to_wav
+from app.audio import MAX_ANALYSIS_SECONDS, transcode_to_wav
 from app.config import CHAT_MODEL, OLLAMA_HOST
 from app.pod_go_reference import AMPS_CLEAN, AMPS_CRUNCH, AMPS_HIGH_GAIN, CABS_COMMON, EFFECTS_SHORT
 
@@ -225,7 +225,7 @@ def analyze_tone(local_path: str) -> str | None:
     """Best-effort, same contract as documents.extract_text/music.py's
     analysis functions — returns None on anything that fails."""
     with tempfile.NamedTemporaryFile(suffix=".wav") as wav_file:
-        if not transcode_to_wav(local_path, wav_file.name, sample_rate=SAMPLE_RATE):
+        if not transcode_to_wav(local_path, wav_file.name, sample_rate=SAMPLE_RATE, max_seconds=MAX_ANALYSIS_SECONDS):
             return None
         try:
             import essentia.standard as es
@@ -318,7 +318,15 @@ def _synthesize_recommendation(measurements: str) -> str | None:
     try:
         response = httpx.post(
             f"{OLLAMA_HOST}/api/chat",
-            json={"model": CHAT_MODEL, "messages": [{"role": "user", "content": prompt}], "stream": False},
+            json={
+                "model": CHAT_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False,
+                # A 2-3 sentence pick from a short list doesn't need the
+                # model's hidden reasoning pass — measured ~5,700 characters
+                # of it per call, which is most of the wait.
+                "think": False,
+            },
             timeout=120.0,
         )
         response.raise_for_status()

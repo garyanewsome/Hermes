@@ -1,0 +1,24 @@
+# Self-hosted web search for Hermes' web_search tool — queries go out from
+# the homelab's own connection through SearXNG (a metasearch engine that
+# strips identifying details), with no API key or account.
+#
+# Runs on the host (like Hindsight and Iris), not in K3s, so the Hermes pod
+# reaches it at http://<host LAN IP>:8180. LAN-only by design: it has no
+# login, so don't port-forward it.
+#
+# Setup on the homelab:
+#   mkdir -p ~/searxng && cp docker-compose.yml settings.yml ~/searxng/
+#   cd ~/searxng && echo "SEARXNG_SECRET=$(openssl rand -hex 32)" > .env
+#   docker compose up -d
+services:
+  searxng:
+    image: searxng/searxng:latest
+    container_name: searxng
+    restart: unless-stopped
+    ports:
+      - "8180:8080"
+    environment:
+      - SEARXNG_SECRET=${SEARXNG_SECRET}
+      - SEARXNG_BASE_URL=http://localhost:8180/
+    volumes:
+      - ./settings.yml:/etc/searxng/settings.yml:ro

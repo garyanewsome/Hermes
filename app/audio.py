@@ -43,23 +43,49 @@ TRANSCRIBE_PROMPT = (
 )
 
 
-def transcode_to_wav(local_path: str, wav_path: str, sample_rate: int = 16000) -> bool:
+def transcode_to_wav(local_path: str, wav_path: str, sample_rate: int = 16000, max_seconds: int | None = None) -> bool:
     """Shared by transcribe() here and app/music.py's chord/melody analysis
     — ffmpeg transcodes whatever container the browser/upload used (webm,
     mp4, ...) to a plain mono wav, since that's the one format confirmed to
     actually work for Ollama's audio input, and the safest common format
-    for the music-analysis libraries too."""
+    for the music-analysis libraries too. `-vn` drops any video track, so a
+    video file (a .mp4/.mov clip of someone playing) goes through the same
+    path as plain audio. `max_seconds` bounds how much audio is kept, so a
+    long upload can't exhaust memory in the analysis that follows."""
+    cmd = ["ffmpeg", "-y", "-i", local_path, "-vn"]
+    if max_seconds:
+        cmd += ["-t", str(max_seconds)]
+    cmd += ["-ar", str(sample_rate), "-ac", "1", wav_path]
     try:
-        subprocess.run(
-            ["ffmpeg", "-y", "-i", local_path, "-ar", str(sample_rate), "-ac", "1", wav_path],
-            check=True,
-            capture_output=True,
-            timeout=60,
-        )
+        subprocess.run(cmd, check=True, capture_output=True, timeout=180)
         return True
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
         logger.exception("ffmpeg transcode failed for %s", local_path)
         return False
+
+
+def has_video_stream(local_path: str) -> bool:
+    """True if the file has a video track (so it should be offered back to
+    the browser as video, not audio). Best-effort: False on any failure."""
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_type",
+             "-of", "csv=p=0", local_path],
+            check=True, capture_output=True, timeout=30, text=True,
+        )
+        return "video" in out.stdout
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        return False
+
+
+# The longest stretch of an upload the tone/chord/melody analysis will look
+# at. Plenty for a clip or a whole song; bounds memory for a long video.
+MAX_ANALYSIS_SECONDS = 180
+
+# 16 kHz mono 16-bit wav is ~32 KB/s, so this is roughly six minutes — past
+# that, sending the whole thing to the speech model is slow and pointless
+# (a long song or video has no memo to transcribe).
+MAX_TRANSCRIBE_WAV_BYTES = 12_000_000
 
 
 def transcribe(local_path: str) -> str | None:
@@ -71,9 +97,12 @@ def transcribe(local_path: str) -> str | None:
             return None
 
         try:
-            audio_b64 = base64.b64encode(wav_file.read()).decode("ascii")
+            wav_bytes = wav_file.read()
         except OSError:
             return None
+        if len(wav_bytes) > MAX_TRANSCRIBE_WAV_BYTES:
+            return None
+        audio_b64 = base64.b64encode(wav_bytes).decode("ascii")
 
     try:
         response = httpx.post(

@@ -671,7 +671,28 @@ _UPLOAD_KINDS = {
     ".wav": ("audio", "audio/wav"),
     ".mp3": ("audio", "audio/mpeg"),
     ".ogg": ("audio", "audio/ogg"),
+    ".opus": ("audio", "audio/ogg"),
+    ".flac": ("audio", "audio/flac"),
+    ".aac": ("audio", "audio/aac"),
+    ".aif": ("audio", "audio/aiff"),
+    ".aiff": ("audio", "audio/aiff"),
+    # Video files are accepted as "audio" attachments: everything downstream
+    # (speech transcription, tone/chord/melody analysis) only ever wants the
+    # soundtrack, and ffmpeg pulls it out. The mime type is corrected to
+    # video/* at upload time if there's really a picture track, so the chat
+    # can play it back as video.
+    ".mov": ("audio", "video/quicktime"),
+    ".m4v": ("audio", "video/mp4"),
+    ".mkv": ("audio", "video/x-matroska"),
+    ".avi": ("audio", "video/x-msvideo"),
 }
+
+# Extensions that can hold either plain audio or video; probed on upload.
+_MAYBE_VIDEO_MIME = {".mp4": "video/mp4", ".webm": "video/webm"}
+
+# A phone video clip is tens of MB; this stops a runaway upload from filling
+# the PVC or the pod's memory (it is streamed to disk, never held whole).
+MAX_UPLOAD_BYTES = 300 * 1024 * 1024
 
 
 @app.post("/uploads")
@@ -688,8 +709,18 @@ async def upload(file: UploadFile) -> UploadResponse:
     filename = f"{uuid.uuid4()}{ext}"
     os.makedirs(UPLOADS_DIR, exist_ok=True)
     local_path = os.path.join(UPLOADS_DIR, filename)
+    written = 0
     with open(local_path, "wb") as f:
-        f.write(await file.read())
+        while chunk := await file.read(1024 * 1024):
+            written += len(chunk)
+            if written > MAX_UPLOAD_BYTES:
+                f.close()
+                os.remove(local_path)
+                raise HTTPException(status_code=413, detail=f"File is too large (limit {MAX_UPLOAD_BYTES // (1024 * 1024)} MB).")
+            f.write(chunk)
+
+    if kind == "audio" and ext in _MAYBE_VIDEO_MIME and audio.has_video_stream(local_path):
+        mime_type = _MAYBE_VIDEO_MIME[ext]
 
     extracted_text = None
     if kind == "document":

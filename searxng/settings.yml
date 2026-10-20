@@ -1,0 +1,14 @@
+# Layered on top of SearXNG's defaults (engines, categories, ...). Only what
+# Hermes needs is overridden: JSON output on (the tool reads the JSON API)
+# and the bot limiter off (it's LAN-only and Hermes is the only client).
+use_default_settings: true
+
+server:
+  limiter: false
+  image_proxy: false
+
+search:
+  safe_search: 0
+  formats:
+    - html
+    - json

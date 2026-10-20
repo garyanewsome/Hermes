@@ -504,6 +504,8 @@ export default function ChatView({ onOpenDrawer }) {
                           <DocumentIcon />
                           {a.filename || a.original_filename}
                         </div>
+                      ) : a.kind === 'audio' && a.mime_type?.startsWith('video/') ? (
+                        <video key={a.path} controls preload="metadata" src={`/uploads/${a.path}`} style={{ maxWidth: 240, maxHeight: 160, borderRadius: 8 }} />
                       ) : a.kind === 'audio' ? (
                         <audio key={a.path} controls src={`/uploads/${a.path}`} style={{ height: 32, maxWidth: 240 }} />
                       ) : (
@@ -730,7 +732,7 @@ export default function ChatView({ onOpenDrawer }) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif,.pdf,.txt,.md,application/pdf,text/plain,text/markdown,.wav,.mp3,.m4a,.webm,.ogg,audio/*"
+            accept="image/png,image/jpeg,image/webp,image/gif,.pdf,.txt,.md,application/pdf,text/plain,text/markdown,.wav,.mp3,.m4a,.webm,.ogg,.opus,.flac,.aac,.aif,.aiff,.mp4,.mov,.m4v,.mkv,.avi,audio/*,video/*"
             multiple
             onChange={handleFilesSelected}
             style={{ display: 'none' }}
@@ -739,8 +741,8 @@ export default function ChatView({ onOpenDrawer }) {
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            aria-label="Attach image, document, or audio file"
-            title="Attach image, document, or audio file"
+            aria-label="Attach image, document, audio or video file"
+            title="Attach image, document, audio or video file"
             style={{
               flexShrink: 0,
               width: 40,

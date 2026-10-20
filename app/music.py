@@ -9,7 +9,7 @@ handoff dance is needed the way generate_image/research_repo need one.
 import logging
 import tempfile
 
-from app.audio import transcode_to_wav
+from app.audio import MAX_ANALYSIS_SECONDS, transcode_to_wav
 
 logger = logging.getLogger("hermes")
 
@@ -22,7 +22,7 @@ def detect_chords(local_path: str) -> str | None:
     import essentia.standard as es
 
     with tempfile.NamedTemporaryFile(suffix=".wav") as wav_file:
-        if not transcode_to_wav(local_path, wav_file.name, sample_rate=CHORD_SAMPLE_RATE):
+        if not transcode_to_wav(local_path, wav_file.name, sample_rate=CHORD_SAMPLE_RATE, max_seconds=MAX_ANALYSIS_SECONDS):
             return None
         try:
             audio = es.MonoLoader(filename=wav_file.name, sampleRate=CHORD_SAMPLE_RATE)()
@@ -89,7 +89,7 @@ def transcribe_melody(local_path: str) -> str | None:
     from basic_pitch.inference import predict
 
     with tempfile.NamedTemporaryFile(suffix=".wav") as wav_file:
-        if not transcode_to_wav(local_path, wav_file.name, sample_rate=22050):
+        if not transcode_to_wav(local_path, wav_file.name, sample_rate=22050, max_seconds=MAX_ANALYSIS_SECONDS):
             return None
         try:
             _, _, note_events = predict(wav_file.name)

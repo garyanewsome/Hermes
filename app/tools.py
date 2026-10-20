@@ -18,7 +18,8 @@ from app.config import (
     IRIS_URL,
     UPLOADS_DIR,
 )
-from app import db, documents, music, planner_db, tone_analysis
+from app import db, documents, music, planner_db, tone_analysis, web
+from app.pod_go_reference import AMPS_CLEAN, AMPS_CRUNCH, AMPS_HIGH_GAIN, CABS_COMMON, EFFECTS_SHORT
 
 
 def search_vault(query: str) -> str:
@@ -399,6 +400,58 @@ def suggest_pod_go_tone(filename: str | None = None, conversation_id: str | None
         "Couldn't extract usable tone characteristics from that audio — it may be too short, too quiet, "
         "or too noisy to measure."
     )
+
+
+def pod_go_models(gain: str = "crunch", **_ignored) -> str:
+    """The no-audio counterpart to suggest_pod_go_tone: the model has worked
+    out roughly how much gain the target tone has (from what it knows about
+    the artist, a web search, or the user's own description) and asks for the
+    real POD Go model names that fit, instead of inventing plausible-sounding
+    ones. Always includes the modulation/delay/reverb lists (a short ~650
+    characters in total) rather than asking the model which it wants: when it
+    was asked, it recommended effects it hadn't requested a list for. Kept to
+    a short, gain-matched amp list for the same reason as tone_analysis —
+    handing gemma the full catalog broke it."""
+    gain = (gain or "crunch").strip().lower().replace(" ", "_").replace("-", "_")
+    if gain in ("lead", "heavy", "metal", "distorted"):
+        gain = "high_gain"
+    amps = {"clean": AMPS_CLEAN, "crunch": AMPS_CRUNCH, "high_gain": AMPS_HIGH_GAIN}.get(gain)
+    if amps is None:
+        gain, amps = "crunch", AMPS_CRUNCH
+
+    lines = [
+        f"Real POD Go models for a {gain.replace('_', ' ')} tone. This is a best guess from a description, "
+        "not measured from audio — say so. Choose ONLY from these names; never invent one.",
+        "",
+        "Amp models (pick the closest-sounding real amp):",
+        amps,
+        "",
+        "Cab models:",
+        CABS_COMMON,
+    ]
+    # Gain pedals only matter if the tone isn't already clean.
+    if gain != "clean":
+        lines += ["", "Distortion/drive models:", EFFECTS_SHORT["distortion"]]
+    lines += [
+        "",
+        "Modulation models (chorus/flanger/phaser/tremolo):",
+        EFFECTS_SHORT["modulation"],
+        "",
+        "Delay models:",
+        EFFECTS_SHORT["delay"],
+        "",
+        "Reverb models:",
+        EFFECTS_SHORT["reverb"],
+    ]
+    return "\n".join(lines)
+
+
+def web_search(query: str, max_results: int = 5, **_ignored) -> str:
+    return web.search(query, max_results)
+
+
+def read_webpage(url: str, **_ignored) -> str:
+    return web.read_page(url)
 
 
 def transcribe_melody(filename: str | None = None, conversation_id: str | None = None) -> str:
@@ -928,6 +981,64 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "pod_go_models",
+            "description": (
+                "Get the REAL Line 6 POD Go amp, cab and effect model names that fit a "
+                "described guitar tone, so you can recommend a signal chain without an "
+                "audio file. Use when the user asks how to get a song's/artist's/style's "
+                "tone on their POD Go and no recording is attached: decide from what you "
+                "know (or a web search) whether the tone is clean, crunch or high gain, "
+                "then call this and pick from the names it returns (amp, cab and "
+                "effects). Present the result as a best-guess starting point."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "gain": {
+                        "type": "string",
+                        "enum": ["clean", "crunch", "high_gain"],
+                        "description": "How much distortion the target tone has",
+                    },
+                },
+                "required": ["gain"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": (
+                "Search the web. Use for things you don't reliably know or that may have "
+                "changed: what gear/amp/pedals an artist used on a song, product details, "
+                "current facts. Returns titles, links and snippets; use read_webpage on a "
+                "result if you need its full text."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "What to search for, e.g. 'The Midnights Heart Worth Breaking guitar amp pedals'"},
+                    "max_results": {"type": "integer", "description": "How many results (default 5, max 8)"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_webpage",
+            "description": "Fetch one web page (a URL from web_search results or given by the user) and return its text.",
+            "parameters": {
+                "type": "object",
+                "properties": {"url": {"type": "string", "description": "The full http(s) URL"}},
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "transcribe_melody",
             "description": (
                 "Transcribe the melody or riff played in a song or musical audio clip "
@@ -1005,6 +1116,9 @@ TOOL_HANDLERS = {
     "analyze_chords": analyze_chords,
     "transcribe_melody": transcribe_melody,
     "suggest_pod_go_tone": suggest_pod_go_tone,
+    "pod_go_models": pod_go_models,
+    "web_search": web_search,
+    "read_webpage": read_webpage,
 }
 
 
@@ -1038,6 +1152,10 @@ TOOL_GROUPS: dict[str, list[str]] = {
     "repo_research": ["research_repo", "forget_repo"],
     "image": ["generate_image"],
     "attachments": ["read_attachment", "analyze_chords", "transcribe_melody", "suggest_pod_go_tone"],
+    # Guitar-tone questions get the no-audio model lookup plus web search
+    # (to find out what an artist actually played through) together.
+    "pod_go": ["pod_go_models", "web_search", "read_webpage"],
+    "web": ["web_search", "read_webpage"],
 }
 
 GROUP_KEYWORDS: dict[str, list[str]] = {
@@ -1053,6 +1171,11 @@ GROUP_KEYWORDS: dict[str, list[str]] = {
         "chord", "melody", "riff", "transcribe", "notes in this", "tab",
         "amp", "tone", "pod go", "attached", "attachment", "voice memo",
         "that pdf", "that document", "that file", "recording", "song",
+    ],
+    "pod_go": ["pod go", "podgo", "amp model", "guitar tone", "guitar sound", "patch", "preset", "my tone", "this tone", "that tone", "sounds like", "tone similar", "similar tone"],
+    "web": [
+        "search the web", "search online", "search the internet", "web search", "google", "look up", "look it up",
+        "lookup", "online", "internet", "on the web", "find out", "latest", "news about",
     ],
 }
 
