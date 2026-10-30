@@ -61,7 +61,7 @@ function isPastFailure(pod, cronjobs = []) {
 
 function findIssues(data) {
   const issues = [];
-  const { agent, agent_error: agentError, probes = [] } = data;
+  const { agent, agent_error: agentError, probes = [], alerts = [] } = data;
   if (!agent) {
     issues.push({ level: 'bad', text: `Can't reach the host status service${agentError ? ` (${agentError})` : ''}` });
   } else {
@@ -107,6 +107,9 @@ function findIssues(data) {
   for (const p of probes) {
     if (!p.ok) issues.push({ level: 'bad', text: `${p.name} isn’t answering` });
   }
+  // Deep checks (a service can answer and still be broken); these already
+  // carry their own wording.
+  for (const a of alerts) issues.push({ level: a.level, text: a.text });
   return issues;
 }
 

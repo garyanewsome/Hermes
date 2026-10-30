@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import audio, auth, documents, system_status, weather
+from app import audio, auth, documents, health_checks, system_status, weather
 from app.chat import list_models, run_chat_stream
 from app.config import UPLOADS_DIR
 from app.db import (
@@ -44,6 +44,11 @@ except Exception:
     # startup. Individual /tasks, /habits, and tool calls will still fail
     # (and report why) the moment they're actually used.
     logger.exception("planner_db.init_planner_db() failed — tasks/habits will be unavailable until this is fixed")
+
+
+@app.on_event("startup")
+def _start_health_checks():
+    health_checks.start_background()
 
 
 class AttachmentRef(BaseModel):
@@ -565,7 +570,20 @@ def remove_todo_item(item_id: int):
 
 @app.get("/system")
 def get_system():
-    return system_status.get_system()
+    return {**system_status.get_system(), "alerts": health_checks.get_alerts()}
+
+
+@app.get("/alerts")
+def get_alerts():
+    # What the Today page shows: the deep checks above plus any service that
+    # isn't answering. Cheap (cached results + parallel 3s probes) and does
+    # not wait on the host status service the way /system does.
+    probe_alerts = [
+        {"id": f"probe-{p['name']}", "level": "bad", "text": f"{p['name']} isn’t answering"}
+        for p in system_status._probes()
+        if not p["ok"]
+    ]
+    return {"alerts": probe_alerts + health_checks.get_alerts()}
 
 
 @app.get("/weather")

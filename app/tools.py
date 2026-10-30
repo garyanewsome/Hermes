@@ -328,9 +328,35 @@ def write_vault_note(folder: str, filename: str, content: str | None = None, con
         json={"folder": folder, "filename": filename, "content": content},
         timeout=30.0,
     )
+    # 403 is CodebaseSearcher's vault_policy refusing (wrong folder, too
+    # big, daily cap). Its detail says what is allowed, so hand it to the
+    # model as the result rather than raising: the model can then tell the
+    # user, or retry under an allowed folder.
+    if response.status_code == 403:
+        return f"Not saved: {response.json().get('detail', 'refused by the vault write limits')}"
     response.raise_for_status()
     note_path = response.json()["note_path"]
     return f"Saved to the vault at: {note_path}"
+
+
+def suggest_vault_edit(path: str, proposed_content: str, reason: str) -> str:
+    # Existing vault notes are never edited directly. This files a suggestion
+    # note (diff + full proposed text) under Hermes/Suggestions/ for the
+    # user to review in Obsidian. proposed_content is the note's *whole*
+    # new text, since CodebaseSearcher diffs it against the current file.
+    response = httpx.post(
+        f"{CODEBASE_SEARCHER_URL}/suggest_edit",
+        json={"path": path, "proposed_content": proposed_content, "reason": reason},
+        timeout=30.0,
+    )
+    if response.status_code == 403:
+        return f"Not filed: {response.json().get('detail', 'refused by the vault write limits')}"
+    response.raise_for_status()
+    note_path = response.json()["note_path"]
+    return (
+        f"Filed a suggestion at {note_path}. The original note was not changed; "
+        f"the user reviews and applies it in Obsidian."
+    )
 
 
 def read_attachment(filename: str | None = None, conversation_id: str | None = None) -> str:
@@ -878,6 +904,9 @@ TOOLS = [
                 "path like '10 Development/Tech Plans'. Not for codebase research findings — "
                 "research_repo already writes those itself. Always creates a new file; never "
                 "overwrites an existing one (auto-suffixes on a name collision instead). "
+                "Notes can go in any vault folder except hidden ones (starting with '.'), "
+                "and only as .md files. Changing an existing note is a different "
+                "tool: suggest_vault_edit. "
                 "Omit `content` whenever you're saving something you (the assistant) already "
                 "wrote earlier in this conversation — it saves your actual last message "
                 "byte-for-byte, which is faster and safer than retyping it."
@@ -917,6 +946,39 @@ TOOLS = [
                     },
                 },
                 "required": ["folder", "filename"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "suggest_vault_edit",
+            "description": (
+                "Propose a change to a note that already exists in the user's Obsidian vault. "
+                "This never edits the note: it files a suggestion (a diff plus the full proposed "
+                "text) for the user to review and apply themselves. Use it for 'fix the typo in "
+                "my X note', 'add this to my plan', 'tidy that note up'. Use search_vault or "
+                "list_notes first to find the note's exact path and read its current text, "
+                "because proposed_content must be the note's WHOLE text after your change, not "
+                "just the changed part. To create a brand-new note use write_vault_note."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Vault-relative path of the existing note, e.g. '10 Development/Tech Plans/Audio Analyzer.md'.",
+                    },
+                    "proposed_content": {
+                        "type": "string",
+                        "description": "The complete text the note should have after the change.",
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "One or two sentences on what changed and why, shown at the top of the suggestion.",
+                    },
+                },
+                "required": ["path", "proposed_content", "reason"],
             },
         },
     },
@@ -1112,6 +1174,7 @@ TOOL_HANDLERS = {
     "research_repo": research_repo,
     "forget_repo": forget_repo,
     "write_vault_note": write_vault_note,
+    "suggest_vault_edit": suggest_vault_edit,
     "read_attachment": read_attachment,
     "analyze_chords": analyze_chords,
     "transcribe_melody": transcribe_melody,
@@ -1143,7 +1206,7 @@ TOOL_HANDLERS = {
 # never existed at all — a much milder failure than the full-catalog
 # hallucinated-tool-call behavior this replaces.
 TOOL_GROUPS: dict[str, list[str]] = {
-    "vault": ["search_vault", "list_notes", "write_vault_note"],
+    "vault": ["search_vault", "list_notes", "write_vault_note", "suggest_vault_edit"],
     "vst_memory": ["save_project_memory", "recall_project_memory"],
     "board": ["add_task", "list_tasks", "complete_task"],
     "habits": ["log_habit", "habit_status"],

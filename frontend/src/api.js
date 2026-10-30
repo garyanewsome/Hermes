@@ -279,6 +279,14 @@ export async function getSystem() {
   return res.json();
 }
 
+// Problems worth interrupting Today for: services not answering, and the deep
+// checks in app/health_checks.py (e.g. Hindsight can't extract memories).
+export async function getAlerts() {
+  const res = await apiFetch('/alerts');
+  if (!res.ok) throw new Error(`Alerts failed (${res.status})`);
+  return (await res.json()).alerts;
+}
+
 export async function getWeather() {
   const res = await apiFetch('/weather');
   if (!res.ok) throw new Error(`Weather failed (${res.status})`);

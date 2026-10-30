@@ -4,6 +4,7 @@ import useIsMobile from '../hooks/useIsMobile.js';
 import {
   completeTask,
   getTodoAgenda,
+  getAlerts,
   getWeather,
   listHabits,
   listTasks,
@@ -158,6 +159,36 @@ function Card({ title, color, count, onOpen, desktop, children }) {
         )}
       </div>
       {children}
+    </section>
+  );
+}
+
+// Only renders when something is wrong. Shown above the weather so a broken
+// service is the first thing seen, not something to go looking for.
+function AlertsBanner({ alerts, onOpen }) {
+  if (!alerts || alerts.length === 0) return null;
+  const color = alerts.some((a) => a.level === 'bad') ? '#ff5d6c' : '#ffb02e';
+  return (
+    <section
+      role="alert"
+      style={{ background: 'var(--panel)', border: `1px solid ${color}`, borderRadius: 14, padding: '12px 16px', boxShadow: `0 0 12px ${color}33` }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color }}>
+          {alerts.length === 1 ? '1 thing needs attention' : `${alerts.length} things need attention`}
+        </div>
+        <button
+          onClick={onOpen}
+          style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: 'var(--text-dim)', fontSize: 13, padding: '4px 2px' }}
+        >
+          System ›
+        </button>
+      </div>
+      <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 14, color: 'var(--text)' }}>
+        {alerts.map((a) => (
+          <li key={a.id}>{a.text}</li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -451,6 +482,7 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
   const [habits, setHabits] = useState(null);
   const [weather, setWeather] = useState(null);
   const [weatherError, setWeatherError] = useState(false);
+  const [alerts, setAlerts] = useState(null);
   const [editingLocation, setEditingLocation] = useState(false);
 
   // Each source loads on its own, so a slow or failing one (weather is the
@@ -471,9 +503,21 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
     }
   }
 
+  // A failure to fetch alerts is itself left silent here: this banner is
+  // for the services Hermes watches, and the page is already unusable if
+  // Hermes' own API is down.
+  async function refreshAlerts() {
+    try {
+      setAlerts(await getAlerts());
+    } catch {
+      /* keep the last known list */
+    }
+  }
+
   function refreshAll() {
     refreshLocal();
     refreshWeather();
+    refreshAlerts();
   }
 
   useEffect(() => {
@@ -589,6 +633,8 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
 
       <div style={{ flex: 1, overflowY: 'auto', padding: `${pad}px ${pad}px calc(${pad}px + env(safe-area-inset-bottom))` }}>
         <div style={{ maxWidth: isMobile ? 720 : 1240, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: isMobile ? 14 : 18 }}>
+          <AlertsBanner alerts={alerts} onOpen={() => onNavigate('system')} />
+
           {isMobile ? (
             <WeatherCard weather={weather} error={weatherError} onEditLocation={() => setEditingLocation(true)} />
           ) : (
