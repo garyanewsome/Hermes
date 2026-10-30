@@ -339,6 +339,16 @@ def write_vault_note(folder: str, filename: str, content: str | None = None, con
     return f"Saved to the vault at: {note_path}"
 
 
+def read_vault_note(path: str) -> str:
+    # The note's whole current text. search_vault only returns snippets, so
+    # this is what makes an accurate suggest_vault_edit possible.
+    response = httpx.post(f"{CODEBASE_SEARCHER_URL}/read_note", json={"path": path}, timeout=30.0)
+    if response.status_code in (403, 404):
+        return f"Can't read it: {response.json().get('detail', 'not found')}"
+    response.raise_for_status()
+    return response.json()["content"]
+
+
 def suggest_vault_edit(path: str, proposed_content: str, reason: str) -> str:
     # Existing vault notes are never edited directly. This files a suggestion
     # note (diff + full proposed text) under Hermes/Suggestions/ for the
@@ -952,14 +962,36 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "read_vault_note",
+            "description": (
+                "Read the complete text of one note in the user's Obsidian vault. search_vault "
+                "only returns short snippets; use this when you need the whole note, e.g. to "
+                "summarise it, answer from all of it, or before proposing a change with "
+                "suggest_vault_edit. Get the exact path from search_vault or list_notes first."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Vault-relative path of the .md note, e.g. '10 Development/Tech Plans/Audio Analyzer.md'.",
+                    },
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "suggest_vault_edit",
             "description": (
                 "Propose a change to a note that already exists in the user's Obsidian vault. "
                 "This never edits the note: it files a suggestion (a diff plus the full proposed "
                 "text) for the user to review and apply themselves. Use it for 'fix the typo in "
                 "my X note', 'add this to my plan', 'tidy that note up'. Use search_vault or "
-                "list_notes first to find the note's exact path and read its current text, "
-                "because proposed_content must be the note's WHOLE text after your change, not "
+                "list_notes to find the note's exact path, then read_vault_note to get its current "
+                "text, because proposed_content must be the note's WHOLE text after your change, not "
                 "just the changed part. To create a brand-new note use write_vault_note."
             ),
             "parameters": {
@@ -1174,6 +1206,7 @@ TOOL_HANDLERS = {
     "research_repo": research_repo,
     "forget_repo": forget_repo,
     "write_vault_note": write_vault_note,
+    "read_vault_note": read_vault_note,
     "suggest_vault_edit": suggest_vault_edit,
     "read_attachment": read_attachment,
     "analyze_chords": analyze_chords,
@@ -1206,7 +1239,7 @@ TOOL_HANDLERS = {
 # never existed at all — a much milder failure than the full-catalog
 # hallucinated-tool-call behavior this replaces.
 TOOL_GROUPS: dict[str, list[str]] = {
-    "vault": ["search_vault", "list_notes", "write_vault_note", "suggest_vault_edit"],
+    "vault": ["search_vault", "list_notes", "read_vault_note", "write_vault_note", "suggest_vault_edit"],
     "vst_memory": ["save_project_memory", "recall_project_memory"],
     "board": ["add_task", "list_tasks", "complete_task"],
     "habits": ["log_habit", "habit_status"],
