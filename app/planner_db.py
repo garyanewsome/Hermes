@@ -176,6 +176,19 @@ def init_planner_db() -> None:
             )
             """
         )
+        # Which scratch notes have been copied into the Obsidian vault, and
+        # where. Keeps a double click or a repeated chat request from filing
+        # the same note twice, and lets the Notes page show it. Cascades, so
+        # deleting a scratch note never leaves a stale row.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS note_vault_exports (
+                note_id INTEGER PRIMARY KEY REFERENCES notes(id) ON DELETE CASCADE,
+                vault_path TEXT NOT NULL,
+                exported_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
         # Small key/value store for app-level preferences (the weather
         # location so far) — server-side so a change made on the phone shows
         # up on the desktop too, which localStorage couldn't do.
@@ -833,7 +846,11 @@ def set_setting(key: str, value) -> None:
 def list_notes() -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT id, content, created_at, updated_at FROM notes ORDER BY position, id DESC"
+            """
+            SELECT n.id, n.content, n.created_at, n.updated_at, e.vault_path
+            FROM notes n LEFT JOIN note_vault_exports e ON e.note_id = n.id
+            ORDER BY n.position, n.id DESC
+            """
         ).fetchall()
     return [dict(row) for row in rows]
 
@@ -903,6 +920,30 @@ def update_note(note_id: int, content: str) -> None:
         conn.execute(
             "UPDATE notes SET content = %s, updated_at = now() WHERE id = %s",
             (content, note_id),
+        )
+
+
+def get_note(note_id: int) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute(
+            """
+            SELECT n.id, n.content, e.vault_path
+            FROM notes n LEFT JOIN note_vault_exports e ON e.note_id = n.id
+            WHERE n.id = %s
+            """,
+            (note_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def record_note_export(note_id: int, vault_path: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO note_vault_exports (note_id, vault_path) VALUES (%s, %s)
+            ON CONFLICT (note_id) DO UPDATE SET vault_path = EXCLUDED.vault_path, exported_at = now()
+            """,
+            (note_id, vault_path),
         )
 
 

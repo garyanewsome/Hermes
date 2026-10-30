@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
-import { listNotes, createNote, updateNote, deleteNote, reorderNotes } from '../api.js';
+import { listNotes, createNote, updateNote, deleteNote, reorderNotes, saveNoteToVault } from '../api.js';
 
 const SAVE_DEBOUNCE_MS = 600;
 
@@ -512,11 +512,41 @@ function NoteEditor({ noteId, value, onChange, isMobile }) {
 
 const POLL_INTERVAL_MS = 20000;
 
+// One line above the editor: copy this scratch note into the Obsidian vault.
+// A copy, so the note stays here; once copied it says where it went.
+function VaultBar({ note, state, onSave }) {
+  const small = { background: 'transparent', border: 'none', color: 'var(--text-dim)', fontSize: 12.5, padding: '2px 4px' };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 16px', borderBottom: '1px solid var(--border)', fontSize: 13, color: 'var(--text-dim)', minHeight: 34 }}>
+      {note.vault_path ? (
+        <>
+          <span style={{ color: 'var(--accent)' }}>In your vault</span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }} title={note.vault_path}>{note.vault_path}</span>
+          <button type="button" disabled={state.saving} onClick={() => onSave(true)} style={{ ...small, marginLeft: 'auto', flexShrink: 0 }}>
+            Save another copy
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          disabled={state.saving || !note.content?.trim()}
+          onClick={() => onSave(false)}
+          style={{ background: 'transparent', border: '1px solid var(--accent-glow)', color: 'var(--accent)', borderRadius: 8, padding: '4px 10px', fontSize: 13 }}
+        >
+          {state.saving ? 'Saving…' : 'Save to vault'}
+        </button>
+      )}
+      {state.error && <span style={{ color: '#ff5d6c' }}>{state.error}</span>}
+    </div>
+  );
+}
+
 export default function NotesView({ onOpenDrawer }) {
   const [notes, setNotes] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [draft, setDraft] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [vaultState, setVaultState] = useState({ saving: false, error: null });
   const isMobile = useIsMobile();
   const saveTimerRef = useRef(null);
   // A ref mirror of activeId — refresh() is called from a setInterval set
@@ -683,6 +713,29 @@ export default function NotesView({ onOpenDrawer }) {
 
   const activeNote = notes.find((n) => n.id === activeId);
 
+  // An error about one note shouldn't follow you to the next.
+  useEffect(() => {
+    setVaultState({ saving: false, error: null });
+  }, [activeId]);
+
+  async function handleSaveToVault(force) {
+    const id = activeId;
+    setVaultState({ saving: true, error: null });
+    // The server copies what is stored, so get any pending keystrokes saved
+    // first and wait for them to land.
+    if (saveTimerRef.current) flushSave(id, draft);
+    for (let i = 0; i < 30 && savesInFlightRef.current > 0; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    try {
+      const { vault_path: vaultPath } = await saveNoteToVault(id, force);
+      setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, vault_path: vaultPath } : n)));
+      setVaultState({ saving: false, error: null });
+    } catch (err) {
+      setVaultState({ saving: false, error: err.message });
+    }
+  }
+
   return (
     <div style={{ flex: 1, display: 'flex', minWidth: 0 }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -717,7 +770,10 @@ export default function NotesView({ onOpenDrawer }) {
             {notes.length === 0 ? 'No notes yet — create one to get started.' : 'Pick a note.'}
           </div>
         ) : (
-          <NoteEditor noteId={activeNote.id} value={draft} onChange={handleChange} isMobile={isMobile} />
+          <>
+            <VaultBar note={activeNote} state={vaultState} onSave={handleSaveToVault} />
+            <NoteEditor noteId={activeNote.id} value={draft} onChange={handleChange} isMobile={isMobile} />
+          </>
         )}
       </div>
 

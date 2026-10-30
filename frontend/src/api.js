@@ -358,6 +358,19 @@ export async function pingHealth() {
   }
 }
 
+// Copies a scratch note into the Obsidian vault (the scratch note stays).
+// `force` files another copy of a note that was already exported.
+export async function saveNoteToVault(noteId, force = false) {
+  const res = await apiFetch(`/notes/${noteId}/to-vault`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || `Saving to the vault failed (${res.status})`);
+  return data;
+}
+
 export async function deleteNote(noteId) {
   await apiFetch(`/notes/${noteId}`, { method: 'DELETE' });
 }

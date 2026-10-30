@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import audio, auth, documents, health_checks, system_status, weather
+from app import audio, auth, documents, health_checks, note_export, system_status, weather
 from app.chat import list_models, run_chat_stream
 from app.config import UPLOADS_DIR
 from app.db import (
@@ -633,6 +633,22 @@ def put_notes_order(request: NotesOrderRequest):
 def patch_note(note_id: int, request: NoteUpdateRequest):
     planner_db.update_note(note_id, request.content)
     return {"status": "ok"}
+
+
+class NoteToVaultRequest(BaseModel):
+    folder: str | None = None
+    force: bool = False
+
+
+@app.post("/notes/{note_id}/to-vault")
+def note_to_vault(note_id: int, request: NoteToVaultRequest):
+    try:
+        return note_export.export_note(note_id, request.folder, request.force)
+    except note_export.ExportRefused as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception:
+        logger.exception("Exporting note %s to the vault failed", note_id)
+        raise HTTPException(status_code=502, detail="The vault service didn't respond. Try again in a moment.")
 
 
 @app.delete("/notes/{note_id}")

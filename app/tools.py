@@ -254,6 +254,28 @@ def list_recent_scratch_notes() -> str:
     return "\n".join(f"- {_note_title(n['content'])}" for n in notes)
 
 
+def save_scratch_note_to_vault(query: str, folder: str | None = None) -> str:
+    # Copies a Notes-page scratch note into the vault (see app/note_export.py).
+    # Found by its text, like search_scratch_notes, because the model never
+    # sees note ids; if the words match several notes, ask rather than guess.
+    from app import note_export
+
+    matches = planner_db.search_notes_content(query)
+    if not matches:
+        return f"No scratch note matches \"{query}\"."
+    if len(matches) > 1:
+        options = "\n".join(f"- {_note_title(m['content'])}" for m in matches)
+        return f"Several scratch notes match \"{query}\". Which one?\n{options}"
+    try:
+        result = note_export.export_note(matches[0]["id"], folder)
+    except note_export.ExportRefused as exc:
+        return f"Not saved: {exc}"
+    title = _note_title(matches[0]["content"])
+    if result["already"]:
+        return f"\"{title}\" is already in the vault at {result['vault_path']}."
+    return f"Copied \"{title}\" to the vault at {result['vault_path']}. The scratch note is still in Notes."
+
+
 def research_repo(repo: str, question: str | None = None) -> str:
     # On-demand, not a background sync like search_vault's Athenaeum —
     # this clones/indexes the repo right now, only re-embedding if its
@@ -962,6 +984,32 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "save_scratch_note_to_vault",
+            "description": (
+                "Copy one of the user's scratch notes (the quick-capture Notes page) into their "
+                "Obsidian vault as a new note, e.g. 'put my CMake note in the vault' or 'move that "
+                "scratch note to Obsidian'. It copies: the scratch note is kept. Not for saving "
+                "something you wrote in conversation (use write_vault_note for that)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Words from the scratch note's text that identify it.",
+                    },
+                    "folder": {
+                        "type": "string",
+                        "description": "Vault folder to put it in. Leave out unless the user names one; the default is 'Hermes/Imported'.",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "read_vault_note",
             "description": (
                 "Read the complete text of one note in the user's Obsidian vault. search_vault "
@@ -1206,6 +1254,7 @@ TOOL_HANDLERS = {
     "research_repo": research_repo,
     "forget_repo": forget_repo,
     "write_vault_note": write_vault_note,
+    "save_scratch_note_to_vault": save_scratch_note_to_vault,
     "read_vault_note": read_vault_note,
     "suggest_vault_edit": suggest_vault_edit,
     "read_attachment": read_attachment,
@@ -1239,12 +1288,12 @@ TOOL_HANDLERS = {
 # never existed at all — a much milder failure than the full-catalog
 # hallucinated-tool-call behavior this replaces.
 TOOL_GROUPS: dict[str, list[str]] = {
-    "vault": ["search_vault", "list_notes", "read_vault_note", "write_vault_note", "suggest_vault_edit"],
+    "vault": ["search_vault", "list_notes", "read_vault_note", "write_vault_note", "suggest_vault_edit", "save_scratch_note_to_vault"],
     "vst_memory": ["save_project_memory", "recall_project_memory"],
     "board": ["add_task", "list_tasks", "complete_task"],
     "habits": ["log_habit", "habit_status"],
     "todo": ["add_todo_item", "list_todo_items", "complete_todo_item"],
-    "scratch_notes": ["add_scratch_note", "search_scratch_notes", "list_recent_scratch_notes"],
+    "scratch_notes": ["add_scratch_note", "search_scratch_notes", "list_recent_scratch_notes", "save_scratch_note_to_vault"],
     "repo_research": ["research_repo", "forget_repo"],
     "image": ["generate_image"],
     "attachments": ["read_attachment", "analyze_chords", "transcribe_melody", "suggest_pod_go_tone"],
