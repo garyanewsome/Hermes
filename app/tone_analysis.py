@@ -24,7 +24,7 @@ import httpx
 import numpy as np
 
 from app.audio import MAX_ANALYSIS_SECONDS, transcode_to_wav
-from app.config import CHAT_MODEL, OLLAMA_HOST
+from app.config import CHAT_MODEL, OLLAMA_HOST, OLLAMA_NUM_CTX
 from app.pod_go_reference import AMPS_CLEAN, AMPS_CRUNCH, AMPS_HIGH_GAIN, CABS_COMMON, EFFECTS_SHORT
 
 logger = logging.getLogger("hermes")
@@ -326,6 +326,8 @@ def _synthesize_recommendation(measurements: str) -> str | None:
                 # model's hidden reasoning pass — measured ~5,700 characters
                 # of it per call, which is most of the wait.
                 "think": False,
+                # Same window as the chat calls, or Ollama reloads the model.
+                "options": {"num_ctx": OLLAMA_NUM_CTX},
             },
             timeout=120.0,
         )

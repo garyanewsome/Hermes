@@ -3,6 +3,14 @@ import os
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://192.168.1.157:11434")
 CHAT_MODEL = os.environ.get("CHAT_MODEL", "gemma4:12b")
 
+# Context window for Ollama chat calls, in tokens. Left unset, Ollama picks
+# 4096 on this 12 GB GPU, and a longer prompt (system prompt + tools + a
+# long note) is silently cut from the *front*, dropping the instructions
+# first. Measured on gemma4:12b: 4096 -> 8.1 GB VRAM, 32768 -> 8.4 GB, still
+# 100% on GPU, so the larger window is nearly free. Every call to the same
+# model should use the same value: a different num_ctx makes Ollama reload it.
+OLLAMA_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", "32768"))
+
 # For transcribing voice-memo attachments (app/audio.py) — deliberately
 # independent of CHAT_MODEL/whatever the user has selected in the UI,
 # since not every chat model has Ollama's "audio" capability (confirmed:

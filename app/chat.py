@@ -3,7 +3,7 @@ import logging
 
 import httpx
 
-from app.config import CHAT_MODEL, CODEBASE_SEARCHER_URL, IRIS_URL, OLLAMA_HOST, SYSTEM_PROMPT
+from app.config import CHAT_MODEL, CODEBASE_SEARCHER_URL, IRIS_URL, OLLAMA_HOST, OLLAMA_NUM_CTX, SYSTEM_PROMPT
 from app.tools import TOOL_HANDLERS, select_tools
 
 MAX_TOOL_ITERATIONS = 5
@@ -70,7 +70,7 @@ async def _stream_ollama(messages: list[dict], model: str, think: bool, tools: l
     a one-sentence reply, far worse under a real tool-decision prompt).
     Ignored harmlessly by models with no thinking mode (verified against
     qwen2.5), so it's safe to pass regardless of which model is active."""
-    payload = {"model": model, "messages": messages, "stream": True, "think": think}
+    payload = {"model": model, "messages": messages, "stream": True, "think": think, "options": {"num_ctx": OLLAMA_NUM_CTX}}
     if tools:
         payload["tools"] = tools
     async with httpx.AsyncClient(timeout=120.0) as client:
