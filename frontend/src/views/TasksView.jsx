@@ -4,7 +4,7 @@ import { completeTask, createTask, deleteTask, listTasks, reopenTask, updateTask
 import useIsMobile from '../hooks/useIsMobile.js';
 import DatePickerPopover from '../components/DatePickerPopover.jsx';
 import { DUE_COLORS, dueTone, formatDue } from '../lib/dates.js';
-import { QUADRANTS, QUADRANT_BY_KEY } from '../lib/quadrants.js';
+import { QUADRANTS, QUADRANT_BY_KEY, MOBILE_QUADRANTS } from '../lib/quadrants.js';
 
 function timeAgo(isoString) {
   if (!isoString) return '';
@@ -606,7 +606,7 @@ export default function TasksView({ onOpenDrawer }) {
               : { flex: 1, minHeight: 0, padding: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: 16 }
           }
         >
-          {QUADRANTS.map((q) => (
+          {(isMobile ? MOBILE_QUADRANTS : QUADRANTS).map((q) => (
             <QuadrantBox
               key={q.key}
               quadrant={q}

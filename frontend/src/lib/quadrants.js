@@ -7,3 +7,8 @@ export const QUADRANTS = [
 ];
 
 export const QUADRANT_BY_KEY = Object.fromEntries(QUADRANTS.map((q) => [q.key, q]));
+
+// Stacked top to bottom on mobile, where reading order is priority order:
+// TODO, NEXT, Schedule, Backlog. The desktop grid keeps QUADRANTS' order
+// (TODO | Schedule over NEXT | Backlog), which reads correctly as a 2x2.
+export const MOBILE_QUADRANTS = ['do', 'next', 'schedule', 'backlog'].map((key) => QUADRANT_BY_KEY[key]);
