@@ -30,7 +30,7 @@ STORAGE_ROOT = os.environ.get("STORAGE_ROOT", "/mnt/storage")
 BACKUP_DIR = os.environ.get("BACKUP_DIR", "/mnt/storage/planner-backups")
 K3S = os.environ.get("K3S_BIN", "/usr/local/bin/k3s")
 SYSTEMD_UNITS = [
-    "ollama", "iris", "codebase-searcher", "images-after-dark",
+    "ollama", "iris", "codebase-searcher", "vault-keeper", "images-after-dark",
     "k3s", "docker", "smbd", "tailscaled", "cron",
 ]
 CACHE_SECONDS = 5

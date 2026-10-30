@@ -6,6 +6,7 @@ needed its LLM returned 404, because its configured model had been removed
 from Ollama. The checks here exercise the failing path itself:
 
 - every model Hermes is configured to use is actually installed in Ollama;
+- vault-keeper can reach the vault's git remote with its deploy key;
 - Hindsight can run its own fact extraction end to end. This uses its
   dry-run-extract endpoint, which calls the LLM but stores nothing.
 
@@ -19,7 +20,7 @@ import time
 
 import httpx
 
-from app.config import AUDIO_MODEL, CHAT_MODEL, HINDSIGHT_BANK_ID, HINDSIGHT_URL, OLLAMA_HOST
+from app.config import AUDIO_MODEL, CHAT_MODEL, HINDSIGHT_BANK_ID, HINDSIGHT_URL, OLLAMA_HOST, VAULT_KEEPER_URL
 
 logger = logging.getLogger("hermes")
 
@@ -60,8 +61,26 @@ def _check_hindsight_extraction() -> dict:
     return {"ok": True, "text": "Hindsight extraction works"}
 
 
+def _check_vault_keeper() -> dict:
+    # /health only says vault-keeper is up. /health/deep asks the vault's git
+    # remote with the same deploy key a write uses, so a revoked key or a
+    # broken network shows here instead of as every note save failing.
+    try:
+        resp = httpx.get(f"{VAULT_KEEPER_URL}/health/deep", timeout=20.0)
+    except Exception as exc:
+        return {"ok": False, "text": f"vault-keeper didn't respond ({type(exc).__name__})"}
+    if resp.status_code != 200:
+        try:
+            detail = resp.json().get("detail", "")
+        except ValueError:
+            detail = resp.text
+        return {"ok": False, "text": f"vault-keeper can't reach the vault on GitHub (HTTP {resp.status_code}: {str(detail)[:160]})"}
+    return {"ok": True, "text": "vault-keeper can reach the vault"}
+
+
 CHECKS = {
     "models": _check_models,
+    "vault_keeper": _check_vault_keeper,
     "hindsight_extraction": _check_hindsight_extraction,
 }
 

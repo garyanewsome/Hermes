@@ -4,7 +4,7 @@ Obsidian vault as a new note.
 A copy, not a move: the scratch note stays where it is. Scratch notes are
 quick capture "meant to get copied into Obsidian later" (planner_db), and
 deleting someone's note as a side effect of saving it is not a thing to do
-by default. The write goes through CodebaseSearcher's /write_note, so it is
+by default. The write goes through vault-keeper's /write_note, so it is
 subject to the same vault limits as anything else Hermes writes.
 """
 
@@ -13,7 +13,7 @@ import re
 import httpx
 
 from app import planner_db
-from app.config import CODEBASE_SEARCHER_URL
+from app.config import VAULT_KEEPER_URL
 
 DEFAULT_FOLDER = "Hermes/Imported"
 
@@ -42,7 +42,7 @@ def export_note(note_id: int, folder: str | None = None, force: bool = False) ->
         raise ExportRefused("That note is empty.")
 
     response = httpx.post(
-        f"{CODEBASE_SEARCHER_URL}/write_note",
+        f"{VAULT_KEEPER_URL}/write_note",
         json={"folder": folder or DEFAULT_FOLDER, "filename": _filename(note["content"]), "content": note["content"]},
         timeout=30.0,
     )

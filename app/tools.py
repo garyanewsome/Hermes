@@ -6,10 +6,13 @@ second one. Adding a third tool later is just adding another dict here
 and a handler function, not restructuring anything."""
 
 import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 
 from app.config import (
+    APP_TIMEZONE,
     ATHENAEUM_HOST_HEADER,
     ATHENAEUM_URL,
     CODEBASE_SEARCHER_URL,
@@ -17,6 +20,7 @@ from app.config import (
     HINDSIGHT_URL,
     IRIS_URL,
     UPLOADS_DIR,
+    VAULT_KEEPER_URL,
 )
 from app import db, documents, music, planner_db, tone_analysis, web
 from app.pod_go_reference import AMPS_CLEAN, AMPS_CRUNCH, AMPS_HIGH_GAIN, CABS_COMMON, EFFECTS_SHORT
@@ -324,9 +328,8 @@ def forget_repo(repo: str) -> str:
 
 
 def write_vault_note(folder: str, filename: str, content: str | None = None, conversation_id: str | None = None) -> str:
-    # General-purpose vault write — reuses CodebaseSearcher's existing
-    # git-clone/commit/push plumbing for the vault (it already holds the
-    # write-scoped deploy key), rather than standing up a second one.
+    # General-purpose vault write, through vault-keeper (which owns the
+    # clone, the write-scoped deploy key and the write limits).
     #
     # content is optional on purpose: the common case ("save that plan
     # you just wrote") would otherwise force the model to retype
@@ -346,11 +349,11 @@ def write_vault_note(folder: str, filename: str, content: str | None = None, con
             raise ValueError("No previous assistant message found in this conversation to save — pass content explicitly.")
 
     response = httpx.post(
-        f"{CODEBASE_SEARCHER_URL}/write_note",
+        f"{VAULT_KEEPER_URL}/write_note",
         json={"folder": folder, "filename": filename, "content": content},
         timeout=30.0,
     )
-    # 403 is CodebaseSearcher's vault_policy refusing (wrong folder, too
+    # 403 is vault-keeper's policy refusing (wrong folder, too
     # big, daily cap). Its detail says what is allowed, so hand it to the
     # model as the result rather than raising: the model can then tell the
     # user, or retry under an allowed folder.
@@ -364,7 +367,7 @@ def write_vault_note(folder: str, filename: str, content: str | None = None, con
 def read_vault_note(path: str) -> str:
     # The note's whole current text. search_vault only returns snippets, so
     # this is what makes an accurate suggest_vault_edit possible.
-    response = httpx.post(f"{CODEBASE_SEARCHER_URL}/read_note", json={"path": path}, timeout=30.0)
+    response = httpx.post(f"{VAULT_KEEPER_URL}/read_note", json={"path": path}, timeout=30.0)
     if response.status_code in (403, 404):
         return f"Can't read it: {response.json().get('detail', 'not found')}"
     response.raise_for_status()
@@ -375,9 +378,9 @@ def suggest_vault_edit(path: str, proposed_content: str, reason: str) -> str:
     # Existing vault notes are never edited directly. This files a suggestion
     # note (diff + full proposed text) under Hermes/Suggestions/ for the
     # user to review in Obsidian. proposed_content is the note's *whole*
-    # new text, since CodebaseSearcher diffs it against the current file.
+    # new text, since vault-keeper diffs it against the current file.
     response = httpx.post(
-        f"{CODEBASE_SEARCHER_URL}/suggest_edit",
+        f"{VAULT_KEEPER_URL}/suggest_edit",
         json={"path": path, "proposed_content": proposed_content, "reason": reason},
         timeout=30.0,
     )
@@ -389,6 +392,45 @@ def suggest_vault_edit(path: str, proposed_content: str, reason: str) -> str:
         f"Filed a suggestion at {note_path}. The original note was not changed; "
         f"the user reviews and applies it in Obsidian."
     )
+
+
+def _local_now() -> datetime:
+    return datetime.now(ZoneInfo(APP_TIMEZONE))
+
+
+def log_to_daily_note(text: str) -> str:
+    # One line under the "Hermes" section of today's daily note. Append-only
+    # and today-only by construction: vault-keeper enforces that, this just
+    # supplies the user's local date and time (it only knows UTC).
+    now = _local_now()
+    response = httpx.post(
+        f"{VAULT_KEEPER_URL}/daily/append",
+        json={"text": text, "date": now.date().isoformat(), "time": now.strftime("%H:%M")},
+        timeout=60.0,
+    )
+    if response.status_code == 403:
+        return f"Not logged: {response.json().get('detail', 'refused by the vault write limits')}"
+    response.raise_for_status()
+    data = response.json()
+    if data["fallback"]:
+        return (
+            f"Logged \"{data['entry']}\" in {data['note_path']}. Today's daily note doesn't exist in the vault "
+            f"yet (Obsidian creates it when it's opened), so it went to a log note for the day instead."
+        )
+    return f"Logged to today's daily note: {data['entry']}"
+
+
+def read_daily_note() -> str:
+    # Today's whole daily note, so the model can answer from it or avoid
+    # logging something that is already there.
+    response = httpx.post(
+        f"{VAULT_KEEPER_URL}/daily/read", json={"date": _local_now().date().isoformat()}, timeout=30.0
+    )
+    response.raise_for_status()
+    data = response.json()
+    if not data["exists"]:
+        return "There is no daily note for today in the vault yet (Obsidian creates it when it's opened)."
+    return f"--- {data['path']} ---\n{data['content']}\n--- end ---"
 
 
 def read_attachment(filename: str | None = None, conversation_id: str | None = None) -> str:
@@ -1010,6 +1052,42 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "log_to_daily_note",
+            "description": (
+                "Add one short line to the 'Hermes' section of today's daily note in the user's "
+                "Obsidian vault, stamped with the current time. Use it when the user asks to log, "
+                "jot down or record something for today ('log that I shelved the burl Intel work', "
+                "'note in my daily that the deploy went out'). It only ever adds a line to today's "
+                "note; it cannot edit anything else or other days. For anything longer than a "
+                "sentence use write_vault_note instead."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "The line to log, one sentence, no leading bullet or timestamp (both are added).",
+                    },
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_daily_note",
+            "description": (
+                "Read today's complete daily note from the user's Obsidian vault: tasks, notes, "
+                "and anything already logged. Use it for 'what's in my daily note', 'what did I "
+                "log today', or before log_to_daily_note to avoid repeating a line."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "read_vault_note",
             "description": (
                 "Read the complete text of one note in the user's Obsidian vault. search_vault "
@@ -1256,6 +1334,8 @@ TOOL_HANDLERS = {
     "write_vault_note": write_vault_note,
     "save_scratch_note_to_vault": save_scratch_note_to_vault,
     "read_vault_note": read_vault_note,
+    "log_to_daily_note": log_to_daily_note,
+    "read_daily_note": read_daily_note,
     "suggest_vault_edit": suggest_vault_edit,
     "read_attachment": read_attachment,
     "analyze_chords": analyze_chords,
@@ -1289,6 +1369,7 @@ TOOL_HANDLERS = {
 # hallucinated-tool-call behavior this replaces.
 TOOL_GROUPS: dict[str, list[str]] = {
     "vault": ["search_vault", "list_notes", "read_vault_note", "write_vault_note", "suggest_vault_edit", "save_scratch_note_to_vault"],
+    "daily": ["log_to_daily_note", "read_daily_note"],
     "vst_memory": ["save_project_memory", "recall_project_memory"],
     "board": ["add_task", "list_tasks", "complete_task"],
     "habits": ["log_habit", "habit_status"],
@@ -1305,6 +1386,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
 
 GROUP_KEYWORDS: dict[str, list[str]] = {
     "vault": ["note", "notes", "vault", "obsidian", "folder"],
+    "daily": ["daily", "journal", "log this", "log that", "log it", "log to", "today's note", "todays note"],
     "vst_memory": ["vst", "plugin", "project memory"],
     "board": ["board", "task", "quadrant", "backlog"],
     "habits": ["habit", "streak", "meditat", "exercis"],
