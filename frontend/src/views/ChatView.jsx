@@ -103,6 +103,7 @@ export default function ChatView({ onOpenDrawer }) {
   const [attachments, setAttachments] = useState([]); // pending, not-yet-sent: [{path, mime_type, filename}]
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
+  const captureInputRef = useRef(null);
   const isMobile = useIsMobile();
 
   const abortRef = useRef(null);
@@ -310,6 +311,17 @@ export default function ChatView({ onOpenDrawer }) {
   }
 
   async function startRecording() {
+    // Browsers only hand out the microphone on secure pages (https, or
+    // localhost). Hermes over plain http on the LAN isn't one, so
+    // navigator.mediaDevices doesn't exist there at all — that was the
+    // "reading 'getUserMedia' of undefined" error on the phone. Fall back to
+    // the phone's own recorder: a file input with `capture` opens it on
+    // Android and returns the recording as a file, which is uploaded like any
+    // other audio attachment.
+    if (!navigator.mediaDevices?.getUserMedia) {
+      captureInputRef.current?.click();
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const { mime, ext } = pickAudioMimeType();
@@ -734,6 +746,14 @@ export default function ChatView({ onOpenDrawer }) {
             type="file"
             accept="image/png,image/jpeg,image/webp,image/gif,.pdf,.txt,.md,application/pdf,text/plain,text/markdown,.wav,.mp3,.m4a,.webm,.ogg,.opus,.flac,.aac,.aif,.aiff,.mp4,.mov,.m4v,.mkv,.avi,audio/*,video/*"
             multiple
+            onChange={handleFilesSelected}
+            style={{ display: 'none' }}
+          />
+          <input
+            ref={captureInputRef}
+            type="file"
+            accept="audio/*"
+            capture
             onChange={handleFilesSelected}
             style={{ display: 'none' }}
           />
