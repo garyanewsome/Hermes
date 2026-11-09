@@ -242,6 +242,19 @@ export default function ChatView({ onOpenDrawer }) {
           if (event.type === 'conversation_id') {
             conversationId = event.conversation_id;
             setCurrentId(event.conversation_id);
+          } else if (event.type === 'status') {
+            // A tool's progress ("Indexing repo: embedding 4,200 of 16,388
+            // chunks (about 12 min left)"). Shown in the waiting bubble, and
+            // only while no reply text has appeared yet.
+            if (!fullText) {
+              setMessages((prev) => {
+                const next = [...prev];
+                next[next.length - 1] = { ...next[next.length - 1], role: 'assistant', content: event.content, pending: true };
+                return next;
+              });
+            }
+            // ('ping' keep-alives need no handling: receiving any bytes
+            // already reset the stall timer above.)
           } else if (event.type === 'token') {
             fullText += event.content;
             const snapshot = fullText;

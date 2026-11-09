@@ -6,6 +6,7 @@ second one. Adding a third tool later is just adding another dict here
 and a handler function, not restructuring anything."""
 
 import os
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -280,20 +281,15 @@ def save_scratch_note_to_vault(query: str, folder: str | None = None) -> str:
     return f"Copied \"{title}\" to the vault at {result['vault_path']}. The scratch note is still in Notes."
 
 
-def research_repo(repo: str, question: str | None = None) -> str:
-    # On-demand, not a background sync like search_vault's Athenaeum —
-    # this clones/indexes the repo right now, only re-embedding if its
-    # commit actually moved since last time. Can genuinely take a while
-    # (first-time clone + embed of a real repo), hence the longer timeout
-    # than this file's other tool calls.
-    response = httpx.post(
-        f"{CODEBASE_SEARCHER_URL}/research",
-        json={"repo": repo, "question": question},
-        timeout=300.0,
-    )
-    response.raise_for_status()
-    data = response.json()
+# How long research_repo will keep waiting for a repo analysis. A first-time
+# index of a big repo (tens of thousands of chunks on the GPU) can take most
+# of an hour; the work continues on the server either way, this only bounds
+# how long the chat waits for it.
+RESEARCH_MAX_WAIT_SECONDS = 90 * 60
+RESEARCH_POLL_SECONDS = 2.0
 
+
+def _research_result(repo: str, question: str | None, data: dict) -> str:
     lines = [f"Indexed {repo} at commit {data['commit'][:8]}."]
     hits = data.get("hits") or []
     is_overview = data.get("is_overview", not question)
@@ -319,6 +315,65 @@ def research_repo(repo: str, question: str | None = None) -> str:
     elif data.get("note_error"):
         lines.append(f"\n(Couldn't write the findings note: {data['note_error']})")
     return "\n".join(lines)
+
+
+def research_repo(repo: str, question: str | None = None, progress=None, **_ignored) -> str:
+    """Clones/indexes the repo on the homelab and returns relevant snippets.
+
+    A first look at a big repo takes far longer than one HTTP request should
+    stay open, so this starts a background job on CodebaseSearcher and polls
+    it, passing each progress message to `progress` (the chat shows it).
+    Falls back to the old single blocking call if the service predates the
+    job API, so the two can be deployed in either order."""
+    start = httpx.post(
+        f"{CODEBASE_SEARCHER_URL}/research/start", json={"repo": repo, "question": question}, timeout=30.0
+    )
+    if start.status_code == 404:
+        response = httpx.post(
+            f"{CODEBASE_SEARCHER_URL}/research", json={"repo": repo, "question": question}, timeout=300.0
+        )
+        response.raise_for_status()
+        return _research_result(repo, question, response.json())
+    start.raise_for_status()
+    job = start.json()
+
+    deadline = time.monotonic() + RESEARCH_MAX_WAIT_SECONDS
+    last_message = None
+    failures = 0
+    while True:
+        try:
+            poll = httpx.get(f"{CODEBASE_SEARCHER_URL}/research/jobs/{job['id']}", timeout=15.0)
+            if poll.status_code == 404:
+                raise RuntimeError("The analysis service restarted while this was running; ask again to start it over.")
+            poll.raise_for_status()
+            failures = 0
+        except RuntimeError:
+            raise
+        except httpx.HTTPError as exc:
+            # A blip while polling is not a failed analysis; the job keeps going.
+            failures += 1
+            if failures >= 5:
+                raise RuntimeError(f"Lost contact with the analysis service: {exc}")
+            time.sleep(RESEARCH_POLL_SECONDS)
+            continue
+
+        snap = poll.json()
+        if snap["stage"] == "done":
+            # Reloading the chat model after the GPU handoff takes a while;
+            # say so instead of leaving the last progress line on screen.
+            if progress:
+                progress("Analysis finished. Writing up the results…")
+            return _research_result(repo, question, snap["result"])
+        if progress and snap.get("message") and snap["message"] != last_message:
+            last_message = snap["message"]
+            progress(last_message)
+        if snap["stage"] == "error":
+            raise RuntimeError(snap.get("error") or "The analysis failed.")
+        if time.monotonic() > deadline:
+            raise RuntimeError(
+                "Still working after 90 minutes. The analysis keeps running on the server; ask again later and it will pick up the finished index."
+            )
+        time.sleep(RESEARCH_POLL_SECONDS)
 
 
 def forget_repo(repo: str) -> str:

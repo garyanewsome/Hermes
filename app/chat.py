@@ -1,3 +1,5 @@
+import asyncio
+import inspect
 import json
 import logging
 
@@ -111,6 +113,58 @@ def list_models() -> list[str]:
     return tool_capable
 
 
+# Shown in the chat while a tool runs, so a slow one doesn't look like a hang.
+# Friendly wording only (the assistant is told not to name its tools); tools
+# that answer instantly are left out. A tool that reports its own progress
+# (research_repo) replaces this as soon as it has something more specific.
+TOOL_STATUS = {
+    "research_repo": "Starting the repo analysis…",
+    "generate_image": "Generating the image…",
+    "web_search": "Searching the web…",
+    "read_webpage": "Reading the page…",
+    "search_vault": "Searching your notes…",
+    "write_vault_note": "Saving to your vault…",
+    "suggest_vault_edit": "Preparing the suggested edit…",
+    "analyze_chords": "Listening for chords…",
+    "transcribe_melody": "Transcribing the melody…",
+    "suggest_pod_go_tone": "Analyzing the tone…",
+    "read_attachment": "Reading the attachment…",
+}
+
+# While a tool runs with nothing new to say, send a no-op event this often so
+# the browser's "no data for 45 seconds, give up" watchdog never fires on a
+# tool that is simply slow.
+KEEPALIVE_SECONDS = 10.0
+
+
+async def _call_tool(handler, kwargs: dict):
+    """Runs a blocking tool handler on a worker thread (so a minutes-long tool
+    no longer freezes the whole app, which it did when called inline) and
+    yields ("status", text) for each progress message it reports,
+    ("ping", None) while it is quiet, then ("result", value). If the handler
+    raises, that exception propagates from here."""
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+    if "progress" in inspect.signature(handler).parameters:
+        kwargs = {**kwargs, "progress": lambda message: loop.call_soon_threadsafe(queue.put_nowait, message)}
+    task = asyncio.ensure_future(asyncio.to_thread(handler, **kwargs))
+    try:
+        while not task.done():
+            try:
+                message = await asyncio.wait_for(queue.get(), timeout=KEEPALIVE_SECONDS)
+                yield ("status", message)
+            except asyncio.TimeoutError:
+                yield ("ping", None)
+        while not queue.empty():
+            yield ("status", queue.get_nowait())
+        yield ("result", task.result())
+    finally:
+        if not task.done():
+            # The client went away mid-tool. The thread can't be interrupted,
+            # but nothing should be left waiting on it.
+            task.cancel()
+
+
 async def run_chat_stream(
     messages: list[dict],
     model: str | None = None,
@@ -188,39 +242,47 @@ async def run_chat_stream(
                 messages.append({"role": "tool", "content": f"Unknown tool: {name}"})
                 continue
 
+            # GPU handoff before/after the tools that need the shared GPU
+            # (see the notes on each _unload_* above), and which tools need
+            # to know the conversation.
+            before = after = None
+            kwargs = dict(arguments)
+            if name == "generate_image":
+                before, after = (lambda: _unload_ollama_model(model)), _unload_iris
+                kwargs["conversation_id"] = conversation_id
+            elif name == "research_repo":
+                before, after = (lambda: _unload_ollama_model(model)), _unload_codebase_searcher
+            elif name in ("write_vault_note", "read_attachment", "analyze_chords", "transcribe_melody", "suggest_pod_go_tone"):
+                # No GPU handoff needed for any of these — chord/melody
+                # analysis runs on CPU inside this same container (see
+                # app/music.py), not on the shared GPU. They just need
+                # conversation_id: write_vault_note to pull the last
+                # assistant message when content is omitted, the others to
+                # scope their lookup to this conversation's own uploads.
+                kwargs["conversation_id"] = conversation_id
+
+            if name in TOOL_STATUS:
+                yield ("status", TOOL_STATUS[name])
             try:
-                if name == "generate_image":
-                    await _unload_ollama_model(model)
-                    try:
-                        result = handler(**arguments, conversation_id=conversation_id)
-                    finally:
-                        # finally, not inline after the call: a raise from
-                        # the handler (Iris down, SDXL OOM, ...) must still
-                        # free whatever Iris did manage to allocate, or the
-                        # next generate_image starts from an already-full
-                        # GPU instead of a clean one.
-                        await _unload_iris()
-                elif name == "research_repo":
-                    await _unload_ollama_model(model)
-                    try:
-                        result = handler(**arguments)
-                    finally:
-                        # Same reasoning as generate_image above — confirmed
-                        # needed for real: a failed embed left CodebaseSearcher
-                        # holding ~9GB of stale CUDA allocator cache because
-                        # this unload never ran on the exception path.
-                        await _unload_codebase_searcher()
-                elif name in ("write_vault_note", "read_attachment", "analyze_chords", "transcribe_melody", "suggest_pod_go_tone"):
-                    # No GPU handoff needed for any of these — chord/melody
-                    # analysis runs on CPU inside this same container (see
-                    # app/music.py), not on the shared GPU. All four just
-                    # need conversation_id: write_vault_note to pull the
-                    # last assistant message when content is omitted, the
-                    # other three to scope their lookup to this
-                    # conversation's own uploads.
-                    result = handler(**arguments, conversation_id=conversation_id)
-                else:
-                    result = handler(**arguments)
+                result = None
+                if before:
+                    await before()
+                try:
+                    async for kind, value in _call_tool(handler, kwargs):
+                        if kind == "result":
+                            result = value
+                        else:
+                            yield (kind, value)
+                finally:
+                    # finally, not inline after the call: a raise from the
+                    # handler (Iris down, SDXL OOM, a failed embed, ...) must
+                    # still free whatever it did manage to allocate, or the
+                    # next call starts from an already-full GPU instead of a
+                    # clean one. (Confirmed needed for real: a failed embed
+                    # left CodebaseSearcher holding ~9GB of stale CUDA
+                    # allocator cache when this unload never ran.)
+                    if after:
+                        await after()
             except Exception as exc:
                 # A tool failure (Athenaeum/Iris down, GPU OOM, timeout, ...)
                 # must never crash the stream — that drops the connection

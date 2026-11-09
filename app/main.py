@@ -301,6 +301,15 @@ def _stream_and_persist(conversation_id: str, history: list[dict], model: str | 
                 # docstring. A saved copy would re-enter the model's own
                 # context on the next message in this conversation and get
                 # echoed/half-retyped instead of a fresh image being made.
+                # "status" (a tool's progress, shown while the reply is still
+                # empty) and "ping" (keep-alive) are display-only: neither is
+                # reply text, so neither is persisted or fed back to the model.
+                if kind == "status":
+                    yield json.dumps({"type": "status", "content": chunk}) + "\n"
+                    continue
+                if kind == "ping":
+                    yield json.dumps({"type": "ping"}) + "\n"
+                    continue
                 if kind == "content":
                     accumulated += chunk
                 yield json.dumps({"type": "token", "content": chunk}) + "\n"
