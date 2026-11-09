@@ -22,6 +22,18 @@ spec:
       containers:
       - name: postgres
         image: postgres:16-alpine
+        # Run as the image's own postgres user (uid/gid 70 in the alpine
+        # image; the data directory is already owned by it) instead of
+        # starting as root and letting the entrypoint drop privileges
+        # with gosu. After the 2026-11-09 reboot (kernel 7.0.0-42) gosu spun
+        # at 100% CPU forever inside this pod, so Postgres never started and
+        # the readiness probe failed with no logs. The same gosu step works
+        # in plain Docker, so the cause is specific to this pod, but starting
+        # as uid 70 skips it entirely (the entrypoint only calls gosu as root)
+        # and was tested to start in ~2s.
+        securityContext:
+          runAsUser: 70
+          runAsGroup: 70
         env:
         - name: POSTGRES_DB
           value: planner
