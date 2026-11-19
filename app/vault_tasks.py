@@ -1,6 +1,7 @@
 """Nightly Obsidian -> Todo import: pulls open `- [ ]` tasks from
 Athenaeum's /tasks (which scans the synced vault clone) and adds any it
-hasn't imported before to a dedicated todo list.
+hasn't imported before to a dedicated todo list. A task tagged `[dev]` goes
+to the dev backlog board in the vault instead (see DEV_TAG).
 
 One-way and additive on purpose: it only ever creates items. Checking a
 task off in Hermes does not write back to the vault (Athenaeum's deploy key
@@ -15,13 +16,20 @@ Run as a K8s CronJob (k8s/vault-tasks-cronjob.yaml), or by hand:
 
 import argparse
 import hashlib
+import re
 
 import httpx
 
 from app import planner_db
-from app.config import ATHENAEUM_HOST_HEADER, ATHENAEUM_URL
+from app.config import ATHENAEUM_HOST_HEADER, ATHENAEUM_URL, VAULT_KEEPER_URL
 
 LIST_NAME = "Inbox"
+
+# A task containing [dev] is a coding task for the dev backlog board in the
+# vault (via vault-keeper), not a personal todo: it skips the Inbox. The
+# original checkbox stays open in the daily note (vault-keeper can't edit it);
+# the import key below stops it being sent twice.
+DEV_TAG = re.compile(r"\s*\[dev\]\s*", re.IGNORECASE)
 
 # get_or_create_todo_list matches list names fuzzily (ILIKE %name%), so if
 # you already have a list with "inbox" in its name, tasks land there rather
@@ -46,13 +54,43 @@ def fetch_vault_tasks(extra_files: list[str]) -> list[dict]:
     return data["tasks"]
 
 
+def add_to_backlog(text: str) -> bool:
+    """True if the backlog now has this card (added, or already there)."""
+    response = httpx.post(f"{VAULT_KEEPER_URL}/backlog/add", json={"text": text, "source": "hermes"}, timeout=60.0)
+    response.raise_for_status()
+    return True
+
+
 def sync(dry_run: bool = False, extra_files: list[str] | None = None) -> dict:
     tasks = fetch_vault_tasks(extra_files or [])
     already = planner_db.get_imported_vault_task_keys()
-    new = [t for t in tasks if _task_key(t["text"]) not in already]
+    new_all = [t for t in tasks if _task_key(t["text"]) not in already]
+    dev = [t for t in new_all if DEV_TAG.search(t["text"])]
+    new = [t for t in new_all if not DEV_TAG.search(t["text"])]
 
     if dry_run:
-        return {"scanned": len(tasks), "new": len(new), "added": 0, "sample": [t["text"] for t in new[:10]]}
+        return {
+            "scanned": len(tasks),
+            "new": len(new),
+            "new_dev": len(dev),
+            "added": 0,
+            "sample": [t["text"] for t in new[:10]],
+            "dev_sample": [t["text"] for t in dev[:10]],
+        }
+
+    # Per-task: one failure (vault-keeper down, backlog note not pushed yet)
+    # leaves that task unrecorded so tomorrow's run retries it, and does not
+    # stop the others.
+    dev_added, dev_errors = 0, []
+    for task in dev:
+        card = DEV_TAG.sub(" ", task["text"]).strip()
+        try:
+            add_to_backlog(card)
+        except httpx.HTTPError as exc:
+            dev_errors.append(f"{card[:60]}: {exc}")
+            continue
+        planner_db.record_vault_task_import(_task_key(task["text"]), None)
+        dev_added += 1
 
     todo_list = planner_db.get_or_create_todo_list(LIST_NAME) if new else None
     for task in new:
@@ -65,6 +103,8 @@ def sync(dry_run: bool = False, extra_files: list[str] | None = None) -> dict:
         "new": len(new),
         "added": len(new),
         "list": todo_list["name"] if todo_list else None,
+        "dev_added": dev_added,
+        "dev_errors": dev_errors,
     }
 
 

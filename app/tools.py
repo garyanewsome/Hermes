@@ -475,6 +475,24 @@ def log_to_daily_note(text: str) -> str:
     return f"Logged to today's daily note: {data['entry']}"
 
 
+def add_to_backlog(text: str, column: str = "Ideas") -> str:
+    # One card on the dev backlog board in the vault (vault-keeper's
+    # /backlog/add: add-only, Ideas or Ready, no duplicates). Moving or
+    # finishing cards is not possible from here by design.
+    response = httpx.post(
+        f"{VAULT_KEEPER_URL}/backlog/add",
+        json={"text": text, "column": column or None},
+        timeout=60.0,
+    )
+    if response.status_code in (403, 404, 409):
+        return f"Not added: {response.json().get('detail', 'refused by the vault write limits')}"
+    response.raise_for_status()
+    data = response.json()
+    if not data["added"]:
+        return f"That card is already on the backlog: {data['card']}"
+    return f"Added to the {data['column']} column of the dev backlog: {data['card']}"
+
+
 def read_daily_note() -> str:
     # Today's whole daily note, so the model can answer from it or avoid
     # logging something that is already there.
@@ -1131,6 +1149,35 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "add_to_backlog",
+            "description": (
+                "Add a card to the DEV backlog: the Kanban board in the user's Obsidian vault that "
+                "holds coding and project work for the user's AI assistants (not the personal task "
+                "board, habits or todo lists). Use it when the user says to add something to the dev "
+                "or coding backlog, or asks to queue a code task for later. It only adds a card to "
+                "the Ideas or Ready column; it cannot move, edit or delete cards, and it skips cards "
+                "that already exist."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "The card: a short title, one line, like 'Misnomer: add a stereo width control'.",
+                    },
+                    "column": {
+                        "type": "string",
+                        "enum": ["Ideas", "Ready"],
+                        "description": "Ideas (default) for rough thoughts, Ready only when the user says it is ready to be worked.",
+                    },
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "read_daily_note",
             "description": (
                 "Read today's complete daily note from the user's Obsidian vault: tasks, notes, "
@@ -1390,6 +1437,7 @@ TOOL_HANDLERS = {
     "save_scratch_note_to_vault": save_scratch_note_to_vault,
     "read_vault_note": read_vault_note,
     "log_to_daily_note": log_to_daily_note,
+    "add_to_backlog": add_to_backlog,
     "read_daily_note": read_daily_note,
     "suggest_vault_edit": suggest_vault_edit,
     "read_attachment": read_attachment,
@@ -1425,6 +1473,7 @@ TOOL_HANDLERS = {
 TOOL_GROUPS: dict[str, list[str]] = {
     "vault": ["search_vault", "list_notes", "read_vault_note", "write_vault_note", "suggest_vault_edit", "save_scratch_note_to_vault"],
     "daily": ["log_to_daily_note", "read_daily_note"],
+    "dev_backlog": ["add_to_backlog"],
     "vst_memory": ["save_project_memory", "recall_project_memory"],
     "board": ["add_task", "list_tasks", "complete_task"],
     "habits": ["log_habit", "habit_status"],
@@ -1442,6 +1491,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
 GROUP_KEYWORDS: dict[str, list[str]] = {
     "vault": ["note", "notes", "vault", "obsidian", "folder"],
     "daily": ["daily", "journal", "log this", "log that", "log it", "log to", "today's note", "todays note"],
+    "dev_backlog": ["backlog", "dev task", "coding task", "code task"],
     "vst_memory": ["vst", "plugin", "project memory"],
     "board": ["board", "task", "quadrant", "backlog"],
     "habits": ["habit", "streak", "meditat", "exercis"],
