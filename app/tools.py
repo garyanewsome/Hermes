@@ -1163,7 +1163,11 @@ TOOLS = [
                 "properties": {
                     "text": {
                         "type": "string",
-                        "description": "The card: a short title, one line, like 'Misnomer: add a stereo width control'.",
+                        "description": (
+                            "The card, one line, and it MUST start with the project (the repo folder name) and a colon, "
+                            "like 'Misnomer: add a stereo width control'. If the user didn't say which project, ask "
+                            "before calling this."
+                        ),
                     },
                     "column": {
                         "type": "string",

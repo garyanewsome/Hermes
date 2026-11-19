@@ -1,7 +1,8 @@
 """Nightly Obsidian -> Todo import: pulls open `- [ ]` tasks from
 Athenaeum's /tasks (which scans the synced vault clone) and adds any it
 hasn't imported before to a dedicated todo list. A task tagged `[dev]` goes
-to the dev backlog board in the vault instead (see DEV_TAG).
+to the dev backlog board in the vault instead (see DEV_TAG); it must read
+`[dev] Project: title`, and one without a project goes to the Inbox.
 
 One-way and additive on purpose: it only ever creates items. Checking a
 task off in Hermes does not write back to the vault (Athenaeum's deploy key
@@ -86,6 +87,17 @@ def sync(dry_run: bool = False, extra_files: list[str] | None = None) -> dict:
         card = DEV_TAG.sub(" ", task["text"]).strip()
         try:
             add_to_backlog(card)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 403:
+                # Refused by policy, in practice a card with no "project:"
+                # prefix. Retrying tomorrow would fail the same way, so it
+                # goes to the Inbox as a normal task instead of being lost.
+                new.append({**task, "text": f"[dev] needs a project, e.g. 'MyProject: ...' -- {card}"})
+                dev_errors.append(f"{card[:60]}: no project prefix, sent to Inbox")
+                planner_db.record_vault_task_import(_task_key(task["text"]), None)
+                continue
+            dev_errors.append(f"{card[:60]}: {exc}")
+            continue
         except httpx.HTTPError as exc:
             dev_errors.append(f"{card[:60]}: {exc}")
             continue
