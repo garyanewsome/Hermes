@@ -5,7 +5,9 @@ vs. "what files exist under folder X") and RAG can't reliably do the
 second one. Adding a third tool later is just adding another dict here
 and a handler function, not restructuring anything."""
 
+import logging
 import os
+import re
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -23,8 +25,10 @@ from app.config import (
     UPLOADS_DIR,
     VAULT_KEEPER_URL,
 )
-from app import db, documents, music, planner_db, tone_analysis, web
+from app import chore_chat, db, documents, music, planner_db, tone_analysis, web
 from app.pod_go_reference import AMPS_CLEAN, AMPS_CRUNCH, AMPS_HIGH_GAIN, CABS_COMMON, EFFECTS_SHORT
+
+logger = logging.getLogger("hermes")
 
 
 def search_vault(query: str) -> str:
@@ -164,6 +168,18 @@ def habit_status(name: str | None = None) -> str:
         f"{h['name']}: {h['streak']} day streak. Last 7 days — {_format_last_7_days(h['last_7_days'])}."
         for h in habits
     )
+
+
+def log_chore(name: str, when: str | None = None) -> str:
+    return chore_chat.log(name, when)
+
+
+def chore_status(name: str | None = None) -> str:
+    return chore_chat.status(name)
+
+
+def add_chore(name: str, every_days: int | None = None) -> str:
+    return chore_chat.add(name, every_days)
 
 
 _WEEKDAY_NAMES = {1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday", 7: "Sunday"}
@@ -863,6 +879,62 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "log_chore",
+            "description": (
+                "Record that the user did a household chore, e.g. 'I dusted the ceiling fans' or "
+                "'descaled the coffee maker yesterday'. The chore stays on the list. Only call this "
+                "when they say they did it, never for a question about it."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "The chore, in the user's words or its exact name"},
+                    "when": {
+                        "type": "string",
+                        "description": (
+                            "The day it was done, as the user said it: 'today' (default), 'yesterday', "
+                            "'saturday', 'last saturday', '3 days ago' or YYYY-MM-DD"
+                        ),
+                    },
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "chore_status",
+            "description": (
+                "When a household chore was last done and which are due, e.g. 'when did I last descale "
+                "the coffee maker?' or 'what chores are due?'. Omit `name` for all chores. Answer with "
+                "the dates and day counts returned; don't work them out yourself."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string", "description": "One chore, or omit for all"}},
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_chore",
+            "description": "Add a new chore to the chores list. Only when the user asks for it to be added.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Short chore name, e.g. 'Dust ceiling fans'"},
+                    "every_days": {"type": "integer", "description": "How often, in days, only if the user says"},
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "add_todo_item",
             "description": (
                 "Add an item to a plain everyday to-do list (groceries, errands, "
@@ -1433,6 +1505,9 @@ TOOL_HANDLERS = {
     "complete_task": complete_task,
     "log_habit": log_habit,
     "habit_status": habit_status,
+    "log_chore": log_chore,
+    "chore_status": chore_status,
+    "add_chore": add_chore,
     "add_todo_item": add_todo_item,
     "list_todo_items": list_todo_items,
     "complete_todo_item": complete_todo_item,
@@ -1485,6 +1560,8 @@ TOOL_GROUPS: dict[str, list[str]] = {
     "vst_memory": ["save_project_memory", "recall_project_memory"],
     "board": ["add_task", "list_tasks", "complete_task"],
     "habits": ["log_habit", "habit_status"],
+    "chores": ["log_chore", "chore_status"],
+    "chore_add": ["add_chore"],
     "todo": ["add_todo_item", "list_todo_items", "complete_todo_item"],
     "scratch_notes": ["add_scratch_note", "search_scratch_notes", "list_recent_scratch_notes", "save_scratch_note_to_vault"],
     "repo_research": ["research_repo", "forget_repo"],
@@ -1504,6 +1581,10 @@ GROUP_KEYWORDS: dict[str, list[str]] = {
     "board": ["board", "task", "quadrant", "backlog"],
     "habits": ["habit", "streak", "meditat", "exercis"],
     "todo": ["todo", "to-do", "to do", "grocery", "groceries", "errand", "remind me", "checklist"],
+    "chores": [
+        "chore", "dusted", "dusting", "cleaned", "cleaning", "descale", "vacuum", "mopped", "mopping",
+        "scrubbed", "washed the", "changed the filter", "replaced the filter", "when did i last", "last time i",
+    ],
     "scratch_notes": ["scratch", "jot", "write down", "wrote down", "jotted"],
     "repo_research": ["repo", "repository", "github", "codebase", "clone"],
     "image": ["image", "picture", "photo", "draw", "generate a"],
@@ -1532,5 +1613,17 @@ def select_tools(recent_texts: list[str], has_attachments: bool) -> list[dict]:
     matched_groups = {group for group, keywords in GROUP_KEYWORDS.items() if any(kw in haystack for kw in keywords)}
     if has_attachments:
         matched_groups.add("attachments")
+    # Chores are named by the user, so their own words are keywords too.
+    if "chores" not in matched_groups:
+        try:
+            if chore_chat.mentions_a_chore(haystack):
+                matched_groups.add("chores")
+        except Exception:
+            # The planner database is optional for chat.
+            logger.exception("Couldn't check the message against the chore names")
+    # Offered only when adding is actually being talked about. With it always
+    # available the model added a chore nobody asked for after a failed log.
+    if "chores" in matched_groups and re.search(r"\b(add|track)\b|new chore", haystack):
+        matched_groups.add("chore_add")
     matched_names = {name for group in matched_groups for name in TOOL_GROUPS[group]}
     return [t for t in TOOLS if t["function"]["name"] in matched_names]
