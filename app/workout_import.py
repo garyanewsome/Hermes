@@ -55,14 +55,17 @@ def list_exercises() -> list[dict]:
     return sorted(found.values(), key=lambda e: e["name"].casefold())
 
 
-def _best(sets: list[dict]) -> dict:
+LB_PER_KG = 2.20462
+
+
+def best_set(sets: list[dict]) -> dict:
     """Heaviest weight, then most reps at it; with no weights recorded, most
     reps. Ties go to the most recent. Expects newest first."""
     def rank(item):
         weight = item["weight"]
         if weight is None:
             return (0, 0, item["reps"])
-        return (1, weight * (2.20462 if item["unit"] == "kg" else 1), item["reps"])
+        return (1, weight * (LB_PER_KG if item["unit"] == "kg" else 1), item["reps"])
 
     return max(sets, key=rank)
 
@@ -107,7 +110,10 @@ def exercise_history(name: str) -> dict | None:
             days[-1]["sessions"].append(session)
         days[-1]["sets"].append(item)
         sets.append({**item, "date": day})
-    return {"days": days, "best": _best(sets)}
+    # Each day's top set, for the weight-over-time chart.
+    for day in days:
+        day["best"] = best_set(day["sets"])
+    return {"days": days, "best": best_set(sets)}
 
 
 def link_exercise(name: str, same_as: str) -> None:

@@ -439,6 +439,7 @@ async function postExercise(url, payload) {
 }
 
 export const exerciseHistory = (name) => workoutRequest(`/workouts/exercises/history?name=${encodeURIComponent(name)}`);
+export const workoutCharts = (weeks) => workoutRequest(`/workouts/charts?weeks=${weeks}`);
 export const linkExercise = (name, sameAs) => postExercise('/workouts/exercises/link', { name, same_as: sameAs });
 export const unlinkExercise = (name) => postExercise('/workouts/exercises/unlink', { name });
 

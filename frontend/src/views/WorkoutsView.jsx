@@ -4,12 +4,14 @@ import useIsMobile from '../hooks/useIsMobile.js';
 import { importWorkoutSheet, listExercises, listWorkouts, previewWorkoutSheet } from '../api.js';
 import { minutesText, paceText } from '../lib/activities.js';
 import ActivityTab from './ActivityTab.jsx';
+import ChartsTab from './ChartsTab.jsx';
 import ExercisesTab from './ExercisesTab.jsx';
 import { card, dim, longDate, number, outline, solid } from './workoutStyles.js';
 
 const TABS = [
   ['history', 'History'],
   ['exercises', 'Search'],
+  ['charts', 'Charts'],
   ['activity', 'Activity'],
   ['import', 'Import'],
 ];
@@ -237,7 +239,7 @@ export default function WorkoutsView({ onOpenDrawer, active }) {
       <TopBar title="Workouts" onOpenDrawer={onOpenDrawer}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {TABS.map(([key, label]) => (
-            <button key={key} type="button" onClick={() => setTab(key)} aria-pressed={tab === key} style={tab === key ? solid : outline}>
+            <button key={key} type="button" onClick={() => setTab(key)} aria-pressed={tab === key} style={{ ...(tab === key ? solid : outline), ...(isMobile && { padding: '6px 9px', fontSize: 12 }) }}>
               {label}
             </button>
           ))}
@@ -247,6 +249,7 @@ export default function WorkoutsView({ onOpenDrawer, active }) {
         <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 12 }}>
           {error && <div role="alert" style={{ fontSize: 13, color: '#ff6b6b' }}>{error}</div>}
           {tab === 'history' && <History days={days} />}
+          {tab === 'charts' && <ChartsTab active={active} />}
           {/* Stays mounted so a half-typed entry isn't lost. */}
           <div style={{ display: tab === 'activity' ? 'contents' : 'none' }}>
             <ActivityTab active={active && tab === 'activity'} onChange={refresh} />
