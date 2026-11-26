@@ -178,6 +178,47 @@ def init_planner_db() -> None:
             )
             """
         )
+        # Workout log (app/workouts.py). Pastes are kept verbatim so entries
+        # can be re-read if the parser improves; lift_sets and walks are the
+        # current parsed state of each day.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS workout_pastes (
+                id SERIAL PRIMARY KEY,
+                raw_text TEXT NOT NULL,
+                saved_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS lift_sets (
+                id SERIAL PRIMARY KEY,
+                paste_id INTEGER NOT NULL REFERENCES workout_pastes(id),
+                workout_date DATE NOT NULL,
+                position INTEGER NOT NULL,
+                exercise TEXT NOT NULL,
+                bodyweight BOOLEAN NOT NULL DEFAULT false,
+                weight NUMERIC(8, 2),
+                weight_unit TEXT CHECK (weight_unit IN ('lb', 'kg')),
+                reps INTEGER NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS walks (
+                id SERIAL PRIMARY KEY,
+                paste_id INTEGER NOT NULL REFERENCES workout_pastes(id),
+                workout_date DATE NOT NULL,
+                position INTEGER NOT NULL,
+                activity TEXT NOT NULL,
+                distance NUMERIC(8, 2),
+                distance_unit TEXT CHECK (distance_unit IN ('mi', 'km')),
+                duration_seconds INTEGER
+            )
+            """
+        )
         # Simplenote-style scratchpad — no title field, the first line of
         # `content` serves as the title in the list. A quick-capture spot
         # for ideas on the go, meant to get copied into Obsidian later, not
