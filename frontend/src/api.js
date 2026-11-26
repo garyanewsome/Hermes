@@ -474,3 +474,19 @@ export const unlogChore = (id, date) => choreRequest(`/chores/${id}/log/${date}`
 export const getNavOrder = async () => (await workoutRequest('/nav-order')).order;
 export const saveNavOrder = (order) =>
   workoutRequest('/nav-order', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order }) });
+
+// ---- Weekly recap ---------------------------------------------------------
+
+export const latestRecap = async () => (await workoutRequest('/recaps/latest')).recap;
+
+// Writing the summary waits on the chat model, so these get longer than the
+// usual timeout and are never retried (a retry could save two vault notes).
+async function slowRecapRequest(url) {
+  const res = await fetch(url, { method: 'POST', signal: AbortSignal.timeout(300000) });
+  if (res.status === 401) window.dispatchEvent(new Event('hermes:unauthorized'));
+  if (!res.ok) throw new Error(await failureText(res));
+  return (await res.json()).recap;
+}
+
+export const updateRecap = (week) => slowRecapRequest(`/recaps/${week}`);
+export const saveRecapToVault = (week) => slowRecapRequest(`/recaps/${week}/vault`);

@@ -324,6 +324,22 @@ def init_planner_db() -> None:
             )
             """
         )
+        # Weekly recaps (app/recap.py). vault_markdown is what the vault note
+        # holds, to tell when the recap has been updated since.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS recaps (
+                week_start DATE PRIMARY KEY,
+                facts JSONB NOT NULL,
+                summary TEXT,
+                markdown TEXT NOT NULL,
+                generated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                vault_path TEXT,
+                vault_markdown TEXT,
+                vault_error TEXT
+            )
+            """
+        )
         # Simplenote-style scratchpad — no title field, the first line of
         # `content` serves as the title in the list. A quick-capture spot
         # for ideas on the go, meant to get copied into Obsidian later, not

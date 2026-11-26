@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
+import RecapCard from '../components/RecapCard.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
 import {
   completeTask,
@@ -656,6 +657,8 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
           ) : (
             <WeatherHero weather={weather} error={weatherError} onEditLocation={() => setEditingLocation(true)} />
           )}
+
+          <RecapCard active={active} />
 
           {/* On a wide screen the sections sit side by side as CSS columns
               (cards stack under each other without leaving holes when one

@@ -29,7 +29,7 @@ from app.db import (
     rename_conversation,
     update_message_content,
 )
-from app import activities, chores, nav_order, planner_db, trends, workout_charts, workout_import, workouts
+from app import activities, chores, nav_order, planner_db, recap, trends, workout_charts, workout_import, workouts
 
 logger = logging.getLogger("hermes")
 
@@ -39,6 +39,7 @@ app.include_router(workout_import.router)
 app.include_router(activities.router)
 app.include_router(chores.router)
 app.include_router(trends.router)
+app.include_router(recap.router)
 app.include_router(nav_order.router)
 app.include_router(workout_charts.router)
 init_db()
@@ -56,6 +57,11 @@ except Exception:
 @app.on_event("startup")
 def _start_health_checks():
     health_checks.start_background()
+
+
+@app.on_event("startup")
+def _start_weekly_recap():
+    recap.start_background()
 
 
 class AttachmentRef(BaseModel):

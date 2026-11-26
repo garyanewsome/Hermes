@@ -21,6 +21,7 @@ export default defineConfig({
       '/workouts': BACKEND,
       '/chores': BACKEND,
       '/trends': BACKEND,
+      '/recaps': BACKEND,
       '/nav-order': BACKEND,
       '/activities': BACKEND,
       '/notes': BACKEND,
