@@ -1,7 +1,8 @@
 """Workout log storage and API. Parsing lives in workout_parser.py.
 
-Saving replaces a day's entries by kind: lift lines replace that day's lifts,
-walk lines replace its walks, and a kind the paste doesn't mention is left
+Saving replaces a day's pasted entries by kind: lift lines replace that day's
+lifts, walk lines replace its pasted walks (never ones added through
+Add Activity), and a kind the paste doesn't mention is left
 alone. So re-sending a day never duplicates, and adding the walk note after
 the lifting log doesn't wipe the lifts. Every saved paste is kept verbatim in
 workout_pastes, including ones whose entries were later replaced.
@@ -14,7 +15,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app import planner_db, workout_parser
+from app import activities, planner_db, workout_parser
 
 router = APIRouter()
 
@@ -27,7 +28,9 @@ def _existing_counts(conn, day: str) -> dict:
     lifts = conn.execute(
         "SELECT count(*) AS n FROM lift_sets WHERE workout_date = %s AND workout_id IS NULL", (day,)
     ).fetchone()["n"]
-    walks = conn.execute("SELECT count(*) AS n FROM walks WHERE workout_date = %s", (day,)).fetchone()["n"]
+    walks = conn.execute(
+        "SELECT count(*) AS n FROM activities WHERE activity_date = %s AND paste_id IS NOT NULL", (day,)
+    ).fetchone()["n"]
     return {"lift_sets": lifts, "walks": walks}
 
 
@@ -76,7 +79,9 @@ def save(text: str) -> dict:
                     "DELETE FROM lift_sets WHERE workout_date = %s AND workout_id IS NULL", (day["date"],)
                 )
             if day["walks"]:
-                conn.execute("DELETE FROM walks WHERE workout_date = %s", (day["date"],))
+                conn.execute(
+                    "DELETE FROM activities WHERE activity_date = %s AND paste_id IS NOT NULL", (day["date"],)
+                )
             position = 0
             for lift in day["lifts"]:
                 for reps in lift["reps"]:
@@ -90,21 +95,21 @@ def save(text: str) -> dict:
                         (paste_id, day["date"], position, lift["exercise"], lift["bodyweight"],
                          lift["weight"], lift["unit"], reps),
                     )
-            for position, walk in enumerate(day["walks"], start=1):
+            for walk in day["walks"]:
                 conn.execute(
                     """
-                    INSERT INTO walks
-                        (paste_id, workout_date, position, activity, distance, distance_unit, duration_seconds)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO activities
+                        (paste_id, activity_date, activity, distance, distance_unit, duration_seconds)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     """,
-                    (paste_id, day["date"], position, walk["activity"], walk["distance"],
+                    (paste_id, day["date"], walk["activity"], walk["distance"],
                      walk["distance_unit"], walk["duration_seconds"]),
                 )
     return {**result, "saved": True}
 
 
 def history(start: date | None = None, end: date | None = None) -> list[dict]:
-    """Saved days, newest first, one entry per set and per walk."""
+    """Saved days, newest first, one entry per set and per activity."""
     def where(column):
         return (f"WHERE (%(start)s::date IS NULL OR {column} >= %(start)s) "
                 f"AND (%(end)s::date IS NULL OR {column} <= %(end)s)")
@@ -125,19 +130,15 @@ def history(start: date | None = None, end: date | None = None) -> list[dict]:
             """,
             params,
         ).fetchall()
-        walks = conn.execute(
-            f"""
-            SELECT workout_date, activity, distance::float8 AS distance, distance_unit, duration_seconds
-            FROM walks {where("workout_date")} ORDER BY workout_date, position
-            """,
-            params,
-        ).fetchall()
+        logged = [
+            {**row, "workout_date": row.pop("activity_date")} for row in activities.entries(conn, start, end)
+        ]
     days: dict[date, dict] = {}
-    for key, rows in (("sets", sets), ("walks", walks)):
+    for key, rows in (("sets", sets), ("activities", logged)):
         for row in rows:
             entry = dict(row)
             day = entry.pop("workout_date")
-            days.setdefault(day, {"date": day.isoformat(), "sets": [], "walks": []})[key].append(entry)
+            days.setdefault(day, {"date": day.isoformat(), "sets": [], "activities": []})[key].append(entry)
     for day in days.values():
         # Full load, in code. Pounds and kilograms are totalled separately.
         volume: dict[str, float] = {}

@@ -23,7 +23,7 @@ walk | walking pad | 20 min
   - time: `30 min`, `28:30`, `1:05:00`
 
 Saving a day again replaces it by kind: lift lines replace that day's lifts,
-walk lines replace its walks. So send **all** of a day's lifts together (and
+walk lines replace its pasted walks (not ones added in the app). So send **all** of a day's lifts together (and
 all of its walks together).
 
 Not supported yet: timed holds, assisted (negative) weight, other cardio.

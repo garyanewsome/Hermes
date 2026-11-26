@@ -163,7 +163,7 @@ class ImportTests(unittest.TestCase):
 
     def setUp(self):
         with self.db._connect() as conn:
-            for table in ("lift_sets", "walks", "workout_pastes", "workouts", "workout_programs", "exercise_aliases"):
+            for table in ("lift_sets", "activities", "walks", "workout_pastes", "workouts", "workout_programs", "exercise_aliases"):
                 conn.execute(f"DELETE FROM {table}")
 
     tearDown = setUp
@@ -216,7 +216,7 @@ class ImportTests(unittest.TestCase):
         self.client.post("/workouts", json={"text": "WORKOUT 2020-01-05\nlift | Bench | 100 lb | 5\nwalk | pad | 5 min"})
         self.upload(build())
         [day] = self.days()
-        self.assertEqual((len(day["sets"]), len(day["walks"])), (7, 1))
+        self.assertEqual((len(day["sets"]), len(day["activities"])), (7, 1))
 
     def test_paste_cannot_double_count_sheet_lifts(self):
         self.upload(build())

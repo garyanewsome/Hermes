@@ -29,13 +29,14 @@ from app.db import (
     rename_conversation,
     update_message_content,
 )
-from app import planner_db, workout_import, workouts
+from app import activities, planner_db, workout_import, workouts
 
 logger = logging.getLogger("hermes")
 
 app = FastAPI(title="Hermes")
 app.include_router(workouts.router)
 app.include_router(workout_import.router)
+app.include_router(activities.router)
 init_db()
 
 try:

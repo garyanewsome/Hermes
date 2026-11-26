@@ -275,6 +275,33 @@ def init_planner_db() -> None:
             )
             """
         )
+        # Everything that isn't lifting: walks, rides, holds (app/activities.py
+        # and walk lines in a paste). Replaces the walks table above, which is
+        # no longer written; its rows are copied across once, when this table
+        # is first created, so a deleted entry never comes back.
+        first_time = conn.execute("SELECT to_regclass('activities') AS found").fetchone()["found"] is None
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS activities (
+                id SERIAL PRIMARY KEY,
+                paste_id INTEGER REFERENCES workout_pastes(id),
+                activity_date DATE NOT NULL,
+                activity TEXT NOT NULL,
+                distance NUMERIC(8, 2),
+                distance_unit TEXT CHECK (distance_unit IN ('mi', 'km')),
+                duration_seconds INTEGER,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
+        if first_time:
+            conn.execute(
+                """
+                INSERT INTO activities (paste_id, activity_date, activity, distance, distance_unit, duration_seconds)
+                SELECT paste_id, workout_date, activity, distance, distance_unit, duration_seconds
+                FROM walks ORDER BY workout_date, position
+                """
+            )
         # Simplenote-style scratchpad — no title field, the first line of
         # `content` serves as the title in the list. A quick-capture spot
         # for ideas on the go, meant to get copied into Obsidian later, not

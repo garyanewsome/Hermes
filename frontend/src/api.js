@@ -440,3 +440,12 @@ async function postExercise(url, payload) {
 
 export const linkExercise = (name, sameAs) => postExercise('/workouts/exercises/link', { name, same_as: sameAs });
 export const unlinkExercise = (name) => postExercise('/workouts/exercises/unlink', { name });
+
+export const listActivities = () => workoutRequest('/activities');
+export const saveActivity = (entry, id) =>
+  workoutRequest(id ? `/activities/${id}` : '/activities', {
+    method: id ? 'PUT' : 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(entry),
+  });
+export const deleteActivity = (id) => workoutRequest(`/activities/${id}`, { method: 'DELETE' });

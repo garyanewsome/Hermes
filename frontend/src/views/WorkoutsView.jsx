@@ -2,21 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
 import { importWorkoutSheet, linkExercise, listExercises, listWorkouts, previewWorkoutSheet, unlinkExercise } from '../api.js';
-import { parseISODate } from '../lib/dates.js';
+import { minutesText, paceText } from '../lib/activities.js';
+import ActivityTab from './ActivityTab.jsx';
+import { card, dim, longDate, number, outline, solid } from './workoutStyles.js';
 
 const TABS = [
   ['history', 'History'],
+  ['activity', 'Activity'],
   ['import', 'Import'],
   ['exercises', 'Exercises'],
 ];
 
-const card = { background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px' };
-const dim = { fontSize: 12, color: 'var(--text-dim)' };
-const outline = { background: 'transparent', border: '1px solid var(--accent-glow)', color: 'var(--accent)', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 600 };
-const solid = { ...outline, background: 'var(--accent)', color: 'var(--accent-text)' };
-
-const number = (value) => value.toLocaleString(undefined, { maximumFractionDigits: 2 });
-const longDate = (iso) => parseISODate(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
 function weightText(set) {
@@ -89,19 +85,20 @@ function Workout({ title, summary, sets, children }) {
 
 function History({ days }) {
   if (days === null) return <div style={dim}>Loading…</div>;
-  if (days.length === 0) return <div style={dim}>No workouts yet. Upload your spreadsheet on the Import tab.</div>;
+  if (days.length === 0) return <div style={dim}>Nothing yet. Upload your spreadsheet on the Import tab, or add an activity.</div>;
   return days.map((day) => {
     const sessions = [...new Set(day.sets.map((s) => s.session).filter(Boolean))];
     const volume = Object.entries(day.volume).map(([unit, total]) => `${number(total)} ${unit}`);
-    const parts = [day.sets.length > 0 && plural(day.sets.length, 'set'), ...volume, day.walks.length > 0 && plural(day.walks.length, 'walk')];
+    const parts = [day.sets.length > 0 && plural(day.sets.length, 'set'), ...volume, day.activities.length > 0 && (day.activities.length === 1 ? '1 activity' : `${day.activities.length} activities`)];
     return (
       <Workout key={day.date} title={[longDate(day.date), ...sessions].join(' · ')} summary={parts.filter(Boolean).join(' · ')} sets={day.sets}>
-        {day.walks.map((walk, i) => (
-          <div key={i} style={{ ...dim, marginTop: 6 }}>
+        {day.activities.map((entry) => (
+          <div key={entry.id} style={{ ...dim, marginTop: 6 }}>
             {[
-              walk.activity,
-              walk.distance !== null && `${number(walk.distance)} ${walk.distance_unit}`,
-              walk.duration_seconds !== null && `${number(walk.duration_seconds / 60)} min`,
+              entry.activity,
+              entry.distance !== null && `${number(entry.distance)} ${entry.distance_unit}`,
+              entry.duration_seconds && minutesText(entry.duration_seconds),
+              paceText(entry),
             ]
               .filter(Boolean)
               .join(' · ')}
@@ -291,7 +288,7 @@ export default function WorkoutsView({ onOpenDrawer, active }) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <TopBar title="Workouts" onOpenDrawer={onOpenDrawer}>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {TABS.map(([key, label]) => (
             <button key={key} type="button" onClick={() => setTab(key)} aria-pressed={tab === key} style={tab === key ? solid : outline}>
               {label}
@@ -303,6 +300,10 @@ export default function WorkoutsView({ onOpenDrawer, active }) {
         <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 12 }}>
           {error && <div role="alert" style={{ fontSize: 13, color: '#ff6b6b' }}>{error}</div>}
           {tab === 'history' && <History days={days} />}
+          {/* Stays mounted so a half-typed entry isn't lost. */}
+          <div style={{ display: tab === 'activity' ? 'contents' : 'none' }}>
+            <ActivityTab active={active && tab === 'activity'} onChange={refresh} />
+          </div>
           {/* Stays mounted so a preview survives a look at another tab. */}
           <div style={{ display: tab === 'import' ? 'contents' : 'none' }}>
             <Import onImported={refresh} />

@@ -104,7 +104,7 @@ class StorageTests(unittest.TestCase):
 
     def wipe(self):
         with self.db._connect() as conn:
-            for table in ("lift_sets", "walks", "workout_pastes"):
+            for table in ("lift_sets", "activities", "walks", "workout_pastes"):
                 conn.execute(f"DELETE FROM {table}")
 
     def save(self, text):
@@ -123,7 +123,7 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(self.save(self.PASTE).status_code, 200)
         self.assertEqual(self.save(self.PASTE).status_code, 200)
         day = self.day()
-        self.assertEqual((len(day["sets"]), len(day["walks"])), (3, 1))
+        self.assertEqual((len(day["sets"]), len(day["activities"])), (3, 1))
         self.assertEqual(day["sets"][0]["weight"], 185.0)
 
     def test_replacing_one_kind_keeps_the_other(self):
@@ -134,7 +134,7 @@ class StorageTests(unittest.TestCase):
         self.save(text)
         day = self.day()
         self.assertEqual(len(day["sets"]), 3)
-        self.assertEqual([w["distance"] for w in day["walks"]], [2.0])
+        self.assertEqual([w["distance"] for w in day["activities"]], [2.0])
 
     def test_any_error_saves_nothing(self):
         self.save(self.PASTE)
