@@ -462,6 +462,7 @@ const choreRequest = (url, method = 'GET', payload) =>
   });
 export const listChores = () => choreRequest('/chores');
 export const saveChore = (chore, id) => choreRequest(id ? `/chores/${id}` : '/chores', id ? 'PUT' : 'POST', chore);
+export const weekendChores = () => choreRequest('/chores/today');
 export const deleteChore = (id) => choreRequest(`/chores/${id}`, 'DELETE');
 export const choreHistory = async (id) => (await choreRequest(`/chores/${id}/history`)).dates;
 export const logChore = (id, date) => choreRequest(`/chores/${id}/log`, 'POST', date ? { date } : {});

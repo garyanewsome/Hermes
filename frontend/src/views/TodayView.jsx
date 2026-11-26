@@ -13,6 +13,9 @@ import {
   setWeatherLocation,
   skipTodoItem,
   updateTodoItem,
+  logChore,
+  unlogChore,
+  weekendChores,
 } from '../api.js';
 import { DUE_COLORS, dueTone, formatDue, parseISODate, todayISO } from '../lib/dates.js';
 import { QUADRANT_BY_KEY, QUADRANTS } from '../lib/quadrants.js';
@@ -21,6 +24,7 @@ const POLL_INTERVAL_MS = 60000;
 const TODO_COLOR = '#b46bff';
 const BOARD_COLOR = '#3bffa0';
 const HABIT_COLOR = '#ff4fc0';
+const CHORE_COLOR = '#8c9eff';
 
 // Other views (which stay mounted) refresh themselves on this.
 function announceChange() {
@@ -480,6 +484,7 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
   const [agenda, setAgenda] = useState(null);
   const [tasks, setTasks] = useState(null);
   const [habits, setHabits] = useState(null);
+  const [chores, setChores] = useState(null);
   const [weather, setWeather] = useState(null);
   const [weatherError, setWeatherError] = useState(false);
   const [alerts, setAlerts] = useState(null);
@@ -488,7 +493,8 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
   // Each source loads on its own, so a slow or failing one (weather is the
   // only call that leaves the house) never holds up the rest of the page.
   async function refreshLocal() {
-    const [a, t, h] = await Promise.allSettled([getTodoAgenda(), listTasks('open'), listHabits()]);
+    const [a, t, h, c] = await Promise.allSettled([getTodoAgenda(), listTasks('open'), listHabits(), weekendChores()]);
+    if (c.status === 'fulfilled') setChores(c.value);
     if (a.status === 'fulfilled') setAgenda(a.value);
     if (t.status === 'fulfilled') setTasks(t.value);
     if (h.status === 'fulfilled') setHabits(h.value);
@@ -605,6 +611,16 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
     announceChange();
   }
 
+  async function handleChoreToggle(chore) {
+    const done = chore.last_done === chores.today;
+    try {
+      await (done ? unlogChore(chore.id, chores.today) : logChore(chore.id));
+    } catch (err) {
+      console.error('Chore toggle failed', err);
+    }
+    await refreshLocal();
+  }
+
   async function handlePickLocation(loc) {
     setEditingLocation(false);
     try {
@@ -705,6 +721,25 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
                   </Row>
                 );
               })}
+          </Card>
+          )}
+
+          {/* The server sends chores only on weekends, and only due ones. */}
+          {chores && chores.chores.length > 0 && (
+          <Card desktop={!isMobile} title="Chores" color={CHORE_COLOR} count={chores.chores.filter((c) => c.last_done !== chores.today).length} onOpen={() => onNavigate('chores')}>
+            {chores.chores.map((chore) => {
+              const done = chore.last_done === chores.today;
+              return (
+                <Row key={chore.id} left={<CheckCircle checked={done} color={CHORE_COLOR} label={done ? `Undo: ${chore.name}` : `Did it: ${chore.name}`} onClick={() => handleChoreToggle(chore)} />}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 16, lineHeight: 1.3, color: done ? 'var(--text-dim)' : 'var(--text)', overflowWrap: 'anywhere' }}>{chore.name}</div>
+                    <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2 }}>
+                      {done ? 'done today' : chore.days_ago === null ? 'never done' : `last done ${chore.days_ago} days ago`}
+                    </div>
+                  </div>
+                </Row>
+              );
+            })}
           </Card>
           )}
 

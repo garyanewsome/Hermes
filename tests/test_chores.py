@@ -1,6 +1,7 @@
 import os
 import unittest
-from datetime import timedelta
+from datetime import date, timedelta
+from unittest import mock
 
 TEST_DB_URL = os.environ.get("PLANNER_TEST_DB_URL")
 if TEST_DB_URL:
@@ -90,6 +91,25 @@ class ChoreTests(unittest.TestCase):
         self.assertTrue(self.only()["due"])
         self.client.put(f"/chores/{chore_id}", json={"name": "Dust ceiling fans", "every_days": None})
         self.assertFalse(self.only()["due"])
+
+    def on_today(self, day):
+        with mock.patch.object(self.db, "_today", return_value=day):
+            body = self.client.get("/chores/today").json()
+        return [c["name"] for c in body["chores"]]
+
+    def test_today_page_shows_due_chores_on_weekends_only(self):
+        saturday = date(2026, 11, 28)
+        for name, every in (("Due", 30), ("Fresh", 30), ("No interval", None), ("Done today", 30)):
+            self.add(name, every)
+        ids = {c["name"]: c["id"] for c in self.client.get("/chores").json()["chores"]}
+        with mock.patch.object(self.db, "_today", return_value=saturday):
+            for name, ago in (("Due", 40), ("Fresh", 2), ("No interval", 400), ("Done today", 0)):
+                self.client.post(f"/chores/{ids[name]}/log", json={"date": str(saturday - timedelta(days=ago))})
+        self.assertEqual(self.on_today(saturday), ["Due", "Done today"])
+        for offset in range(2, 7):  # Monday to Friday
+            self.assertEqual(self.on_today(saturday + timedelta(days=offset)), [])
+        # Still due on Sunday; yesterday's finished one has dropped off.
+        self.assertEqual(self.on_today(saturday + timedelta(days=1)), ["Due"])
 
     def test_never_done_first_then_longest_ago(self):
         for name in ("Recent", "Old", "Never"):

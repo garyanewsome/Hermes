@@ -80,6 +80,8 @@ Tests need a throwaway Postgres database (never the real one); they're skipped w
 PLANNER_TEST_DB_URL=postgresql://localhost:5432/planner_test .venv/bin/python -m unittest discover -s tests -t .
 ```
 
+**Chores on Today:** Saturdays and Sundays only, chores with an interval that are due appear on Today with a tick to log them (`GET /chores/today`).
+
 **Chores by chat:** "I dusted the ceiling fans", "I flipped the mattress last Saturday", "when did I last descale the coffee maker?", "what chores are due?". Code picks the chore and the date; if nothing matches it asks rather than guessing.
 
 **Menu order:** drag items by the handle in **Settings → Menu order** (a copy cached in the browser keeps the menu from shifting after a refresh) (Today stays pinned at the top, Settings and System at the bottom). Saved on the server (`GET|PUT /nav-order`), so devices match.

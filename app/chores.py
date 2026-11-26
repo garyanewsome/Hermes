@@ -52,6 +52,20 @@ def list_chores() -> list[dict]:
     return chores
 
 
+def weekend_chores() -> dict:
+    """What the Today page shows. Saturdays and Sundays only, so weekdays
+    stay clear of house chores: chores with an interval that are due, plus
+    any of those done today so a mistaken tap can be undone."""
+    today = planner_db._today()
+    shown = []
+    if today.weekday() >= 5:
+        shown = [
+            c for c in list_chores()
+            if c["every_days"] is not None and (c["due"] or c["last_done"] == today.isoformat())
+        ]
+    return {"chores": shown, "today": today.isoformat()}
+
+
 def _clean_name(conn, name: str, chore_id: int | None = None) -> str:
     name = " ".join(name.split())
     if not name:
@@ -136,6 +150,11 @@ def _found(result):
 @router.get("/chores")
 def get_chores():
     return {"chores": list_chores(), "today": planner_db._today().isoformat()}
+
+
+@router.get("/chores/today")
+def get_weekend_chores():
+    return weekend_chores()
 
 
 @router.post("/chores")
