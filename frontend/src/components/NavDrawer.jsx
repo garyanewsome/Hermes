@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-import { getNavOrder, saveNavOrder } from '../api.js';
+import { useEffect, useState } from 'react';
+import { getNavOrder } from '../api.js';
 
-const ITEMS = [
+export const ITEMS = [
   {
     key: 'today',
     label: 'Today',
@@ -102,6 +102,18 @@ const ITEMS = [
     ),
   },
   {
+    key: 'settings',
+    label: 'Settings',
+    pinned: 'bottom',
+    icon: (color) => (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M2 4.5h6.5M12 4.5h2M2 11.5h2M7.5 11.5H14" stroke={color} strokeWidth="1.4" strokeLinecap="round" />
+        <circle cx="10.2" cy="4.5" r="1.8" stroke={color} strokeWidth="1.3" />
+        <circle cx="5.8" cy="11.5" r="1.8" stroke={color} strokeWidth="1.3" />
+      </svg>
+    ),
+  },
+  {
     key: 'system',
     label: 'System',
     pinned: 'bottom',
@@ -135,24 +147,12 @@ const ITEMS = [
 
 // Saved keys first, in their order; anything newer than the saved order
 // follows in its default place at the end.
-function arrange(items, order) {
+export function arrange(items, order) {
   const rank = (item) => {
     const index = order.indexOf(item.key);
     return index === -1 ? order.length : index;
   };
   return [...items].sort((a, b) => rank(a) - rank(b));
-}
-
-const editButton = { background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-dim)', borderRadius: 8, fontSize: 12, padding: '5px 10px' };
-
-function MoveButton({ label, disabled, onClick, down }) {
-  return (
-    <button type="button" aria-label={label} disabled={disabled} onClick={onClick} style={{ ...editButton, width: 40, height: 36, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: disabled ? 0.3 : 1 }}>
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" style={{ transform: down ? 'rotate(180deg)' : 'none' }}>
-        <path d="M2.5 9L7 4.5 11.5 9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </button>
-  );
 }
 
 function StarIcon({ color }) {
@@ -173,20 +173,12 @@ function OverdueMark({ color }) {
 
 export default function NavDrawer({ open, activeView, onNavigate, onClose, todoAttention }) {
   const [order, setOrder] = useState([]);
-  const [editing, setEditing] = useState(false);
-  const [error, setError] = useState('');
-  // Saves run one after another, so quick taps can't land out of order.
-  const saving = useRef(Promise.resolve());
 
   useEffect(() => {
-    if (!open) {
-      setEditing(false);
-      return undefined;
-    }
+    if (!open) return undefined;
     let current = true;
-    setError('');
     // If this fails the last known order stays, and the menu still works.
-    saving.current.then(getNavOrder).then((next) => current && setOrder(next)).catch(() => {});
+    getNavOrder().then((next) => current && setOrder(next)).catch(() => {});
     return () => {
       current = false;
     };
@@ -195,20 +187,6 @@ export default function NavDrawer({ open, activeView, onNavigate, onClose, todoA
   if (!open) return null;
 
   const items = arrange(ITEMS.filter((item) => !item.pinned), order);
-
-  function save(next) {
-    setOrder(next);
-    setError('');
-    saving.current = saving.current
-      .then(() => saveNavOrder(next))
-      .catch(() => setError('Couldn’t save the order.'));
-  }
-
-  function move(index, by) {
-    const keys = items.map((item) => item.key);
-    [keys[index], keys[index + by]] = [keys[index + by], keys[index]];
-    save(keys);
-  }
 
   const renderItem = (item) => {
       const active = item.key === activeView;
@@ -292,33 +270,15 @@ export default function NavDrawer({ open, activeView, onNavigate, onClose, todoA
           overflowY: 'auto',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', padding: '0 14px 12px 20px', fontSize: 12, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+        <div style={{ padding: '0 20px 16px', fontSize: 12, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
           Views
-          <button type="button" onClick={() => setEditing(!editing)} aria-pressed={editing} style={{ ...editButton, marginLeft: 'auto', ...(editing && { borderColor: 'var(--accent)', color: 'var(--accent)' }) }}>
-            {editing ? 'Done' : 'Edit order'}
-          </button>
         </div>
-        {error && <div role="alert" style={{ padding: '0 20px 8px', fontSize: 12, color: '#ff6b6b' }}>{error}</div>}
         {ITEMS.filter((item) => item.pinned === 'top').map(renderItem)}
-        {editing
-          ? items.map((item, index) => (
-              <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 14px 4px 22px', fontSize: 14, color: '#c7c8cc', flexShrink: 0 }}>
-                {item.icon('#c7c8cc')}
-                <span style={{ marginRight: 'auto', marginLeft: 4 }}>{item.label}</span>
-                <MoveButton label={`Move ${item.label} up`} disabled={index === 0} onClick={() => move(index, -1)} />
-                <MoveButton label={`Move ${item.label} down`} disabled={index === items.length - 1} onClick={() => move(index, 1)} down />
-              </div>
-            ))
-          : items.map(renderItem)}
-        {editing && order.length > 0 && (
-          <button type="button" onClick={() => save([])} style={{ ...editButton, margin: '8px 20px', flexShrink: 0 }}>
-            Reset to default
-          </button>
-        )}
+        {items.map(renderItem)}
 
         {/* Pinned to the bottom, like a settings link: marginTop:auto pushes
             it to the end of the drawer, below a thin divider. */}
-        <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border)', paddingTop: 8, paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', flexShrink: 0, borderTop: '1px solid var(--border)', paddingTop: 8, paddingBottom: 'env(safe-area-inset-bottom)' }}>
           {ITEMS.filter((item) => item.pinned === 'bottom').map(renderItem)}
         </div>
       </div>

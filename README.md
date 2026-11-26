@@ -80,7 +80,7 @@ Tests need a throwaway Postgres database (never the real one); they're skipped w
 PLANNER_TEST_DB_URL=postgresql://localhost:5432/planner_test .venv/bin/python -m unittest discover -s tests -t .
 ```
 
-**Menu order:** **Edit order** at the top of the menu moves items up and down (Today stays pinned at the top, System at the bottom). Saved on the server (`GET|PUT /nav-order`), so devices match.
+**Menu order:** **Settings → Menu order** moves items up and down (Today stays pinned at the top, Settings and System at the bottom). Saved on the server (`GET|PUT /nav-order`), so devices match.
 
 **Chores:** its own page for jobs that are never finished. **Did it** logs today and the chore stays; longest ago sorts to the top. History per chore with backdating and removal, and an optional "every N days" that flags it when due. Routes: `GET|POST /chores`, `PUT|DELETE /chores/{id}`, `GET /chores/{id}/history`, `POST /chores/{id}/log`, `DELETE /chores/{id}/log/{date}`.
 

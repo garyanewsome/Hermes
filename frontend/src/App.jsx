@@ -7,13 +7,14 @@ import TasksView from './views/TasksView.jsx';
 import HabitsView from './views/HabitsView.jsx';
 import WorkoutsView from './views/WorkoutsView.jsx';
 import ChoresView from './views/ChoresView.jsx';
+import SettingsView from './views/SettingsView.jsx';
 import TodoView from './views/TodoView.jsx';
 import NotesView from './views/NotesView.jsx';
 import SketchView from './views/SketchView.jsx';
 import SystemView from './views/SystemView.jsx';
 import { checkAuth, pingHealth } from './api.js';
 
-const VIEWS = ['today', 'chat', 'tasks', 'todo', 'notes', 'habits', 'chores', 'workouts', 'sketch', 'system'];
+const VIEWS = ['today', 'chat', 'tasks', 'todo', 'notes', 'habits', 'chores', 'workouts', 'sketch', 'settings', 'system'];
 const LAST_VIEW_KEY = 'hermes:lastView';
 
 function initialView() {
@@ -145,6 +146,9 @@ export default function App() {
       </div>
       <div style={{ display: view === 'sketch' ? 'contents' : 'none' }}>
         <SketchView onOpenDrawer={() => setDrawerOpen(true)} />
+      </div>
+      <div style={{ display: view === 'settings' ? 'contents' : 'none' }}>
+        <SettingsView onOpenDrawer={() => setDrawerOpen(true)} active={view === 'settings'} />
       </div>
       <div style={{ display: view === 'system' ? 'contents' : 'none' }}>
         <SystemView onOpenDrawer={() => setDrawerOpen(true)} active={view === 'system'} />
