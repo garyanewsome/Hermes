@@ -242,6 +242,40 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(len(found), 5)
         self.assertEqual((found["flat BENCH"]["sets"], found["flat BENCH"]["last_done"]), (4, "2020-01-12"))
 
+    def past(self, name):
+        return self.client.get("/workouts/exercises/history", params={"name": name})
+
+    def test_exercise_history_newest_first_with_best(self):
+        self.upload(build())
+        def edit(book):
+            book.active["A10"] = "flat   BENCH"
+            book.active["F10"] = "95"
+            book.active["G10"] = 210
+        self.upload(build(edit, day="2020.01.12"))
+        body = self.past("Flat Bench").json()
+        self.assertEqual([d["date"] for d in body["days"]], ["2020-01-12", "2020-01-05"])
+        self.assertEqual([(s["weight"], s["reps"]) for s in body["days"][0]["sets"]], [(210, 7), (200, 6)])
+        self.assertEqual(body["days"][0]["sessions"], ["UPPER A"])
+        best = body["best"]
+        self.assertEqual((best["weight"], best["per_side"], best["reps"], best["date"]), (230, 105, 7, "2020-01-05"))
+
+    def test_history_includes_linked_names_either_way(self):
+        self.upload(build())
+        self.link("Leg Extensions", "Flat Bench")
+        for name in ("Flat Bench", "leg extensions"):
+            with self.subTest(name=name):
+                sets = self.past(name).json()["days"][0]["sets"]
+                self.assertEqual({s["exercise"] for s in sets}, {"Flat Bench", "Leg Extensions"})
+                self.assertEqual(len(sets), 3)
+
+    def test_best_without_weights_is_most_reps(self):
+        self.upload(build())
+        best = self.past("Close Grip Pulls").json()["best"]
+        self.assertEqual((best["weight"], best["reps"]), (None, 3))
+
+    def test_history_of_unknown_exercise(self):
+        self.assertEqual(self.past("Nothing").status_code, 404)
+
     def test_link_and_unlink(self):
         self.upload(build())
         self.assertEqual(self.link("Leg Extensions", "Flat Bench").status_code, 200)

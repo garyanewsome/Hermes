@@ -438,6 +438,7 @@ async function postExercise(url, payload) {
   return (await workoutRequest(url, options)).exercises;
 }
 
+export const exerciseHistory = (name) => workoutRequest(`/workouts/exercises/history?name=${encodeURIComponent(name)}`);
 export const linkExercise = (name, sameAs) => postExercise('/workouts/exercises/link', { name, same_as: sameAs });
 export const unlinkExercise = (name) => postExercise('/workouts/exercises/unlink', { name });
 

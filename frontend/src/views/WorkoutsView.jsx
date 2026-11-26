@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
-import { importWorkoutSheet, linkExercise, listExercises, listWorkouts, previewWorkoutSheet, unlinkExercise } from '../api.js';
+import { importWorkoutSheet, listExercises, listWorkouts, previewWorkoutSheet } from '../api.js';
 import { minutesText, paceText } from '../lib/activities.js';
 import ActivityTab from './ActivityTab.jsx';
+import ExercisesTab from './ExercisesTab.jsx';
 import { card, dim, longDate, number, outline, solid } from './workoutStyles.js';
 
 const TABS = [
   ['history', 'History'],
+  ['exercises', 'Search'],
   ['activity', 'Activity'],
   ['import', 'Import'],
-  ['exercises', 'Exercises'],
 ];
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
@@ -182,7 +183,7 @@ function Import({ onImported }) {
             <div style={card}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>New exercise names ({preview.new_exercises.length})</div>
               <div style={{ ...dim, marginTop: 6 }}>{preview.new_exercises.join(', ')}</div>
-              <div style={{ ...dim, marginTop: 6 }}>If one is a lift you already track under another name, link it on the Exercises tab after saving.</div>
+              <div style={{ ...dim, marginTop: 6 }}>If one is a lift you already track under another name, link it on the Search tab after saving.</div>
             </div>
           )}
           {preview.skipped_tabs.length > 0 && <div style={dim}>Tabs not read: {preview.skipped_tabs.join(', ')}</div>}
@@ -205,60 +206,6 @@ function Import({ onImported }) {
           )}
         </>
       )}
-    </>
-  );
-}
-
-function Exercises({ exercises, onChange }) {
-  const [search, setSearch] = useState('');
-  const [error, setError] = useState('');
-  if (exercises === null) return <div style={dim}>Loading…</div>;
-  if (exercises.length === 0) return <div style={dim}>No exercises yet.</div>;
-
-  async function change(action) {
-    setError('');
-    try {
-      onChange(await action());
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  const shown = exercises.filter((e) => e.variants.concat(e.name).some((n) => n.toLowerCase().includes(search.toLowerCase())));
-  return (
-    <>
-      <input
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder={`Search ${plural(exercises.length, 'exercise')}`}
-        aria-label="Search exercises"
-        style={{ background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--text)', borderRadius: 8, padding: '9px 12px', fontSize: 13 }}
-      />
-      {error && <div role="alert" style={{ fontSize: 13, color: '#ff6b6b' }}>{error}</div>}
-      {shown.map((entry) => (
-        <div key={entry.name} style={{ ...card, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, overflowWrap: 'anywhere' }}>{entry.name}</div>
-            <div style={dim}>{plural(entry.sets, 'set')} · last {longDate(entry.last_done)}</div>
-          </div>
-          {entry.variants
-            .filter((v) => v.toLowerCase().replace(/\s+/g, ' ') !== entry.name.toLowerCase().replace(/\s+/g, ' '))
-            .map((variant) => (
-              <button key={variant} type="button" onClick={() => change(() => unlinkExercise(variant))} title="Unlink this name" style={{ ...outline, padding: '3px 8px', fontSize: 11, fontWeight: 400 }}>
-                includes {variant} ×
-              </button>
-            ))}
-          <select
-            value=""
-            onChange={(e) => e.target.value && change(() => linkExercise(entry.name, e.target.value))}
-            aria-label={`Count ${entry.name} as another exercise`}
-            style={{ marginLeft: 'auto', maxWidth: 170, background: 'var(--panel-2)', border: '1px solid var(--border-strong)', color: 'var(--text-dim)', borderRadius: 8, padding: '5px 8px', fontSize: 12 }}
-          >
-            <option value="">Same as…</option>
-            {exercises.filter((o) => o.name !== entry.name).map((o) => <option key={o.name} value={o.name}>{o.name}</option>)}
-          </select>
-        </div>
-      ))}
     </>
   );
 }
@@ -308,7 +255,10 @@ export default function WorkoutsView({ onOpenDrawer, active }) {
           <div style={{ display: tab === 'import' ? 'contents' : 'none' }}>
             <Import onImported={refresh} />
           </div>
-          {tab === 'exercises' && <Exercises exercises={exercises} onChange={setExercises} />}
+          {/* Stays mounted so the search is still there after a look elsewhere. */}
+          <div style={{ display: tab === 'exercises' ? 'contents' : 'none' }}>
+            <ExercisesTab exercises={exercises} onChange={setExercises} />
+          </div>
         </div>
       </div>
     </div>

@@ -55,6 +55,61 @@ def list_exercises() -> list[dict]:
     return sorted(found.values(), key=lambda e: e["name"].casefold())
 
 
+def _best(sets: list[dict]) -> dict:
+    """Heaviest weight, then most reps at it; with no weights recorded, most
+    reps. Ties go to the most recent. Expects newest first."""
+    def rank(item):
+        weight = item["weight"]
+        if weight is None:
+            return (0, 0, item["reps"])
+        return (1, weight * (2.20462 if item["unit"] == "kg" else 1), item["reps"])
+
+    return max(sets, key=rank)
+
+
+def exercise_history(name: str) -> dict | None:
+    """Every set of one exercise, including linked names, newest day first.
+    Returns None if nothing has been logged under it."""
+    with planner_db._connect() as conn:
+        aliases = _aliases(conn)
+
+        def resolved(recorded):
+            return exercise_key(aliases.get(exercise_key(recorded), recorded))
+
+        wanted = resolved(name)
+        names = [
+            row["exercise"]
+            for row in conn.execute("SELECT DISTINCT exercise FROM lift_sets").fetchall()
+            if resolved(row["exercise"]) == wanted
+        ]
+        if not names:
+            return None
+        rows = conn.execute(
+            """
+            SELECT s.workout_date, w.session_name AS session, s.exercise, s.bodyweight,
+                   s.weight::float8 AS weight, s.weight_unit AS unit, s.per_side::float8 AS per_side,
+                   s.reps, s.set_type, s.target, s.myo, s.myo_raw, s.note
+            FROM lift_sets s LEFT JOIN workouts w ON w.id = s.workout_id
+            WHERE s.exercise = ANY(%s)
+            ORDER BY s.workout_date DESC, w.session_name, s.position
+            """,
+            (names,),
+        ).fetchall()
+    days: list[dict] = []
+    sets = []
+    for row in rows:
+        item = dict(row)
+        day = item.pop("workout_date").isoformat()
+        session = item.pop("session")
+        if not days or days[-1]["date"] != day:
+            days.append({"date": day, "sessions": [], "sets": []})
+        if session and session not in days[-1]["sessions"]:
+            days[-1]["sessions"].append(session)
+        days[-1]["sets"].append(item)
+        sets.append({**item, "date": day})
+    return {"days": days, "best": _best(sets)}
+
+
 def link_exercise(name: str, same_as: str) -> None:
     """Counts `name` as `same_as` from now on, including anything already
     linked to `name`."""
@@ -203,6 +258,14 @@ class UnlinkRequest(BaseModel):
 @router.get("/workouts/exercises")
 def get_exercises():
     return {"exercises": list_exercises()}
+
+
+@router.get("/workouts/exercises/history")
+def get_exercise_history(name: str):
+    result = exercise_history(name)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Nothing logged for that exercise")
+    return result
 
 
 @router.post("/workouts/exercises/link")
