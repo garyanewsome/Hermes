@@ -302,6 +302,28 @@ def init_planner_db() -> None:
                 FROM walks ORDER BY workout_date, position
                 """
             )
+        # Chores (app/chores.py): never finished, so they only have a log of
+        # the days they were done.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chores (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                every_days INTEGER,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chore_logs (
+                chore_id INTEGER NOT NULL REFERENCES chores(id) ON DELETE CASCADE,
+                done_date DATE NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                PRIMARY KEY (chore_id, done_date)
+            )
+            """
+        )
         # Simplenote-style scratchpad — no title field, the first line of
         # `content` serves as the title in the list. A quick-capture spot
         # for ideas on the go, meant to get copied into Obsidian later, not

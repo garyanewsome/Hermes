@@ -47,6 +47,13 @@
   --accent-wash: rgba(255, 79, 192, 0.1);
 }
 
+[data-view="chores"] {
+  --accent: #8c9eff;
+  --accent-text: #0b1240;
+  --accent-glow: rgba(140, 158, 255, 0.4);
+  --accent-wash: rgba(140, 158, 255, 0.1);
+}
+
 [data-view="workouts"] {
   --accent: #ff5c5c;
   --accent-text: #330a0a;

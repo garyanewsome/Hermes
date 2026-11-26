@@ -80,6 +80,8 @@ Tests need a throwaway Postgres database (never the real one); they're skipped w
 PLANNER_TEST_DB_URL=postgresql://localhost:5432/planner_test .venv/bin/python -m unittest discover -s tests -t .
 ```
 
+**Chores:** its own page for jobs that are never finished. **Did it** logs today and the chore stays; longest ago sorts to the top. History per chore with backdating and removal, and an optional "every N days" that flags it when due. Routes: `GET|POST /chores`, `PUT|DELETE /chores/{id}`, `GET /chores/{id}/history`, `POST /chores/{id}/log`, `DELETE /chores/{id}/log/{date}`.
+
 **Completion history:** every todo check-off adds a row to `todo_completions` (item text and list name copied, so it survives renames and deletes). Unchecking a one-off removes its latest row; skips aren't recorded. Recurring items never stay checked, so a mistaken check-off on one can't be undone from the UI.
 
 **Workouts page:** upload the training spreadsheet's `.xlsx` export, check the preview, save. A workout is identified by date and tab name, so uploading again replaces rather than duplicates, and the sheet replaces pasted lifts on the same date. History and unique exercise names (with "same as" linking) are on the same page. Routes: `POST /workouts/import[/preview]`, `GET /workouts/exercises`, `POST /workouts/exercises/link|unlink`.
