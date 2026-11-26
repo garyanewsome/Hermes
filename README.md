@@ -80,6 +80,8 @@ Tests need a throwaway Postgres database (never the real one); they're skipped w
 PLANNER_TEST_DB_URL=postgresql://localhost:5432/planner_test .venv/bin/python -m unittest discover -s tests -t .
 ```
 
+**Trends:** tasks, todos, habit check-ins, chores, gym days and activity minutes per week over 4 weeks, 3 months or a year, plus a year grid for each habit (`GET /trends?weeks=`). Todo history starts when completions began being recorded; a reopened or deleted task no longer counts.
+
 **Chores on Today:** Saturdays and Sundays only, chores with an interval that are due appear on Today with a tick to log them (`GET /chores/today`).
 
 **Chores by chat:** "I dusted the ceiling fans", "I flipped the mattress last Saturday", "when did I last descale the coffee maker?", "what chores are due?". Code picks the chore and the date; if nothing matches it asks rather than guessing.

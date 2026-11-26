@@ -216,7 +216,7 @@ function Cell({ x, y, size, info }) {
   );
 }
 
-export function DayGrid({ start, today, weeks, days, describe }) {
+export function DayGrid({ start, today, weeks, days, describe, title = 'Workout days', legend = true }) {
   const [ref, width] = useWidth();
   const scroller = useRef(null);
   const [active, setActive] = useState(null);
@@ -240,7 +240,7 @@ export function DayGrid({ start, today, weeks, days, describe }) {
   );
   const shown = active || today;
   return (
-    <ChartCard title="Workout days" readout={`${shortDate(shown)} · ${describe(byDate.get(shown))}`}>
+    <ChartCard title={title} readout={`${shortDate(shown)} · ${describe(byDate.get(shown))}`}>
       <div ref={ref}>
         {width > 0 && (
           <div ref={scroller} onPointerLeave={() => setActive(null)} style={{ overflowX: 'auto' }}>
@@ -271,11 +271,13 @@ export function DayGrid({ start, today, weeks, days, describe }) {
           </div>
         )}
       </div>
-      <div style={{ ...dim, display: 'flex', flexWrap: 'wrap', gap: 14 }}>
-        <span>{key({ sets: 1, activities: 0 })}Gym</span>
-        <span>{key({ sets: 0, activities: 1 })}Activity</span>
-        <span>{key({ sets: 1, activities: 1 })}Both</span>
-      </div>
+      {legend && (
+        <div style={{ ...dim, display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+          <span>{key({ sets: 1, activities: 0 })}Gym</span>
+          <span>{key({ sets: 0, activities: 1 })}Activity</span>
+          <span>{key({ sets: 1, activities: 1 })}Both</span>
+        </div>
+      )}
     </ChartCard>
   );
 }

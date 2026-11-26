@@ -61,6 +61,13 @@
   --accent-wash: rgba(199, 200, 204, 0.1);
 }
 
+[data-view="trends"] {
+  --accent: #2fd4c4;
+  --accent-text: #032b27;
+  --accent-glow: rgba(47, 212, 196, 0.35);
+  --accent-wash: rgba(47, 212, 196, 0.1);
+}
+
 [data-view="workouts"] {
   --accent: #ff5c5c;
   --accent-text: #330a0a;
