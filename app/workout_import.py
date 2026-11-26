@@ -16,6 +16,7 @@ router = APIRouter()
 SET_COLUMNS = (
     "exercise", "exercise_order", "set_type", "target", "planned_sets", "superset",
     "weight", "per_side", "base_weight", "base_kind", "reps", "reps_raw", "myo", "note",
+    "myo_raw", "full_reps", "rest_pause_reps", "partial_reps",
 )
 
 

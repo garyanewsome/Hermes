@@ -116,7 +116,8 @@ def history(start: date | None = None, end: date | None = None) -> list[dict]:
             SELECT s.workout_date, w.session_name AS session, p.name AS program, s.exercise, s.bodyweight,
                    s.weight::float8 AS weight, s.weight_unit AS unit, s.reps, s.set_type, s.target,
                    s.per_side::float8 AS per_side, s.base_weight::float8 AS base_weight, s.base_kind,
-                   s.myo, s.superset, s.note
+                   s.myo, s.superset, s.note,
+                   s.myo_raw, s.full_reps, s.rest_pause_reps, s.partial_reps
             FROM lift_sets s
             LEFT JOIN workouts w ON w.id = s.workout_id
             LEFT JOIN workout_programs p ON p.id = w.program_id

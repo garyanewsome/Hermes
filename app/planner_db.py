@@ -250,6 +250,17 @@ def init_planner_db() -> None:
             )
             """
         )
+        # The Myo column's text, and its split of reps (the total) into full,
+        # rest-pause and partial reps. NULL where no split was recorded.
+        conn.execute(
+            """
+            ALTER TABLE lift_sets
+                ADD COLUMN IF NOT EXISTS myo_raw TEXT,
+                ADD COLUMN IF NOT EXISTS full_reps INTEGER,
+                ADD COLUMN IF NOT EXISTS rest_pause_reps INTEGER,
+                ADD COLUMN IF NOT EXISTS partial_reps INTEGER
+            """
+        )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS walks (

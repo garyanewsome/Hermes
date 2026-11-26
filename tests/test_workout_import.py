@@ -80,6 +80,44 @@ class SheetTests(unittest.TestCase):
             self.assertIn(expected, warnings)
         self.assertNotIn("'total vol.' total", warnings)
 
+    def bench_sets(self, reps, myo):
+        def edit(book):
+            book.active["H10"] = reps
+            book.active["I10"] = myo
+        result = parse(build(edit))
+        sets = [s for s in result["workouts"][0]["sets"] if s["exercise"] == "Flat Bench"]
+        return sets[0], [w for w in result["warnings"] if "row 10" in w]
+
+    def split(self, item):
+        return item["reps"], item["full_reps"], item["rest_pause_reps"], item["partial_reps"]
+
+    def test_myo_breakdowns(self):
+        for reps, myo, expected in (
+            ("15", "12 + 3", (15, 12, 3, 0)),
+            ("40", "30 ++ 10", (40, 30, 0, 10)),
+            (19, "12+3++4", (19, 12, 3, 4)),
+            ("17", "12 + 3 + 2", (17, 12, 5, 0)),
+        ):
+            with self.subTest(myo=myo):
+                item, warnings = self.bench_sets(reps, myo)
+                self.assertEqual((self.split(item), item["myo_raw"], warnings), (expected, myo, []))
+
+    def test_old_x_mark_has_no_split_and_no_warning(self):
+        item, warnings = self.bench_sets("7", "x")
+        self.assertEqual((item["myo"], self.split(item), warnings), (True, (7, None, None, None), []))
+
+    def test_breakdown_that_disagrees_or_is_unreadable(self):
+        for myo, expected in (("12 + 3", "adds up to 15"), ("12 +++ 3", "should look like"), ("+3", "should look like")):
+            with self.subTest(myo=myo):
+                item, warnings = self.bench_sets("14", myo)
+                self.assertEqual((self.split(item), item["myo_raw"]), ((14, None, None, None), myo))
+                self.assertIn(expected, warnings[0])
+
+    def test_breakdown_typed_in_reps_is_added_up(self):
+        item, warnings = self.bench_sets("30 ++ 10", None)
+        self.assertEqual(self.split(item), (40, 30, 0, 10))
+        self.assertIn("read as 40", warnings[0])
+
     def test_sled_base_counts_once(self):
         def edit(book):
             book.active["E9"] = "sled"
@@ -153,6 +191,16 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(len(day["sets"]), 7)
         self.assertEqual(day["volume"], {"lb": 4610})
         self.assertEqual(day["sets"][0]["program"], "Renamed")
+
+    def test_breakdown_is_saved(self):
+        def edit(book):
+            book.active["I10"] = "4 + 3"
+        self.upload(build(edit))
+        bench = next(s for s in self.days()[0]["sets"] if s["exercise"] == "Flat Bench")
+        self.assertEqual(
+            (bench["myo_raw"], bench["reps"], bench["full_reps"], bench["rest_pause_reps"], bench["partial_reps"]),
+            ("4 + 3", 7, 4, 3, 0),
+        )
 
     def test_other_dates_are_left_alone(self):
         self.upload(build())

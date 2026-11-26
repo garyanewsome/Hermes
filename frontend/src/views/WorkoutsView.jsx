@@ -20,10 +20,11 @@ const longDate = (iso) => parseISODate(iso).toLocaleDateString(undefined, { week
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
 function weightText(set) {
-  if (set.weight === null) return set.bodyweight ? 'bodyweight' : '';
-  const total = `${number(set.weight)} ${set.unit || 'lb'}`;
-  return set.per_side === null || set.per_side === undefined ? total : `${total} (${number(set.per_side)} a side)`;
+  if (set.weight === null) return set.bodyweight ? 'bodyweight' : '—';
+  return `${number(set.weight)}${set.unit === 'kg' ? ' kg' : ''}`;
 }
+
+const columns = { display: 'grid', gridTemplateColumns: '1.2fr 0.6fr 1fr 0.9fr', columnGap: 10, fontSize: 13 };
 
 // Sets in recorded order, grouped under their exercise.
 function SetList({ sets }) {
@@ -34,27 +35,33 @@ function SetList({ sets }) {
     else groups.push({ name: set.exercise, sets: [set] });
   });
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 12, maxWidth: 480 }}>
       {groups.map((group, index) => (
-        <div key={index}>
+        <div key={index} role="table" aria-label={group.name}>
           <div style={{ fontSize: 13, fontWeight: 600 }}>
             {group.name}
             {group.sets[0].superset && <span style={{ ...dim, marginLeft: 8 }}>superset</span>}
           </div>
           {group.sets[0].note && <div style={dim}>{group.sets[0].note}</div>}
-          {group.sets.map((set, i) => (
-            <div key={i} style={{ display: 'flex', flexWrap: 'wrap', columnGap: 12, fontSize: 13, padding: '2px 0' }}>
-              <span style={{ minWidth: 170 }}>
-                {weightText(set)}
-                {weightText(set) ? ' × ' : ''}
-                {set.reps}
-                {set.weight === null && !set.bodyweight ? ' reps' : ''}
-              </span>
-              <span style={dim}>
-                {[set.set_type, set.target && `target ${set.target}`, set.myo && 'myo'].filter(Boolean).join(' · ')}
-              </span>
-            </div>
-          ))}
+          <div role="row" style={{ ...columns, ...dim, fontSize: 11, marginTop: 4, borderBottom: '1px solid var(--border)' }}>
+            {['Weight', 'Reps', 'Myo', 'Volume'].map((heading) => <span key={heading} role="columnheader">{heading}</span>)}
+          </div>
+          {group.sets.map((set, i) => {
+            const side = set.per_side === null || set.per_side === undefined ? null : `${number(set.per_side)} a side`;
+            const detail = [set.set_type, set.target && `target ${set.target}`, side].filter(Boolean).join(' · ');
+            return (
+              <div key={i} style={{ padding: '3px 0' }}>
+                <div role="row" style={columns}>
+                  <span role="cell">{weightText(set)}</span>
+                  <span role="cell">{set.reps}</span>
+                  {/* The x fallback covers sets saved before the text was kept. */}
+                  <span role="cell">{set.myo_raw || (set.myo ? 'x' : '')}</span>
+                  <span role="cell">{set.weight === null ? '—' : number(set.weight * set.reps)}</span>
+                </div>
+                {detail && <div style={{ ...dim, fontSize: 11 }}>{detail}</div>}
+              </div>
+            );
+          })}
         </div>
       ))}
     </div>

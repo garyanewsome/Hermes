@@ -7,6 +7,11 @@ headings in row 2. The three weight columns hold either one weight, or base
 weight / per side / total for plate machines (announced by a "per side" row
 above the exercise). Rows run down to "Total Sets".
 
+The Myo column breaks a set's total down: "12 + 3" is 12 reps, a rest-pause,
+then 3 more; "30 ++ 10" is 30 full reps then 10 partials. Both can appear
+("12 + 3 ++ 4"). Reps holds the total, so partials count toward volume. An
+older "x" marks a set without giving the split.
+
 Errors block saving. Warnings describe cells that were skipped or read loosely,
 so they can be fixed in the sheet and uploaded again."""
 
@@ -140,7 +145,8 @@ def _read_block(sheet, block, rows, end, label, warnings) -> list[dict]:
         row, exercise = entry["row"], entry["exercise"]
         where = f"{label}, row {row} ({exercise['name']})"
         raw_reps = sheet.value(row, reps_col)
-        myo = "myo" in headings and bool(_text(sheet.value(row, headings["myo"])))
+        myo_raw = _label(sheet.value(row, headings["myo"])) if "myo" in headings else ""
+        myo = bool(myo_raw)
         cells = [sheet.value(row, c) for c in weight_cols]
         words = [_text(c) for c in cells if _text(c) and _number(c) is None]
         if words:
@@ -173,6 +179,14 @@ def _read_block(sheet, block, rows, end, label, warnings) -> list[dict]:
             continue
         reps = _number(raw_reps)
         reps_raw = _label(raw_reps)
+        breakdown = parse_breakdown(myo_raw)
+        typed = parse_breakdown(reps_raw)
+        if typed:
+            # A breakdown in the wrong column: add it up rather than lose reps.
+            reps = float(sum(typed.values()))
+            breakdown = breakdown or typed
+            warnings.append(f"{where}: reps '{reps_raw}' read as {reps:g}; put the total in Reps and the split "
+                            "in Myo so the sheet's volume is right")
         if reps is None:
             loose = re.match(r"\d{1,4}", reps_raw)
             if not loose:
@@ -186,6 +200,12 @@ def _read_block(sheet, block, rows, end, label, warnings) -> list[dict]:
         if reps == 0:
             warnings.append(f"{where}: 0 reps, treated as not done")
             continue
+        if breakdown and sum(breakdown.values()) != reps:
+            warnings.append(f"{where}: Myo '{myo_raw}' adds up to {sum(breakdown.values())} but Reps is "
+                            f"{reps:g}; kept Reps, without the split")
+            breakdown = None
+        elif myo_raw and not breakdown and myo_raw.lower() != "x":
+            warnings.append(f"{where}: Myo '{myo_raw}' should look like '12 + 3' or '30 ++ 10'; kept as typed")
         set_type = " ".join(entry["set_type"].lower().split())
         planned = exercise["planned_sets"]
         sets.append({
@@ -196,10 +216,24 @@ def _read_block(sheet, block, rows, end, label, warnings) -> list[dict]:
             "superset": exercise["superset"],
             "weight": weight, "per_side": per_side, "base_weight": base if plate else None,
             "base_kind": base_kind, "reps": int(reps), "reps_raw": reps_raw, "myo": myo,
+            "myo_raw": myo_raw or None,
+            **(breakdown or {"full_reps": None, "rest_pause_reps": None, "partial_reps": None}),
         })
     for item in sets:
         item["note"] = "; ".join(notes.get(item["exercise_order"], [])) or None
     return sets
+
+
+def parse_breakdown(text: str) -> dict | None:
+    """Splits "12 + 3 ++ 4" into full, rest-pause (+) and partial (++) reps.
+    Returns None if the text isn't a breakdown."""
+    text = text.strip()
+    if not re.fullmatch(r"\d{1,4}(\s*\+{1,2}\s*\d{1,4})+", text):
+        return None
+    parts = {"full_reps": int(re.match(r"\d+", text).group()), "rest_pause_reps": 0, "partial_reps": 0}
+    for sign, count in re.findall(r"(\++)\s*(\d+)", text):
+        parts["partial_reps" if sign == "++" else "rest_pause_reps"] += int(count)
+    return parts
 
 
 def totals(sets: list[dict]) -> dict:
