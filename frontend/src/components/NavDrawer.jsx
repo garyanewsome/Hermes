@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { getNavOrder } from '../api.js';
+import { useNavOrder } from '../lib/navOrder.js';
 
 export const ITEMS = [
   {
@@ -172,17 +171,9 @@ function OverdueMark({ color }) {
 }
 
 export default function NavDrawer({ open, activeView, onNavigate, onClose, todoAttention }) {
-  const [order, setOrder] = useState([]);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    let current = true;
-    // If this fails the last known order stays, and the menu still works.
-    getNavOrder().then((next) => current && setOrder(next)).catch(() => {});
-    return () => {
-      current = false;
-    };
-  }, [open]);
+  // Loaded as soon as the app is, then again on each opening, so a change
+  // made on another device shows up.
+  const [order] = useNavOrder(open);
 
   if (!open) return null;
 
