@@ -162,6 +162,22 @@ def init_planner_db() -> None:
             )
             """
         )
+        # One row per check-off, for history and charts. A column on
+        # todo_items couldn't do this: a recurring item resets to open when
+        # completed, so each completion needs its own row. Item text and list
+        # name are copied, and there is no FK, so history survives renames
+        # and deletes. History starts when this table first exists.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS todo_completions (
+                id SERIAL PRIMARY KEY,
+                item_id INTEGER NOT NULL,
+                item_text TEXT NOT NULL,
+                list_name TEXT NOT NULL,
+                completed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
         # Simplenote-style scratchpad — no title field, the first line of
         # `content` serves as the title in the list. A quick-capture spot
         # for ideas on the go, meant to get copied into Obsidian later, not
@@ -636,6 +652,28 @@ def create_todo_item(
     return dict(row)
 
 
+def _record_completion(conn, item_id: int) -> None:
+    conn.execute(
+        """
+        INSERT INTO todo_completions (item_id, item_text, list_name)
+        SELECT i.id, i.text, l.name
+        FROM todo_items i JOIN todo_lists l ON l.id = i.list_id
+        WHERE i.id = %s
+        """,
+        (item_id,),
+    )
+
+
+def _remove_latest_completion(conn, item_id: int) -> None:
+    conn.execute(
+        """
+        DELETE FROM todo_completions
+        WHERE id = (SELECT id FROM todo_completions WHERE item_id = %s ORDER BY completed_at DESC, id DESC LIMIT 1)
+        """,
+        (item_id,),
+    )
+
+
 def update_todo_item(
     item_id: int,
     text: str | None = None,
@@ -661,6 +699,10 @@ def update_todo_item(
         recurrence_weekdays = ""
     elif recurrence_weekdays is not None and recurrence_weekdays != "":
         recurrence_days = 0
+
+    # What the caller asked for: `done` is overwritten below for recurring
+    # items, but the check-off still has to be recorded.
+    requested_done = done
 
     if done is True:
         with _connect() as conn:
@@ -717,6 +759,11 @@ def update_todo_item(
             params.append(list_id)
 
     with _connect() as conn:
+        # Locked so two simultaneous "done" requests for a one-off item can't
+        # both see it as open and record it twice.
+        before = None
+        if requested_done is not None:
+            before = conn.execute("SELECT done FROM todo_items WHERE id = %s FOR UPDATE", (item_id,)).fetchone()
         if fields:
             params.append(item_id)
             row = conn.execute(
@@ -734,6 +781,13 @@ def update_todo_item(
                 """,
                 (item_id,),
             ).fetchone()
+        # Same transaction as the update, so history and item state can't
+        # disagree.
+        if before is not None:
+            if requested_done and not before["done"]:
+                _record_completion(conn, item_id)
+            elif not requested_done and before["done"]:
+                _remove_latest_completion(conn, item_id)
     # Returned so callers (the PATCH route) can sync the client to what
     # actually happened server-side — critical for a recurring item, where
     # "mark done" can silently turn into "reset to open, due_date advanced"
