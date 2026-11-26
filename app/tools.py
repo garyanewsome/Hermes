@@ -477,7 +477,7 @@ def log_to_daily_note(text: str) -> str:
 
 def add_to_backlog(text: str, column: str = "Ideas") -> str:
     # One card on the dev backlog board in the vault (vault-keeper's
-    # /backlog/add: add-only, Ideas, Ready or Bugs, no duplicates). Moving or
+    # /backlog/add: add-only, Ideas, Backlog, Ready or Bugs, no duplicates). Moving or
     # finishing cards is not possible from here by design.
     response = httpx.post(
         f"{VAULT_KEEPER_URL}/backlog/add",
@@ -1155,7 +1155,7 @@ TOOLS = [
                 "holds coding and project work for the user's AI assistants (not the personal task "
                 "board, habits or todo lists). Use it when the user says to add something to the dev "
                 "or coding backlog, asks to queue a code task for later, or reports a bug in one of "
-                "their projects. It only adds a card to the Ideas, Ready or Bugs column; it cannot move, edit or delete cards, and it skips cards "
+                "their projects. It only adds a card to the Ideas, Backlog, Ready or Bugs column; it cannot move, edit or delete cards, and it skips cards "
                 "that already exist."
             ),
             "parameters": {
@@ -1171,9 +1171,10 @@ TOOLS = [
                     },
                     "column": {
                         "type": "string",
-                        "enum": ["Ideas", "Ready", "Bugs"],
+                        "enum": ["Ideas", "Backlog", "Ready", "Bugs"],
                         "description": (
-                            "Ideas (default) for rough thoughts, Bugs for something broken, "
+                            "Ideas (default) for rough thoughts that need refining, "
+                            "Backlog for scoped work not yet queued, Bugs for something broken, "
                             "Ready only when the user says it is ready to be worked."
                         ),
                     },
