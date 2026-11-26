@@ -466,3 +466,9 @@ export const deleteChore = (id) => choreRequest(`/chores/${id}`, 'DELETE');
 export const choreHistory = async (id) => (await choreRequest(`/chores/${id}/history`)).dates;
 export const logChore = (id, date) => choreRequest(`/chores/${id}/log`, 'POST', date ? { date } : {});
 export const unlogChore = (id, date) => choreRequest(`/chores/${id}/log/${date}`, 'DELETE');
+
+// ---- Menu order -----------------------------------------------------------
+
+export const getNavOrder = async () => (await workoutRequest('/nav-order')).order;
+export const saveNavOrder = (order) =>
+  workoutRequest('/nav-order', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order }) });

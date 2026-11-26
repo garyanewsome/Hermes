@@ -20,6 +20,7 @@ export default defineConfig({
       '/todo-items': BACKEND,
       '/workouts': BACKEND,
       '/chores': BACKEND,
+      '/nav-order': BACKEND,
       '/activities': BACKEND,
       '/notes': BACKEND,
       '/weather': BACKEND,
