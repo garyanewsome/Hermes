@@ -82,7 +82,9 @@ PLANNER_TEST_DB_URL=postgresql://localhost:5432/planner_test .venv/bin/python -m
 
 **Completion history:** every todo check-off adds a row to `todo_completions` (item text and list name copied, so it survives renames and deletes). Unchecking a one-off removes its latest row; skips aren't recorded. Recurring items never stay checked, so a mistaken check-off on one can't be undone from the UI.
 
-**Workout log:** backend only so far. `POST /workouts/preview` and `POST /workouts` take `{"text": ...}` in the [paste format](docs/workout-format.md); `GET /workouts?start=&end=` returns saved days.
+**Workouts page:** upload the training spreadsheet's `.xlsx` export, check the preview, save. A workout is identified by date and tab name, so uploading again replaces rather than duplicates, and the sheet replaces pasted lifts on the same date. History and unique exercise names (with "same as" linking) are on the same page. Routes: `POST /workouts/import[/preview]`, `GET /workouts/exercises`, `POST /workouts/exercises/link|unlink`.
+
+**Walk notes (paste):** no screen yet. `POST /workouts/preview` and `POST /workouts` take `{"text": ...}` in the [paste format](docs/workout-format.md); `GET /workouts?start=&end=` returns saved days.
 
 ## Deployment
 

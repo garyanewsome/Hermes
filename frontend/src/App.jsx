@@ -5,13 +5,14 @@ import TodayView from './views/TodayView.jsx';
 import ChatView from './views/ChatView.jsx';
 import TasksView from './views/TasksView.jsx';
 import HabitsView from './views/HabitsView.jsx';
+import WorkoutsView from './views/WorkoutsView.jsx';
 import TodoView from './views/TodoView.jsx';
 import NotesView from './views/NotesView.jsx';
 import SketchView from './views/SketchView.jsx';
 import SystemView from './views/SystemView.jsx';
 import { checkAuth, pingHealth } from './api.js';
 
-const VIEWS = ['today', 'chat', 'tasks', 'todo', 'notes', 'habits', 'sketch', 'system'];
+const VIEWS = ['today', 'chat', 'tasks', 'todo', 'notes', 'habits', 'workouts', 'sketch', 'system'];
 const LAST_VIEW_KEY = 'hermes:lastView';
 
 function initialView() {
@@ -128,6 +129,9 @@ export default function App() {
       </div>
       <div style={{ display: view === 'habits' ? 'contents' : 'none' }}>
         <HabitsView onOpenDrawer={() => setDrawerOpen(true)} />
+      </div>
+      <div style={{ display: view === 'workouts' ? 'contents' : 'none' }}>
+        <WorkoutsView onOpenDrawer={() => setDrawerOpen(true)} active={view === 'workouts'} />
       </div>
       <div style={{ display: view === 'todo' ? 'contents' : 'none' }}>
         <TodoView onOpenDrawer={() => setDrawerOpen(true)} onAttentionChange={setTodoAttention} />

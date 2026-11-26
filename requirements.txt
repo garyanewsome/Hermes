@@ -4,6 +4,7 @@ httpx
 psycopg[binary]
 python-multipart
 pypdf
+openpyxl
 essentia
 librosa
 mir-eval>=0.6

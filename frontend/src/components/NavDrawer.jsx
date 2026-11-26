@@ -68,6 +68,15 @@ const ITEMS = [
     ),
   },
   {
+    key: 'workouts',
+    label: 'Workouts',
+    icon: (color) => (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M4.5 4v8M11.5 4v8M2 6v4M14 6v4M4.5 8h7" stroke={color} strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
     key: 'sketch',
     label: 'Sketch',
     icon: (color) => (

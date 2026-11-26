@@ -1,0 +1,308 @@
+import { useEffect, useRef, useState } from 'react';
+import TopBar from '../components/TopBar.jsx';
+import useIsMobile from '../hooks/useIsMobile.js';
+import { importWorkoutSheet, linkExercise, listExercises, listWorkouts, previewWorkoutSheet, unlinkExercise } from '../api.js';
+import { parseISODate } from '../lib/dates.js';
+
+const TABS = [
+  ['history', 'History'],
+  ['import', 'Import'],
+  ['exercises', 'Exercises'],
+];
+
+const card = { background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px' };
+const dim = { fontSize: 12, color: 'var(--text-dim)' };
+const outline = { background: 'transparent', border: '1px solid var(--accent-glow)', color: 'var(--accent)', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 600 };
+const solid = { ...outline, background: 'var(--accent)', color: 'var(--accent-text)' };
+
+const number = (value) => value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+const longDate = (iso) => parseISODate(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
+
+function weightText(set) {
+  if (set.weight === null) return set.bodyweight ? 'bodyweight' : '';
+  const total = `${number(set.weight)} ${set.unit || 'lb'}`;
+  return set.per_side === null || set.per_side === undefined ? total : `${total} (${number(set.per_side)} a side)`;
+}
+
+// Sets in recorded order, grouped under their exercise.
+function SetList({ sets }) {
+  const groups = [];
+  sets.forEach((set) => {
+    const last = groups[groups.length - 1];
+    if (last && last.name === set.exercise) last.sets.push(set);
+    else groups.push({ name: set.exercise, sets: [set] });
+  });
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+      {groups.map((group, index) => (
+        <div key={index}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>
+            {group.name}
+            {group.sets[0].superset && <span style={{ ...dim, marginLeft: 8 }}>superset</span>}
+          </div>
+          {group.sets[0].note && <div style={dim}>{group.sets[0].note}</div>}
+          {group.sets.map((set, i) => (
+            <div key={i} style={{ display: 'flex', flexWrap: 'wrap', columnGap: 12, fontSize: 13, padding: '2px 0' }}>
+              <span style={{ minWidth: 170 }}>
+                {weightText(set)}
+                {weightText(set) ? ' × ' : ''}
+                {set.reps}
+                {set.weight === null && !set.bodyweight ? ' reps' : ''}
+              </span>
+              <span style={dim}>
+                {[set.set_type, set.target && `target ${set.target}`, set.myo && 'myo'].filter(Boolean).join(' · ')}
+              </span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Workout({ title, summary, sets, children }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={card}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        style={{ width: '100%', display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 12, background: 'transparent', border: 'none', padding: 0, color: 'var(--text)', textAlign: 'left' }}
+      >
+        <span style={{ fontSize: 14, fontWeight: 600 }}>{title}</span>
+        <span style={{ ...dim, marginLeft: 'auto', color: 'var(--accent)' }}>{summary}</span>
+      </button>
+      {children}
+      {open && <SetList sets={sets} />}
+    </div>
+  );
+}
+
+function History({ days }) {
+  if (days === null) return <div style={dim}>Loading…</div>;
+  if (days.length === 0) return <div style={dim}>No workouts yet. Upload your spreadsheet on the Import tab.</div>;
+  return days.map((day) => {
+    const sessions = [...new Set(day.sets.map((s) => s.session).filter(Boolean))];
+    const volume = Object.entries(day.volume).map(([unit, total]) => `${number(total)} ${unit}`);
+    const parts = [day.sets.length > 0 && plural(day.sets.length, 'set'), ...volume, day.walks.length > 0 && plural(day.walks.length, 'walk')];
+    return (
+      <Workout key={day.date} title={[longDate(day.date), ...sessions].join(' · ')} summary={parts.filter(Boolean).join(' · ')} sets={day.sets}>
+        {day.walks.map((walk, i) => (
+          <div key={i} style={{ ...dim, marginTop: 6 }}>
+            {[
+              walk.activity,
+              walk.distance !== null && `${number(walk.distance)} ${walk.distance_unit}`,
+              walk.duration_seconds !== null && `${number(walk.duration_seconds / 60)} min`,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </div>
+        ))}
+      </Workout>
+    );
+  });
+}
+
+function Import({ onImported }) {
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const input = useRef(null);
+
+  async function choose(event) {
+    const chosen = event.target.files[0];
+    // Cleared so picking the same file again (after fixing the sheet) fires.
+    event.target.value = '';
+    if (!chosen) return;
+    setFile(chosen);
+    setPreview(null);
+    setError('');
+    setMessage('');
+    setBusy('Reading…');
+    try {
+      setPreview(await previewWorkoutSheet(chosen));
+    } catch (err) {
+      // Browsers refuse to re-read a file that changed on disk after picking.
+      setError(err.message);
+    }
+    setBusy('');
+  }
+
+  async function save() {
+    setBusy('Saving…');
+    setError('');
+    try {
+      const result = await importWorkoutSheet(file);
+      setMessage(`Saved ${plural(result.workouts.length, 'workout')}.`);
+      setPreview(null);
+      onImported();
+    } catch (err) {
+      setError(err.message);
+    }
+    setBusy('');
+  }
+
+  const blocked = preview && preview.errors.length > 0;
+  return (
+    <>
+      <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
+        <div style={dim}>In Google Sheets: File → Download → Microsoft Excel (.xlsx). Nothing is saved until you check the preview.</div>
+        <input ref={input} type="file" accept=".xlsx" onChange={choose} style={{ display: 'none' }} />
+        <button type="button" onClick={() => input.current.click()} disabled={!!busy} style={outline}>
+          {busy || 'Choose spreadsheet'}
+        </button>
+        {file && <div style={dim}>{file.name}</div>}
+        {message && <div style={{ fontSize: 13, color: 'var(--accent)' }}>{message}</div>}
+        {error && <div role="alert" style={{ fontSize: 13, color: '#ff6b6b', whiteSpace: 'pre-line' }}>{error}</div>}
+      </div>
+
+      {preview && (
+        <>
+          {blocked && (
+            <div style={{ ...card, borderColor: '#ff6b6b' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#ff6b6b' }}>Fix these in the sheet, then upload it again</div>
+              {preview.errors.map((text, i) => <div key={i} style={{ fontSize: 13, marginTop: 6 }}>{text}</div>)}
+            </div>
+          )}
+          {preview.warnings.length > 0 && (
+            <div style={{ ...card, borderColor: '#ffb020' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#ffb020' }}>Worth checking ({preview.warnings.length})</div>
+              {preview.warnings.map((text, i) => <div key={i} style={{ fontSize: 13, marginTop: 6 }}>{text}</div>)}
+            </div>
+          )}
+          {preview.new_exercises.length > 0 && (
+            <div style={card}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>New exercise names ({preview.new_exercises.length})</div>
+              <div style={{ ...dim, marginTop: 6 }}>{preview.new_exercises.join(', ')}</div>
+              <div style={{ ...dim, marginTop: 6 }}>If one is a lift you already track under another name, link it on the Exercises tab after saving.</div>
+            </div>
+          )}
+          {preview.skipped_tabs.length > 0 && <div style={dim}>Tabs not read: {preview.skipped_tabs.join(', ')}</div>}
+          {preview.workouts.map((w) => (
+            <Workout
+              key={`${w.date}-${w.session}`}
+              title={`${longDate(w.date)} · ${w.session}`}
+              summary={`${plural(w.set_count, 'set')} · ${number(w.volume)} lb (${number(w.entered_volume)} as entered)`}
+              sets={w.sets}
+            >
+              {(w.replaces.sets > 0 || w.replaces.pasted_sets > 0) && (
+                <div style={{ ...dim, marginTop: 6 }}>Replaces {plural(w.replaces.sets + w.replaces.pasted_sets, 'saved set')}</div>
+              )}
+            </Workout>
+          ))}
+          {!blocked && (
+            <button type="button" onClick={save} disabled={!!busy} style={{ ...solid, alignSelf: 'flex-start' }}>
+              {busy || `Save ${plural(preview.workouts.length, 'workout')}`}
+            </button>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+function Exercises({ exercises, onChange }) {
+  const [search, setSearch] = useState('');
+  const [error, setError] = useState('');
+  if (exercises === null) return <div style={dim}>Loading…</div>;
+  if (exercises.length === 0) return <div style={dim}>No exercises yet.</div>;
+
+  async function change(action) {
+    setError('');
+    try {
+      onChange(await action());
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  const shown = exercises.filter((e) => e.variants.concat(e.name).some((n) => n.toLowerCase().includes(search.toLowerCase())));
+  return (
+    <>
+      <input
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder={`Search ${plural(exercises.length, 'exercise')}`}
+        aria-label="Search exercises"
+        style={{ background: 'var(--panel)', border: '1px solid var(--border-strong)', color: 'var(--text)', borderRadius: 8, padding: '9px 12px', fontSize: 13 }}
+      />
+      {error && <div role="alert" style={{ fontSize: 13, color: '#ff6b6b' }}>{error}</div>}
+      {shown.map((entry) => (
+        <div key={entry.name} style={{ ...card, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, overflowWrap: 'anywhere' }}>{entry.name}</div>
+            <div style={dim}>{plural(entry.sets, 'set')} · last {longDate(entry.last_done)}</div>
+          </div>
+          {entry.variants
+            .filter((v) => v.toLowerCase().replace(/\s+/g, ' ') !== entry.name.toLowerCase().replace(/\s+/g, ' '))
+            .map((variant) => (
+              <button key={variant} type="button" onClick={() => change(() => unlinkExercise(variant))} title="Unlink this name" style={{ ...outline, padding: '3px 8px', fontSize: 11, fontWeight: 400 }}>
+                includes {variant} ×
+              </button>
+            ))}
+          <select
+            value=""
+            onChange={(e) => e.target.value && change(() => linkExercise(entry.name, e.target.value))}
+            aria-label={`Count ${entry.name} as another exercise`}
+            style={{ marginLeft: 'auto', maxWidth: 170, background: 'var(--panel-2)', border: '1px solid var(--border-strong)', color: 'var(--text-dim)', borderRadius: 8, padding: '5px 8px', fontSize: 12 }}
+          >
+            <option value="">Same as…</option>
+            {exercises.filter((o) => o.name !== entry.name).map((o) => <option key={o.name} value={o.name}>{o.name}</option>)}
+          </select>
+        </div>
+      ))}
+    </>
+  );
+}
+
+export default function WorkoutsView({ onOpenDrawer, active }) {
+  const [tab, setTab] = useState('history');
+  const [days, setDays] = useState(null);
+  const [exercises, setExercises] = useState(null);
+  const [error, setError] = useState('');
+  const isMobile = useIsMobile();
+
+  async function refresh() {
+    try {
+      const [nextDays, nextExercises] = await Promise.all([listWorkouts(), listExercises()]);
+      setDays(nextDays);
+      setExercises(nextExercises);
+      setError('');
+    } catch {
+      setError('Couldn’t load workouts.');
+    }
+  }
+
+  useEffect(() => {
+    if (active) refresh();
+  }, [active]);
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <TopBar title="Workouts" onOpenDrawer={onOpenDrawer}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {TABS.map(([key, label]) => (
+            <button key={key} type="button" onClick={() => setTab(key)} aria-pressed={tab === key} style={tab === key ? solid : outline}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </TopBar>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: isMobile ? 14 : 24 }}>
+        <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {error && <div role="alert" style={{ fontSize: 13, color: '#ff6b6b' }}>{error}</div>}
+          {tab === 'history' && <History days={days} />}
+          {/* Stays mounted so a preview survives a look at another tab. */}
+          <div style={{ display: tab === 'import' ? 'contents' : 'none' }}>
+            <Import onImported={refresh} />
+          </div>
+          {tab === 'exercises' && <Exercises exercises={exercises} onChange={setExercises} />}
+        </div>
+      </div>
+    </div>
+  );
+}

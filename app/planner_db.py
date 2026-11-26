@@ -178,9 +178,40 @@ def init_planner_db() -> None:
             )
             """
         )
-        # Workout log (app/workouts.py). Pastes are kept verbatim so entries
-        # can be re-read if the parser improves; lift_sets and walks are the
-        # current parsed state of each day.
+        # Workout log (app/workouts.py, app/workout_import.py). Pastes are
+        # kept verbatim so entries can be re-read if the parser improves;
+        # lift_sets and walks are the current parsed state of each day. A
+        # lift set comes from either a paste or a spreadsheet workout.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS workout_programs (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS workouts (
+                id SERIAL PRIMARY KEY,
+                program_id INTEGER NOT NULL REFERENCES workout_programs(id),
+                session_name TEXT NOT NULL,
+                workout_date DATE NOT NULL,
+                source_file TEXT,
+                imported_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE (workout_date, session_name)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS exercise_aliases (
+                alias_key TEXT PRIMARY KEY,
+                canonical TEXT NOT NULL
+            )
+            """
+        )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS workout_pastes (
@@ -194,14 +225,28 @@ def init_planner_db() -> None:
             """
             CREATE TABLE IF NOT EXISTS lift_sets (
                 id SERIAL PRIMARY KEY,
-                paste_id INTEGER NOT NULL REFERENCES workout_pastes(id),
+                paste_id INTEGER REFERENCES workout_pastes(id),
+                workout_id INTEGER REFERENCES workouts(id),
                 workout_date DATE NOT NULL,
                 position INTEGER NOT NULL,
                 exercise TEXT NOT NULL,
                 bodyweight BOOLEAN NOT NULL DEFAULT false,
                 weight NUMERIC(8, 2),
                 weight_unit TEXT CHECK (weight_unit IN ('lb', 'kg')),
-                reps INTEGER NOT NULL
+                reps INTEGER NOT NULL,
+                -- Spreadsheet detail. weight above is always the full load;
+                -- per_side and base_weight are set for plate machines.
+                exercise_order INTEGER,
+                set_type TEXT,
+                target TEXT,
+                planned_sets INTEGER,
+                superset BOOLEAN NOT NULL DEFAULT false,
+                per_side NUMERIC(8, 2),
+                base_weight NUMERIC(8, 2),
+                base_kind TEXT,
+                reps_raw TEXT,
+                myo BOOLEAN NOT NULL DEFAULT false,
+                note TEXT
             )
             """
         )

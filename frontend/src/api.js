@@ -401,3 +401,42 @@ export async function updateSketch(sketchId, updates) {
 export async function deleteSketch(sketchId) {
   await apiFetch(`/sketches/${sketchId}`, { method: 'DELETE' });
 }
+
+// ---- Workouts -------------------------------------------------------------
+
+// FastAPI puts the reason in `detail`: a string, or a list of problems.
+async function failureText(res) {
+  try {
+    const { detail } = await res.json();
+    if (Array.isArray(detail)) return detail.map((d) => (typeof d === 'string' ? d : d.message || d.msg)).join('\n');
+    if (detail) return detail;
+  } catch {
+    // Not JSON; fall through to the status code.
+  }
+  return `Request failed (${res.status})`;
+}
+
+async function workoutRequest(url, opts) {
+  const res = await apiFetch(url, opts);
+  if (!res.ok) throw new Error(await failureText(res));
+  return res.json();
+}
+
+function sheetUpload(url, file) {
+  const body = new FormData();
+  body.append('file', file);
+  return workoutRequest(url, { method: 'POST', body });
+}
+
+export const previewWorkoutSheet = (file) => sheetUpload('/workouts/import/preview', file);
+export const importWorkoutSheet = (file) => sheetUpload('/workouts/import', file);
+export const listWorkouts = async () => (await workoutRequest('/workouts')).days;
+export const listExercises = async () => (await workoutRequest('/workouts/exercises')).exercises;
+
+async function postExercise(url, payload) {
+  const options = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) };
+  return (await workoutRequest(url, options)).exercises;
+}
+
+export const linkExercise = (name, sameAs) => postExercise('/workouts/exercises/link', { name, same_as: sameAs });
+export const unlinkExercise = (name) => postExercise('/workouts/exercises/unlink', { name });
