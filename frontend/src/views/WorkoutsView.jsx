@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
+import AddActivityButton from '../components/AddActivityButton.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
 import { importWorkoutSheet, listExercises, listWorkouts, previewWorkoutSheet } from '../api.js';
 import { minutesText, paceText } from '../lib/activities.js';
@@ -88,7 +89,7 @@ function Workout({ title, summary, sets, children }) {
 
 function History({ days }) {
   if (days === null) return <div style={dim}>Loading…</div>;
-  if (days.length === 0) return <div style={dim}>Nothing yet. Upload your spreadsheet on the Import tab, or add an activity.</div>;
+  if (days.length === 0) return <div style={dim}>Nothing yet. Upload your spreadsheet on the Import tab, or tap + to add an activity.</div>;
   return days.map((day) => {
     const sessions = [...new Set(day.sets.map((s) => s.session).filter(Boolean))];
     const volume = Object.entries(day.volume).map(([unit, total]) => `${number(total)} ${unit}`);
@@ -217,6 +218,8 @@ export default function WorkoutsView({ onOpenDrawer, active }) {
   const [days, setDays] = useState(null);
   const [exercises, setExercises] = useState(null);
   const [error, setError] = useState('');
+  // Bumped after the + button saves, so the tabs showing activities reload.
+  const [version, setVersion] = useState(0);
   const isMobile = useIsMobile();
 
   async function refresh() {
@@ -246,13 +249,14 @@ export default function WorkoutsView({ onOpenDrawer, active }) {
         </div>
       </TopBar>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: isMobile ? 14 : 24 }}>
-        <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* The bottom padding lets the last card scroll clear of the + button. */}
+        <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 88 }}>
           {error && <div role="alert" style={{ fontSize: 13, color: '#ff6b6b' }}>{error}</div>}
           {tab === 'history' && <History days={days} />}
-          {tab === 'charts' && <ChartsTab active={active} />}
+          {tab === 'charts' && <ChartsTab active={active} version={version} />}
           {/* Stays mounted so a half-typed entry isn't lost. */}
           <div style={{ display: tab === 'activity' ? 'contents' : 'none' }}>
-            <ActivityTab active={active && tab === 'activity'} onChange={refresh} />
+            <ActivityTab active={active && tab === 'activity'} version={version} onChange={refresh} />
           </div>
           {/* Stays mounted so a preview survives a look at another tab. */}
           <div style={{ display: tab === 'import' ? 'contents' : 'none' }}>
@@ -264,6 +268,12 @@ export default function WorkoutsView({ onOpenDrawer, active }) {
           </div>
         </div>
       </div>
+      <AddActivityButton
+        onAdded={() => {
+          setVersion((n) => n + 1);
+          refresh();
+        }}
+      />
     </div>
   );
 }

@@ -146,7 +146,7 @@ function Bests({ bests }) {
   );
 }
 
-export default function ChartsTab({ active }) {
+export default function ChartsTab({ active, version }) {
   const [weeks, setWeeks] = useState(13);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -160,7 +160,7 @@ export default function ChartsTab({ active }) {
     return () => {
       current = false;
     };
-  }, [active, weeks]);
+  }, [active, weeks, version]);
 
   const describe = (day) => {
     if (!day) return 'nothing logged';

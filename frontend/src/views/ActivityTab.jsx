@@ -11,7 +11,8 @@ const shortDate = (iso) => parseISODate(iso).toLocaleDateString(undefined, { mon
 
 const blank = (activity) => ({ activity, custom: '', date: todayISO(), distance: '', unit: 'mi', minutes: '' });
 
-function ActivityForm({ types, entry, onSaved, onCancel }) {
+// Adds a new entry, or edits `entry`. onSaved gets the activity name.
+export function ActivityForm({ types, entry, onSaved, onCancel }) {
   const [form, setForm] = useState(() =>
     entry
       ? { activity: entry.activity, custom: '', date: entry.date, distance: entry.distance ?? '', unit: entry.distance_unit || 'mi', minutes: entry.duration_seconds ? entry.duration_seconds / 60 : '' }
@@ -21,11 +22,9 @@ function ActivityForm({ types, entry, onSaved, onCancel }) {
   const [dated, setDated] = useState(!!entry);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
   const set = (key) => (event) => {
     const { value } = event.target;
     setForm((current) => ({ ...current, [key]: value }));
-    setMessage('');
   };
 
   async function submit(event) {
@@ -45,14 +44,7 @@ function ActivityForm({ types, entry, onSaved, onCancel }) {
         },
         entry?.id
       );
-      const types = await onSaved();
-      if (!entry) {
-        // Keep the activity and date for the next one; select the stored
-        // spelling of a newly typed name.
-        const stored = types?.find((t) => t.toLowerCase() === activity.replace(/\s+/g, ' ').toLowerCase()) || form.activity;
-        setForm((current) => ({ ...current, activity: stored, custom: '', distance: '', minutes: '' }));
-        setMessage(`Added ${activity}.`);
-      }
+      await onSaved(activity);
     } catch (err) {
       setError(err.message);
     }
@@ -83,7 +75,7 @@ function ActivityForm({ types, entry, onSaved, onCancel }) {
         <label style={label}>
           Distance (optional)
           <span style={{ display: 'flex', gap: 6 }}>
-            <input type="number" inputMode="decimal" min="0.01" max="1000" step="any" value={form.distance} onChange={set('distance')} style={field} />
+            <input type="number" inputMode="decimal" min="0.01" max="1000" step="any" autoFocus={!entry} value={form.distance} onChange={set('distance')} style={field} />
             <select value={form.unit} onChange={set('unit')} aria-label="Distance unit" style={{ ...field, width: 70, flexShrink: 0 }}>
               <option value="mi">mi</option>
               <option value="km">km</option>
@@ -98,8 +90,7 @@ function ActivityForm({ types, entry, onSaved, onCancel }) {
       {error && <div role="alert" style={{ fontSize: 13, color: '#ff6b6b', whiteSpace: 'pre-line' }}>{error}</div>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <button type="submit" disabled={busy} style={solid}>{busy ? 'Saving…' : entry ? 'Save changes' : 'Add'}</button>
-        {entry && <button type="button" onClick={onCancel} style={outline}>Cancel</button>}
-        {message && <span role="status" style={{ fontSize: 13, color: 'var(--accent)' }}>{message}</span>}
+        <button type="button" onClick={onCancel} style={outline}>Cancel</button>
       </div>
     </form>
   );
@@ -162,7 +153,7 @@ const VIEWS = [
   ['type', 'By activity'],
 ];
 
-export default function ActivityTab({ active, onChange }) {
+export default function ActivityTab({ active, version, onChange }) {
   const [data, setData] = useState(null);
   const [view, setView] = useState('day');
   const [editing, setEditing] = useState(null);
@@ -182,12 +173,11 @@ export default function ActivityTab({ active, onChange }) {
 
   useEffect(() => {
     if (active) refresh();
-  }, [active]);
+  }, [active, version]);
 
   async function changed() {
-    const types = await refresh();
+    await refresh();
     onChange();
-    return types;
   }
 
   async function remove(entry) {
@@ -217,7 +207,7 @@ export default function ActivityTab({ active, onChange }) {
 
   return (
     <>
-      <ActivityForm types={data.types} onSaved={changed} />
+      {data.entries.length === 0 && <div style={dim}>No activities yet. Tap + to add one.</div>}
       {error && <div role="alert" style={{ fontSize: 13, color: '#ff6b6b' }}>{error}</div>}
       {data.entries.length > 0 && (
         <div style={{ display: 'flex', gap: 6 }}>

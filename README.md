@@ -90,7 +90,7 @@ PLANNER_TEST_DB_URL=postgresql://localhost:5432/planner_test .venv/bin/python -m
 
 **Myo column:** `12 + 3` is rest-pause, `30 ++ 10` is partials, and they can be combined. Reps holds the total, which is what volume counts. Format the column as plain text in Google Sheets. A breakdown that doesn't add up to Reps is flagged in the preview.
 
-**Activities:** Workouts → Activity logs anything that isn't lifting (work walk, bike, a deep squat sit): date, time, optional distance. Several a day, editable, with totals by day, week or activity. Routes: `GET|POST /activities`, `PUT|DELETE /activities/{id}`.
+**Activities:** the **+** button on the Workouts page logs anything that isn't lifting (work walk, bike, a deep squat sit): date, time, optional distance. Several a day, editable, with totals by day, week or activity. Routes: `GET|POST /activities`, `PUT|DELETE /activities/{id}`.
 
 **Walk notes (paste):** no screen yet. `POST /workouts/preview` and `POST /workouts` take `{"text": ...}` in the [paste format](docs/workout-format.md); `GET /workouts?start=&end=` returns saved days.
 
