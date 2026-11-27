@@ -3,7 +3,7 @@ worked out here, in code."""
 
 from datetime import date, timedelta
 
-from app import chores, planner_db, trends, workout_charts, workout_import
+from app import chores, daily_log, planner_db, trends, workout_charts, workout_import
 from app.config import APP_TIMEZONE
 
 
@@ -132,6 +132,7 @@ def week_facts(week_start: date) -> dict:
             a=next_start, b=next_end,
         )
         bests = _new_bests(conn, week_start, end)
+        logged_days = daily_log.between(conn, previous, end)
 
     for group in (gym, chores_done, overdue_todos, overdue_tasks, upcoming):
         for row in group:
@@ -151,6 +152,10 @@ def week_facts(week_start: date) -> dict:
         "new_bests": bests,
         "activities": _activities(logged),
         "chores_done": chores_done,
+        "daily": {
+            "week": daily_log.week_summary(logged_days, week_start),
+            "previous": daily_log.week_summary(logged_days, previous),
+        },
         "slipping": {
             "todos": overdue_todos,
             "tasks": overdue_tasks,

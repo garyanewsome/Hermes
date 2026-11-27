@@ -108,9 +108,8 @@ def _save(conn, on: datetime.date, sent: dict) -> dict | None:
     return public(saved)
 
 
-def week_summary(days: list[dict], start: datetime.date) -> dict:
+def summary(days: list[dict], start: datetime.date, end: datetime.date) -> dict:
     """Averages over the days that have each number, with how many that was."""
-    end = start + datetime.timedelta(days=6)
     inside = [d for d in days if start.isoformat() <= d["date"] <= end.isoformat()]
     averages, counts = {}, {}
     for name in (*NUMBERS, "balance"):
@@ -121,6 +120,18 @@ def week_summary(days: list[dict], start: datetime.date) -> dict:
         averages[name] = round(sum(values) / len(values), places) if values else None
         counts[name] = len(values)
     return {"start": start.isoformat(), "days": len(inside), "average": averages, "counts": counts}
+
+
+def week_summary(days: list[dict], start: datetime.date) -> dict:
+    return summary(days, start, start + datetime.timedelta(days=6))
+
+
+def between(conn, start: datetime.date, end: datetime.date) -> list[dict]:
+    """Logged days in the range, oldest first."""
+    rows = conn.execute(
+        "SELECT * FROM daily_log WHERE log_date BETWEEN %s AND %s ORDER BY log_date", (start, end)
+    ).fetchall()
+    return [public(row) for row in rows]
 
 
 def log(weeks: int) -> dict:

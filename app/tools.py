@@ -25,7 +25,7 @@ from app.config import (
     UPLOADS_DIR,
     VAULT_KEEPER_URL,
 )
-from app import chore_chat, db, documents, habit_chat, music, planner_db, show_chat, tone_analysis, web, workout_chat
+from app import chore_chat, daily_chat, db, documents, habit_chat, music, planner_db, show_chat, tone_analysis, web, workout_chat
 from app.pod_go_reference import AMPS_CLEAN, AMPS_CRUNCH, AMPS_HIGH_GAIN, CABS_COMMON, EFFECTS_SHORT
 
 logger = logging.getLogger("hermes")
@@ -162,6 +162,10 @@ def chore_status(name: str | None = None) -> str:
 
 def add_chore(name: str, every_days: int | None = None) -> str:
     return chore_chat.add(name, every_days)
+
+
+def daily_numbers(period: str | None = None) -> str:
+    return daily_chat.numbers(period)
 
 
 def lift_history(exercise: str | None = None) -> str:
@@ -947,6 +951,33 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "daily_numbers",
+            "description": (
+                "The user's body weight, weight trend, calories eaten and burned, deficit or surplus, and "
+                "protein, carbs and fat from their Fitness log, e.g. 'what's my weight trend?', 'how was my "
+                "protein last week?' or 'what did I eat yesterday?'. Body weight, not weights lifted. Use "
+                "this, not the vault or habits. Read-only. Answer only with the numbers returned, don't work "
+                "any out yourself, and say when a day's numbers are only 'so far'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "period": {
+                        "type": "string",
+                        "description": (
+                            "Only if the user names one: 'today', 'yesterday', a weekday, 'this week', "
+                            "'last week', 'this month', 'last month', 'this year' or 'last N days'. Omit for "
+                            "the overview with the weight trend."
+                        ),
+                    }
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "lift_history",
             "description": (
                 "The user's logged weight lifting at the gym: when they last did an exercise, what they lifted, "
@@ -1650,6 +1681,7 @@ TOOL_HANDLERS = {
     "log_chore": log_chore,
     "chore_status": chore_status,
     "add_chore": add_chore,
+    "daily_numbers": daily_numbers,
     "lift_history": lift_history,
     "activity_totals": activity_totals,
     "show_status": show_status,
@@ -1709,6 +1741,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
     "habits": ["log_habit", "habit_status"],
     "chores": ["log_chore", "chore_status"],
     "chore_add": ["add_chore"],
+    "nutrition": ["daily_numbers"],
     "workouts": ["lift_history", "activity_totals"],
     "shows": ["show_status", "update_show"],
     "show_add": ["add_show"],
@@ -1743,6 +1776,10 @@ GROUP_KEYWORDS: dict[str, list[str]] = {
         "workout", "work out", "worked out", "gym", "lift", "personal best", "personal record", "bench", "squat",
         "deadlift", "dead lift", "curl", "walk", "miles", "my activit", "training volume", "leg press",
         "pull up", "pullup", "push up", "shrug", "lateral raise", "extensions", "my max", "1rm",
+    ],
+    "nutrition": [
+        "weigh", "weight", "calorie", "protein", "carb", "macro", "deficit", "surplus", "burned", "did i eat",
+        "i ate",
     ],
     "scratch_notes": ["scratch", "jot", "write down", "wrote down", "jotted"],
     "repo_research": ["repo", "repository", "github", "codebase", "clone"],

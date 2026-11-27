@@ -141,6 +141,13 @@ def log(name: str, amount=None, unit: str | None = None, when: str | None = None
                 "Ask the user which one.")
     if amount in ("", 0):
         amount = None
+    if not matches and "weigh" in name.casefold():
+        # Weigh-ins belong to the Fitness log unless there's a habit for them.
+        return (
+            "NOT SAVED. Nothing was recorded anywhere. Reply with exactly this and nothing else: \"I didn't save "
+            "that. Weigh-ins go in the fitness section of your daily note, which imports when you open Fitness, "
+            "Daily. You can also type it on that page.\""
+        )
     if not matches:
         known = ", ".join(h["name"] for h in habits) or "none yet"
         if amount is not None or not name:

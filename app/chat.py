@@ -6,7 +6,7 @@ import logging
 import httpx
 
 from app.config import CHAT_MODEL, CODEBASE_SEARCHER_URL, IRIS_URL, OLLAMA_HOST, OLLAMA_NUM_CTX, SYSTEM_PROMPT
-from app import habit_chat, show_chat, workout_chat
+from app import daily_chat, habit_chat, show_chat, workout_chat
 from app.tools import TOOL_HANDLERS, select_tools
 
 MAX_TOOL_ITERATIONS = 5
@@ -208,7 +208,7 @@ async def run_chat_stream(
     show_chat.latest.set(typed[-1] if typed else "")
     habit_chat.latest.set(typed[-1] if typed else "")
     habit_chat.saved.set(set())
-    notes = [workout_chat.report_note(typed[-1] if typed else "")]
+    notes = [workout_chat.report_note(typed[-1] if typed else ""), daily_chat.report_note(typed[-1] if typed else "")]
     try:
         notes.append(habit_chat.report_note(typed[-1] if typed else ""))
     except Exception:

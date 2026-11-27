@@ -68,6 +68,53 @@ def _set(item: dict) -> str:
     return f"{item['weight']:g} {item['unit'] or 'lb'}{side} × {item['reps']}"
 
 
+def _amount(value: float) -> str:
+    return f"{value:,.1f}".removesuffix(".0")
+
+
+def _balance(value: float) -> str:
+    return "even" if value == 0 else f"{_amount(abs(value))} {'deficit' if value < 0 else 'surplus'}"
+
+
+def _daily_lines(daily: dict | None) -> list[str]:
+    """Weigh-ins, calories and macros: daily averages beside the week before.
+    Recaps made before these were tracked have none."""
+    if not daily or not daily["week"]["days"]:
+        return []
+    week, before = daily["week"], daily["previous"]
+    now, old, counts = week["average"], before["average"], week["counts"]
+    lines = []
+    for key, name in (("weight", "Home weight"), ("weight_pf", "PF weight")):
+        if now[key] is None:
+            continue
+        line = f"- {name}: average {_amount(now[key])} lb over {_plural(counts[key], 'weigh-in')}"
+        if old[key] is not None:
+            change = round(now[key] - old[key], 1)
+            moved = "no change" if change == 0 else f"{'down' if change < 0 else 'up'} {_amount(abs(change))} lb"
+            line += f", {moved} from the week before ({_amount(old[key])} lb)"
+        lines.append(line)
+    eaten = [
+        f"{label} {_amount(now[key])} (over {_plural(counts[key], 'day')})"
+        for key, label in (("calories_in", "eaten"), ("burned_total", "burned"), ("burned_active", "active"))
+        if now[key] is not None
+    ]
+    if eaten:
+        lines.append(f"- Calories a day: {', '.join(eaten)}")
+    if now["balance"] is not None:
+        line = f"- Balance a day: {_balance(now['balance'])} (over {_plural(counts['balance'], 'day')})"
+        if old["balance"] is not None:
+            line += f"; week before: {_balance(old['balance'])}"
+        lines.append(line)
+    macros = []
+    for key, name in (("carbs_g", "carbs"), ("fat_g", "fat"), ("protein_g", "protein")):
+        if now[key] is not None:
+            was = "" if old[key] is None else f" (week before: {_amount(old[key])} g)"
+            macros.append(f"{name} {_amount(now[key])} g{was}")
+    if macros:
+        lines.append(f"- Macros a day: {', '.join(macros)}")
+    return lines
+
+
 def body(facts: dict) -> str:
     """The recap without its title or summary, as markdown."""
     out: list[str] = []
@@ -106,6 +153,8 @@ def body(facts: dict) -> str:
         for a in facts["activities"]
     ]
     section("Training and activity", training)
+
+    section("Body and food", _daily_lines(facts.get("daily")))
 
     section("Chores", _listed([f"- {_one_line(c['name'])} ({_day(c['date'])})" for c in facts["chores_done"]]))
 
