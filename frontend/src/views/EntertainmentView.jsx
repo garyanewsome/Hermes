@@ -5,6 +5,7 @@ import { deleteEntertainment, listEntertainment, saveEntertainment } from '../ap
 import { card, dim, longDate, outline, solid } from './workoutStyles.js';
 
 const STATUSES = [
+  ['recommended', 'Recommended'],
   ['want', 'Want to watch'],
   ['watching', 'Watching'],
   ['waiting', 'Waiting'],
@@ -28,6 +29,7 @@ const body = (e) => ({
   return_date: e.return_date || null,
   where_to_watch: e.where_to_watch || null,
   note: e.note || null,
+  recommended_by: e.recommended_by || null,
 });
 
 // "S4 · after E3", or "Season 4" when nothing in it has been watched yet.
@@ -61,7 +63,7 @@ function Overlay({ label: name, onClose, children }) {
 
 function EntryForm({ entry, groups, onSave, onDelete, onClose }) {
   const [form, setForm] = useState(() => ({
-    title: '', kind: 'tv', group_name: '', status: 'want', season: '', episode: '', return_date: '', where_to_watch: '', note: '',
+    title: '', kind: 'tv', group_name: '', status: 'want', season: '', episode: '', return_date: '', where_to_watch: '', note: '', recommended_by: '',
     ...Object.fromEntries(Object.entries(entry || {}).map(([k, v]) => [k, v ?? ''])),
   }));
   const [busy, setBusy] = useState(false);
@@ -138,6 +140,10 @@ function EntryForm({ entry, groups, onSave, onDelete, onClose }) {
         <label style={label}>
           Where to watch (optional)
           <input value={form.where_to_watch} onChange={set('where_to_watch')} maxLength={100} style={field} />
+        </label>
+        <label style={label}>
+          Recommended by (optional)
+          <input value={form.recommended_by} onChange={set('recommended_by')} maxLength={100} style={field} />
         </label>
         <label style={label}>
           Note (optional)
@@ -225,6 +231,8 @@ export default function EntertainmentView({ onOpenDrawer, active }) {
   const watching = by('watching');
   const waiting = [...by('waiting')].sort((a, b) => (a.return_date || '9999').localeCompare(b.return_date || '9999'));
   const want = by('want');
+  const recommended = by('recommended');
+  const from = (e) => e.recommended_by && `from ${e.recommended_by}`;
   const button = (entry, text, patch, name) => (
     <button type="button" disabled={busyId === entry.id} onClick={() => quick(entry, patch)} aria-label={`${name || text}: ${entry.title}`} style={small}>
       {text}
@@ -257,7 +265,7 @@ export default function EntertainmentView({ onOpenDrawer, active }) {
                 <Row
                   key={entry.id}
                   entry={entry}
-                  detail={[placeText(entry), entry.where_to_watch].filter(Boolean).join(' · ')}
+                  detail={[placeText(entry), entry.where_to_watch, from(entry)].filter(Boolean).join(' · ')}
                   onEdit={setEditing}
                   actions={
                     <>
@@ -277,9 +285,29 @@ export default function EntertainmentView({ onOpenDrawer, active }) {
                 <Row
                   key={entry.id}
                   entry={entry}
-                  detail={[entry.season && `Season ${entry.season}`, whenText(entry)].filter(Boolean).join(' · ')}
+                  detail={[entry.season && `Season ${entry.season}`, whenText(entry), from(entry)].filter(Boolean).join(' · ')}
                   onEdit={setEditing}
                   actions={entry.days_until !== null && entry.days_until <= 0 && button(entry, 'Start', { status: 'watching', return_date: null, episode: null })}
+                />
+              ))}
+            </section>
+          )}
+
+          {recommended.length > 0 && (
+            <section style={card}>
+              <h2 style={{ ...heading, marginTop: 0, marginBottom: 4 }}>Recommended</h2>
+              {recommended.map((entry) => (
+                <Row
+                  key={entry.id}
+                  entry={entry}
+                  detail={[entry.kind === 'movie' ? 'Movie' : 'TV', from(entry), entry.where_to_watch].filter(Boolean).join(' · ')}
+                  onEdit={setEditing}
+                  actions={
+                    <>
+                      {button(entry, 'Add to my list', { status: 'want' })}
+                      {button(entry, 'Start', { status: 'watching' })}
+                    </>
+                  }
                 />
               ))}
             </section>
@@ -294,7 +322,7 @@ export default function EntertainmentView({ onOpenDrawer, active }) {
                   items.length > 0 && (
                     <div key={kind}>
                       <div style={{ fontSize: 14, fontWeight: 600, marginTop: 10 }}>{name}</div>
-                      {list(items, (e) => [placeText(e), e.where_to_watch].filter(Boolean).join(' · '), (e) => button(e, 'Start', { status: 'watching' }))}
+                      {list(items, (e) => [placeText(e), e.where_to_watch, from(e)].filter(Boolean).join(' · '), (e) => button(e, 'Start', { status: 'watching' }))}
                     </div>
                   )
                 );
@@ -304,11 +332,11 @@ export default function EntertainmentView({ onOpenDrawer, active }) {
 
           {by('paused').length > 0 && (
             <Folding title="Paused" count={by('paused').length}>
-              {list(by('paused'), placeText, (e) => button(e, 'Resume', { status: 'watching' }))}
+              {list(by('paused'), (e) => [placeText(e), from(e)].filter(Boolean).join(' · '), (e) => button(e, 'Resume', { status: 'watching' }))}
             </Folding>
           )}
           {by('done').length > 0 && (
-            <Folding title="Done" count={by('done').length}>{list(by('done'))}</Folding>
+            <Folding title="Done" count={by('done').length}>{list(by('done'), from)}</Folding>
           )}
           {data?.vault &&
             (data.vault.error ? (

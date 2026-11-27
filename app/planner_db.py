@@ -367,6 +367,25 @@ def init_planner_db() -> None:
             )
             """
         )
+        # "Recommended": things others suggested, kept apart from what was
+        # logged by choice. Widens the status check; no rows are touched.
+        conn.execute("ALTER TABLE entertainment ADD COLUMN IF NOT EXISTS recommended_by TEXT")
+        allowed = conn.execute(
+            """
+            SELECT pg_get_constraintdef(oid) AS rule FROM pg_constraint
+            WHERE conrelid = 'entertainment'::regclass AND conname = 'entertainment_status_check'
+            """
+        ).fetchone()
+        if allowed is None or "recommended" not in allowed["rule"]:
+            # One statement, so there is no moment without a check.
+            conn.execute(
+                """
+                ALTER TABLE entertainment
+                    DROP CONSTRAINT IF EXISTS entertainment_status_check,
+                    ADD CONSTRAINT entertainment_status_check
+                        CHECK (status IN ('recommended', 'want', 'watching', 'waiting', 'paused', 'done'))
+                """
+            )
         # Simplenote-style scratchpad — no title field, the first line of
         # `content` serves as the title in the list. A quick-capture spot
         # for ideas on the go, meant to get copied into Obsidian later, not

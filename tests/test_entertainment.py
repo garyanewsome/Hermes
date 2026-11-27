@@ -50,6 +50,19 @@ class RenderTests(unittest.TestCase):
             ],
         )
 
+    def test_recommendations_have_their_own_heading(self):
+        note = entertainment.render(
+            [
+                entry("Severance", status="recommended", recommended_by="Sam"),
+                entry("Dune", kind="movie", status="recommended"),
+                entry("Devs", recommended_by="Alex"),
+            ]
+        )
+        self.assertEqual(
+            note.split("\n")[1:],
+            ["", "## TV", "", "- Devs - from Alex", "", "## Recommended", "", "- Severance - from Sam", "- Dune (movie)", ""],
+        )
+
     def test_no_others_heading_without_groups(self):
         self.assertNotIn("###", entertainment.render([entry("Devs")]))
 
@@ -105,6 +118,31 @@ class EntertainmentTests(unittest.TestCase):
         self.assertEqual(self.add(title="  DEVS ").status_code, 400)
         self.assertEqual(self.add(kind="movie").status_code, 200)
         self.assertEqual(self.add(title="  ").status_code, 400)
+
+    def test_recommended(self):
+        self.assertEqual(self.add(status="recommended", recommended_by="  Sam ").status_code, 200)
+        [entry] = self.entries()
+        self.assertEqual((entry["status"], entry["recommended_by"]), ("recommended", "Sam"))
+        body = {"title": "Devs", "status": "watching", "recommended_by": "Sam"}
+        self.client.put(f"/entertainment/{entry['id']}", json=body)
+        self.assertEqual(self.entries()[0]["recommended_by"], "Sam")
+
+    def test_an_older_table_gains_the_category_and_keeps_its_rows(self):
+        self.add(status="done")
+        with self.db._connect() as conn:
+            conn.execute(
+                """
+                ALTER TABLE entertainment DROP COLUMN recommended_by,
+                    DROP CONSTRAINT entertainment_status_check,
+                    ADD CONSTRAINT entertainment_status_check
+                        CHECK (status IN ('want', 'watching', 'waiting', 'paused', 'done'))
+                """
+            )
+        self.db.init_planner_db()
+        self.db.init_planner_db()
+        self.assertEqual([(e["title"], e["status"]) for e in self.entries()], [("Devs", "done")])
+        self.assertEqual(self.add(title="You", status="recommended").status_code, 200)
+        self.assertEqual(self.add(title="Silo", status="seen").status_code, 422)
 
     def test_movies_have_no_episodes(self):
         self.add(kind="movie", season=2, episode=4)

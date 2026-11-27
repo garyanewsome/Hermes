@@ -26,9 +26,9 @@ _changed = threading.Event()
 _vault_error: str | None = None
 
 Kind = Literal["tv", "movie"]
-Status = Literal["want", "watching", "waiting", "paused", "done"]
+Status = Literal["recommended", "want", "watching", "waiting", "paused", "done"]
 
-FIELDS = ("title", "kind", "group_name", "status", "season", "episode", "return_date", "where_to_watch", "note")
+FIELDS = ("title", "kind", "group_name", "status", "season", "episode", "return_date", "where_to_watch", "note", "recommended_by")
 
 
 class Entry(BaseModel):
@@ -42,6 +42,7 @@ class Entry(BaseModel):
     return_date: datetime.date | None = None
     where_to_watch: str | None = Field(default=None, max_length=100)
     note: str | None = Field(default=None, max_length=1000)
+    recommended_by: str | None = Field(default=None, max_length=100)
 
 
 def _tidy(text: str | None) -> str | None:
@@ -57,7 +58,7 @@ def _clean(entry: Entry) -> dict:
     values["title"] = _tidy(entry.title)
     if not values["title"]:
         raise ValueError("Give it a title")
-    for name in ("group_name", "where_to_watch"):
+    for name in ("group_name", "where_to_watch", "recommended_by"):
         values[name] = _tidy(values[name])
     values["note"] = (entry.note or "").strip() or None
     if entry.kind == "movie":
@@ -143,6 +144,8 @@ def _line(entry: dict) -> str:
         parts.append(entry["return_date"].replace("-", "."))
     if entry["where_to_watch"]:
         parts.append(f"on {entry['where_to_watch']}")
+    if entry["recommended_by"]:
+        parts.append(f"from {entry['recommended_by']}")
     mark = {"watching": "▶️ watching", "paused": "⏸️ paused", "done": "✅"}.get(entry["status"])
     if entry["status"] == "waiting" and not entry["return_date"]:
         mark = "⏳ waiting"
@@ -155,10 +158,10 @@ def _line(entry: dict) -> str:
 
 def render(entries: list[dict]) -> str:
     """The list in the style of the hand-written note: TV then movies, named
-    groups first, then the rest."""
+    groups first, then the rest. Recommendations have their own heading."""
     out = ["> Written by Hermes from its Entertainment page. Anything typed here is replaced."]
     for kind, heading in (("tv", "TV"), ("movie", "Movies")):
-        mine = [e for e in entries if e["kind"] == kind]
+        mine = [e for e in entries if e["kind"] == kind and e["status"] != "recommended"]
         if not mine:
             continue
         out += ["", f"## {heading}"]
@@ -170,6 +173,11 @@ def render(entries: list[dict]) -> str:
             out += ["", f"### {name}", *map(_line, members)]
         if loose:
             out += ["", *(["### Others"] if groups else []), *map(_line, loose)]
+    recommended = [e for e in entries if e["status"] == "recommended"]
+    if recommended:
+        out += ["", "## Recommended", ""]
+        # Movies are marked, since this list mixes both.
+        out += [_line({**e, "title": f"{e['title']} (movie)"} if e["kind"] == "movie" else e) for e in recommended]
     return "\n".join(out) + "\n"
 
 

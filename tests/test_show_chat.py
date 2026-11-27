@@ -155,6 +155,35 @@ class ChatActionTests(unittest.TestCase):
         show_chat.add("Severance", "tv", "want", season=1, episode=5)
         self.assertEqual(self.place("Severance"), ("watching", None, 5))
 
+    def test_recommendations(self):
+        self.heard("Sam recommended Severance")
+        reply = show_chat.add("Severance", "tv", "want", recommended_by="Sam")
+        self.assertIn("recommended list, recommended by Sam", reply)
+        self.assertEqual(self.entry("Severance")["status"], "recommended")
+        self.assertIn("Severance (from Sam)", show_chat.status())
+        show_chat.update("Severance", status="want")
+        entry = self.entry("Severance")
+        self.assertEqual((entry["status"], entry["recommended_by"]), ("want", "Sam"))
+
+    def test_adding_a_recommendation_to_the_want_list_moves_it(self):
+        show_chat.add("Severance", "tv", "recommended")
+        self.assertTrue(show_chat.add("Severance", "tv", "want").startswith("Saved."))
+        self.assertEqual(self.entry("Severance")["status"], "want")
+        self.assertIn("Recommended by others: nothing.", show_chat.status())
+
+    def test_recommending_something_listed_only_notes_who(self):
+        self.heard("Alex says I should watch Devs")
+        self.assertIn("not moved", show_chat.add("devs", "tv", "recommended", recommended_by="Alex"))
+        entry = self.entry("Devs")
+        self.assertEqual((entry["status"], entry["recommended_by"]), ("want", "Alex"))
+
+    def test_made_up_names_and_titles_are_refused(self):
+        self.heard("someone recommended Silo")
+        show_chat.add("Silo", "tv", "recommended", recommended_by="Jordan")
+        self.assertIsNone(self.entry("Silo")["recommended_by"])
+        self.heard("can you recommend me a show?")
+        self.assertTrue(show_chat.add("Severance", "tv", "recommended").startswith("NOT ADDED"))
+
     def test_status(self):
         everything = show_chat.status()
         self.assertIn("season 4, watched through episode 2", everything)
@@ -179,6 +208,9 @@ class ChatActionTests(unittest.TestCase):
         self.assertLessEqual({"show_status", "update_show"}, offered("I am on episode 4"))
         self.assertNotIn("add_show", offered("what was I watching?"))
         self.assertIn("add_show", offered("add Severance to my watch list"))
+        self.assertIn("add_show", offered("Sam recommended Severance"))
+        self.assertIn("add_show", offered("my brother told me to watch Severance"))
+        self.assertIn("add_show", offered("my brother told me I should watch Severance"))
         self.assertIn("update_show", offered("finished strange new worlds"))
         self.assertNotIn("update_show", offered("add milk to the grocery list"))
         self.assertLessEqual({"add_show", "add_todo_item"}, offered("add Severance to my list"))

@@ -35,6 +35,7 @@ def _was_said(number: int) -> bool:
         numbers.add(1)
     return number in numbers
 _STATUS_WORDS = {
+    "recommended": "on the recommended list",
     "watching": "watching", "paused": "paused", "done": "finished", "want": "on the want-to-watch list",
     "waiting": "waiting for more",
 }
@@ -101,6 +102,8 @@ def _describe(entry: dict) -> str:
         parts.append(f"{verb} {_long(entry['return_date'])} ({when})")
     if entry["where_to_watch"]:
         parts.append(f"on {entry['where_to_watch']}")
+    if entry["recommended_by"]:
+        parts.append(f"recommended by {entry['recommended_by']}")
     return f"{entry['title']} ({kind}): {', '.join(parts)}."
 
 
@@ -127,6 +130,14 @@ def status(title: str | None = None) -> str:
     for name, heading in (("waiting", "Waiting for more:"), ("paused", "Paused:")):
         if by[name]:
             lines += [heading, *map(_describe, by[name])]
+    if not by["recommended"]:
+        lines.append("Recommended by others: nothing.")
+    else:
+        names = ", ".join(
+            e["title"] + (f" (from {e['recommended_by']})" if e["recommended_by"] else "")
+            for e in by["recommended"]
+        )
+        lines.append(f"Recommended by others, not yet on the want-to-watch list ({len(by['recommended'])}): {names}.")
     for kind, name in (("tv", "TV"), ("movie", "movies")):
         want = [e for e in by["want"] if e["kind"] == kind]
         if want:
@@ -221,12 +232,40 @@ def update(title: str | None = None, season=None, episode=None, status: str | No
     return reply
 
 
-def add(title: str, kind: str = "tv", status: str | None = None, season=None, episode=None) -> str:
+def _heard_name(name) -> str | None:
+    """Who recommended it, only if the user actually typed that."""
+    name = " ".join(str(name or "").split())
+    text = said.get()
+    if not name or (text is not None and not set(_words(name)) <= set(_words(text))):
+        return None
+    return None if name.casefold() in ("someone", "somebody", "a friend", "me", "unknown") else name
+
+
+def add(title: str, kind: str = "tv", status: str | None = None, season=None, episode=None,
+        recommended_by: str | None = None) -> str:
+    title = " ".join((title or "").split())
     kind = "movie" if str(kind).strip().lower() in ("movie", "film") else "tv"
-    status = (status or "want").strip().lower()
+    status = (status or "").strip().lower()
+    who = _heard_name(recommended_by)
+    if who and status in ("", "want"):
+        status = "recommended"
     if status not in _STATUS_WORDS:
         status = "want"
+    # Asked for suggestions, the model must not file its own.
+    text = said.get()
+    if status == "recommended" and text is not None and "".join(_words(title)) not in "".join(_words(text)):
+        return "NOT ADDED. The user didn't name that title. Only add what they say was recommended to them."
     try:
+        listed = entertainment.list_entries()["entries"]
+        same = [e for e in listed if _words(e["title"]) == _words(title) and e["kind"] == kind]
+        if same and not who and status == "want" and same[0]["status"] == "recommended":
+            return update(same[0]["title"], status="want")
+        if same and who:
+            # Already listed: note who suggested it and leave it where it is.
+            values = {name: same[0][name] for name in entertainment.FIELDS}
+            entertainment.update(same[0]["id"], entertainment.Entry(**{**values, "recommended_by": who}))
+            return (f"Saved. {same[0]['title']} was already {_STATUS_WORDS[same[0]['status']]}; noted that "
+                    f"{who} recommended it. It was not moved.")
         season, episode = (
             n if n is None or _was_said(n) else None
             for n in (_number(season, "season"), _number(episode, "episode"))
@@ -235,9 +274,12 @@ def add(title: str, kind: str = "tv", status: str | None = None, season=None, ep
             season = episode = None
         elif episode:
             status = "watching"
-        entry = entertainment.Entry(title=title, kind=kind, status=status, season=season, episode=episode)
+        entry = entertainment.Entry(
+            title=title, kind=kind, status=status, season=season, episode=episode, recommended_by=who
+        )
         entertainment.add(entry)
     except ValueError as exc:
         return f"NOT ADDED. {exc}"
     place = "".join(f", {name} {n}" for name, n in (("season", season), ("watched through episode", episode)) if n)
-    return f"Added \"{' '.join(title.split())}\" ({'movie' if kind == 'movie' else 'TV'}), {_STATUS_WORDS[status]}{place}."
+    by = f", recommended by {who}" if who else ""
+    return f"Added \"{title}\" ({'movie' if kind == 'movie' else 'TV'}), {_STATUS_WORDS[status]}{place}{by}."

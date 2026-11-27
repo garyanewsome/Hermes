@@ -192,8 +192,8 @@ def update_show(title: str | None = None, season: int | None = None, episode: in
 
 
 def add_show(title: str, kind: str = "tv", status: str | None = None, season: int | None = None,
-             episode: int | None = None) -> str:
-    return show_chat.add(title, kind, status, season, episode)
+             episode: int | None = None, recommended_by: str | None = None) -> str:
+    return show_chat.add(title, kind, status, season, episode, recommended_by)
 
 
 _WEEKDAY_NAMES = {1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday", 7: "Sunday"}
@@ -952,7 +952,7 @@ TOOLS = [
             "name": "show_status",
             "description": (
                 "The user's TV and movie list: what they're watching, where they are in it, what's coming "
-                "back and what they want to watch, e.g. 'what was I watching?' or 'when is 3 Body Problem "
+                "back, what others recommended and what they want to watch, e.g. 'what was I watching?' or 'when is 3 Body Problem "
                 "back?'. Omit `title` for the whole list. Answer only from what is returned."
             ),
             "parameters": {
@@ -970,7 +970,8 @@ TOOLS = [
                 "Save the user's progress in a TV show or movie, e.g. 'I'm on episode 4', 'finished Dark "
                 "Matter', 'I started Silicon Valley', 'pausing Devs', 'watched another episode'. Call it every "
                 "time they report watching something, even straight after an earlier update and even with no "
-                "title: nothing is saved unless you call it. Never call it for a question."
+                "title: nothing is saved unless you call it. Also call it to move a title, e.g. 'add it to "
+                "my want to watch list' for a recommended one. Never call it for a question."
             ),
             "parameters": {
                 "type": "object",
@@ -987,7 +988,7 @@ TOOLS = [
                     },
                     "status": {
                         "type": "string",
-                        "enum": ["watching", "done", "paused", "want", "waiting"],
+                        "enum": ["watching", "done", "paused", "want", "waiting", "recommended"],
                         "description": (
                             "'done' means finished the whole show or movie; for one season use "
                             "finished_season instead. Omit when they only give a season or episode."
@@ -1004,7 +1005,9 @@ TOOLS = [
             "name": "add_show",
             "description": (
                 "Add a TV show or movie to the user's watch list. Only for things to watch, and only when "
-                "they ask for it to be added; groceries and to-dos go on to-do lists."
+                "they ask for it to be added or say someone recommended it to them (e.g. 'Sam recommended "
+                "Severance' or 'my brother told me to watch Arrival': add those straight away as recommended, "
+                "without asking first. Never add your own suggestions. Groceries and to-dos go on to-do lists."
             ),
             "parameters": {
                 "type": "object",
@@ -1013,11 +1016,15 @@ TOOLS = [
                     "kind": {"type": "string", "enum": ["tv", "movie"]},
                     "status": {
                         "type": "string",
-                        "enum": ["want", "watching"],
-                        "description": "'watching' only if they say they've started it",
+                        "enum": ["want", "watching", "recommended"],
+                        "description": (
+                            "'recommended' when someone else suggested it; 'watching' only if they say "
+                            "they've started it; otherwise 'want'"
+                        ),
                     },
                     "season": {"type": "integer", "description": "Only if the user said where they are"},
                     "episode": {"type": "integer", "description": "Only if the user said where they are"},
+                    "recommended_by": {"type": "string", "description": "Who suggested it, only if the user says"},
                 },
                 "required": ["title", "kind"],
             },
@@ -1683,7 +1690,7 @@ GROUP_KEYWORDS: dict[str, list[str]] = {
     ],
     "shows": [
         "episode", "season", "watching", "watched", "to watch", "watch list", "watchlist", "movie", "tv show",
-        "series", "entertainment", "my list",
+        "series", "entertainment", "my list", "recommend", "should watch",
     ],
     "scratch_notes": ["scratch", "jot", "write down", "wrote down", "jotted"],
     "repo_research": ["repo", "repository", "github", "codebase", "clone"],
@@ -1732,7 +1739,7 @@ def select_tools(recent_texts: list[str], has_attachments: bool) -> list[dict]:
                 matched_groups.add("shows")
         except Exception:
             logger.exception("Couldn't check the message against the watch list")
-    if "shows" in matched_groups and re.search(r"\b(add|put)\b", haystack):
+    if "shows" in matched_groups and re.search(r"\b(add|put|recommend\w*|suggested)\b|\b(told|says|said)\b.{0,40}\bwatch\b", haystack):
         matched_groups.add("show_add")
     # "Add X to my list" could be either kind of list, so offer both.
     if "show_add" in matched_groups and "my list" in haystack:
