@@ -112,7 +112,9 @@ class ParserTests(unittest.TestCase):
     def test_weights(self):
         for text, expected in (
             ("228.6 at 10:02", (228.6, [228.6], False)),
-            ("226ish around 8am", (226, [226], True)),
+            ("226 around 7:15 only about an hour after wake up", (226, [226], False)),
+            ("about 227", (227, [227], False)),
+            ("226ish around 8am", (226, [226], False)),
             ("230-1", (230, [230, 231], True)),
             ("233/4 - best guess", (233, [233, 234], True)),
             ("231.4 maybe 229 was right", (231.4, [231.4, 229], True)),
@@ -169,6 +171,7 @@ class ImportTests(unittest.TestCase):
         with self.db._connect() as conn:
             conn.execute("DELETE FROM daily_log")
             conn.execute("DELETE FROM activities")
+            conn.execute("DELETE FROM daily_note_seen")
 
     def vault(self, notes, status=200):
         response = mock.Mock(status_code=status)
@@ -285,6 +288,93 @@ class ImportTests(unittest.TestCase):
             self.assertIn(words, response.json()["detail"])
         with mock.patch.object(daily_import.httpx, "post", side_effect=daily_import.httpx.ConnectError("x")):
             self.assertEqual(self.client.get("/daily-import").status_code, 502)
+
+    def auto(self, notes):
+        with self.vault(notes):
+            response = self.client.post("/daily-import/auto")
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()
+
+    def put(self, on="2026-11-27", **fields):
+        self.assertEqual(self.client.put(f"/daily/{on}", json=fields).status_code, 200)
+
+    def test_auto_saves_clear_values_once(self):
+        notes = {TODAY: note(home="226.4 at 7:00", calories="- Today's Numbers:\n\t- In: 900", walks="- walk: 30:00 1.2mi")}
+        first = self.auto(notes)
+        self.assertEqual((first["saved"], first["review"]), (["2026-11-27"], []))
+        got = self.stored()["2026-11-27"]
+        self.assertEqual((got["weight"], got["calories_in"], got["calories_partial"]), (226.4, 900, True))
+        self.assertEqual(self.auto(notes)["saved"], [])
+        self.assertEqual(len(self.walks()), 1)
+
+    def test_auto_leaves_vague_weights_to_pick(self):
+        notes = {TODAY: note(home="224-5 at 11:42")}
+        result = self.auto(notes)
+        self.assertIn("Pick the home weight", result["review"][0]["text"])
+        got = self.stored()["2026-11-27"]
+        self.assertEqual((got["weight"], got["weight_note"]), (None, "224-5 at 11:42"))
+        self.put(weight=225)
+        again = self.auto(notes)
+        self.assertEqual((again["saved"], again["review"], self.stored()["2026-11-27"]["weight"]), ([], [], 225))
+
+    def test_auto_follows_the_note_until_you_edit_in_hermes(self):
+        def notes(eaten, body):
+            return {TODAY: f"## AI Fitness Dump\n### Body Update\n- {body}\n### Calories\n- Today's Numbers:\n\t- In: {eaten}\n"}
+
+        self.auto(notes(900, "stiff"))
+        self.auto(notes(1500, "stiff"))  # the day goes on
+        self.assertEqual(self.stored()["2026-11-27"]["calories_in"], 1500)
+        self.put(body_note="my words")
+        same = self.auto(notes(1500, "stiff"))
+        self.assertEqual((same["saved"], same["review"]), ([], []))
+        changed = self.auto(notes(1500, "sore"))
+        self.assertIn("Kept your body update", changed["review"][0]["text"])
+        self.assertEqual(self.stored()["2026-11-27"]["body_note"], "my words")
+
+    def test_auto_does_not_restore_what_you_cleared_or_deleted(self):
+        notes = {TODAY: note(home="226.4", walks="- walk: 30:00 1.2mi")}
+        self.auto(notes)
+        self.put(weight=None)
+        with self.db._connect() as conn:
+            conn.execute("DELETE FROM activities")
+        self.assertEqual(self.auto(notes)["saved"], [])
+        self.assertIsNone(self.stored()["2026-11-27"]["weight"])
+        self.assertEqual(self.walks(), [])
+        more = {TODAY: note(home="226.4", walks="- walk: 30:00 1.2mi\n- walk: 10:00 0.4mi")}
+        self.auto(more)  # a new walk in the note brings the list up to date
+        self.assertEqual(len(self.walks()), 2)
+
+    def test_auto_finishes_yesterday_even_if_typed_by_hand(self):
+        yesterday = TODAY - timedelta(days=1)
+        self.put(yesterday.isoformat(), calories_in=1200, calories_partial=True)
+        final = {TODAY: note(calories="- Yesterday's Totals:\n\t- In: 2600")}
+        self.auto(final)
+        got = self.stored()[yesterday.isoformat()]
+        self.assertEqual((got["calories_in"], got["calories_partial"]), (2600, False))
+        # A correction to the final number stays, even if marked unfinished again.
+        self.put(yesterday.isoformat(), calories_in=2650, calories_partial=True)
+        self.auto(final)
+        self.assertEqual(self.stored()[yesterday.isoformat()]["calories_in"], 2650)
+
+    def test_auto_respects_what_the_manual_import_changed(self):
+        notes = {TODAY: note(home="226.4")}
+        [day] = self.preview(notes)
+        said = dict(day["fields"])
+        day["fields"]["weight"] = 227
+        body = {"days": [{"date": day["date"], "fields": day["fields"], "walks": [], "note": said}]}
+        self.assertEqual(self.client.post("/daily-import", json=body).status_code, 200)
+        result = self.auto(notes)
+        self.assertEqual((result["saved"], result["review"], self.stored()["2026-11-27"]["weight"]), ([], [], 227))
+
+    def test_auto_never_overwrites_hand_entries(self):
+        self.put(weight=221)
+        result = self.auto({TODAY: note(home="226.4")})
+        self.assertIn("Kept your home weight", result["review"][0]["text"])
+        self.assertEqual(self.stored()["2026-11-27"]["weight"], 221)
+
+    def test_auto_reports_vault_trouble(self):
+        with self.vault({}, status=404):
+            self.assertEqual(self.client.post("/daily-import/auto").status_code, 502)
 
     def test_asks_for_the_right_notes(self):
         with self.vault({}) as post:

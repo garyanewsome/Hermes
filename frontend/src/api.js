@@ -451,6 +451,7 @@ export const saveDay = (date, fields) =>
     body: JSON.stringify(fields),
   });
 export const previewDailyImport = (days, countOld) => workoutRequest(`/daily-import?days=${days}&count_old=${countOld}`);
+export const autoDailyImport = () => workoutRequest('/daily-import/auto', { method: 'POST' });
 export const saveDailyImport = (days) =>
   workoutRequest('/daily-import', {
     method: 'POST',

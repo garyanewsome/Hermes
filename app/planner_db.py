@@ -122,6 +122,18 @@ def init_planner_db() -> None:
                 ADD COLUMN IF NOT EXISTS gym_note TEXT
             """
         )
+        # What the daily notes last said, so an automatic import can tell a
+        # change in a note from a correction made in Hermes.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS daily_note_seen (
+                log_date DATE NOT NULL,
+                field TEXT NOT NULL,
+                value JSONB,
+                PRIMARY KEY (log_date, field)
+            )
+            """
+        )
         # Deliberately separate from `tasks` — a plain everyday checklist
         # (groceries, errands), kept simple on purpose so it never grows
         # the quadrant/notes/due-date machinery that makes sense for the

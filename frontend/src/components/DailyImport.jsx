@@ -90,7 +90,7 @@ function payload(day, { weights = {}, counted }) {
     else throw new Error(`${longDate(day.date)}: “${text}” isn’t a weight`);
   }
   if (fields.calories_partial && counted) Object.assign(fields, { calories_partial: false, calories_as_of: null });
-  return { date: day.date, fields, walks: day.walks };
+  return { date: day.date, fields, walks: day.walks, note: day.fields };
 }
 
 export default function DailyImport({ onClose, onSaved }) {

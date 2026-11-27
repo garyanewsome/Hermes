@@ -34,8 +34,8 @@ def weight(text: str) -> dict | None:
                 second = first.split(".")[0][: -len(whole)] + second
             values.append(float(second))
         found += [v for v in values if WEIGHT_RANGE[0] <= v <= WEIGHT_RANGE[1] and v not in found]
-    unsure = len(found) > 1 or bool(re.search(r"\?|ish\b|believe|plus.?minus|about", cleaned, re.IGNORECASE))
-    return {"weight": found[0] if found else None, "candidates": found, "unsure": unsure or not found, "note": cleaned}
+    # "226ish" has one reading; only a line with several (or none) needs a pick.
+    return {"weight": found[0] if found else None, "candidates": found, "unsure": len(found) != 1, "note": cleaned}
 
 
 def _count(text: str) -> float | None:

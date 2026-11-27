@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { dailyLog, saveDay } from '../api.js';
+import { autoDailyImport, dailyLog, saveDay } from '../api.js';
 import { Table, shortDate } from '../components/Charts.jsx';
 import DailyImport from '../components/DailyImport.jsx';
 import { todayISO } from '../lib/dates.js';
@@ -59,6 +59,45 @@ function Weeks({ now, before }) {
   );
 }
 
+// Opening Daily again sooner than this doesn't re-read the notes.
+const CHECK_EVERY = 2 * 60 * 1000;
+
+const shortDays = (dates) => dates.map(shortDate).join(', ');
+
+// What the last automatic read of the daily notes did.
+function NoteCheck({ check, onAgain }) {
+  if (!check) return null;
+  const link = { background: 'transparent', border: 'none', padding: 0, color: 'var(--accent)', fontSize: 12, textDecoration: 'underline' };
+  if (check.busy) return <div role="status" style={dim}>Checking your daily notes…</div>;
+  return (
+    <div role="status" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ ...dim, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {check.error ? (
+          <span style={{ color: '#ff6b6b' }}>Couldn’t check your notes: {check.error}</span>
+        ) : (
+          <span>
+            Notes checked {check.at} · {check.saved.length ? `saved ${shortDays(check.saved)}` : 'nothing new'}
+            {check.notes === 0 && ' · no notes found for the last week'}
+          </span>
+        )}
+        <button type="button" onClick={onAgain} style={link}>Check again</button>
+      </div>
+      {check.review?.length > 0 && (
+        <div style={{ ...card, borderColor: '#ffb020', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ fontWeight: 600, color: '#ffb020' }}>For you to look at</div>
+          {check.review.map((item) => (
+            <div key={`${item.date}${item.text}`} style={{ overflowWrap: 'anywhere' }}>
+              <span style={dim}>{shortDate(item.date)}: </span>
+              {item.text}
+            </div>
+          ))}
+          <div style={dim}>Use Import from daily note to pick a weight or take the note’s value, or fix the note.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // `focus` changes when the + button asks for today's numbers.
 export default function DailyTab({ active, focus, onSaved }) {
   const [data, setData] = useState(null);
@@ -71,6 +110,8 @@ export default function DailyTab({ active, focus, onSaved }) {
   const [message, setMessage] = useState('');
   const [all, setAll] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [check, setCheck] = useState(null);
+  const checked = useRef(0);
   const form = useRef(null);
   const date = picked || todayISO();
 
@@ -79,8 +120,22 @@ export default function DailyTab({ active, focus, onSaved }) {
       .then((next) => (setData(next), setError('')))
       .catch(() => setError('Couldn’t load your daily numbers.'));
 
+  async function checkNotes() {
+    checked.current = Date.now();
+    setCheck({ busy: true });
+    try {
+      const result = await autoDailyImport();
+      if (result.saved.length) await refresh();
+      setCheck({ ...result, at: new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) });
+    } catch (err) {
+      setCheck({ error: err.message });
+    }
+  }
+
   useEffect(() => {
-    if (active) refresh();
+    if (!active) return;
+    refresh();
+    if (Date.now() - checked.current > CHECK_EVERY) checkNotes();
   }, [active]);
 
   function choose(next) {
@@ -152,6 +207,7 @@ export default function DailyTab({ active, focus, onSaved }) {
       ) : (
         <button type="button" onClick={() => setImporting(true)} style={{ ...outline, alignSelf: 'flex-start' }}>Import from daily note</button>
       )}
+      {!importing && <NoteCheck check={check} onAgain={checkNotes} />}
 
       <form ref={form} onSubmit={submit} style={{ ...card, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
