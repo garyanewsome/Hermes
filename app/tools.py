@@ -25,7 +25,7 @@ from app.config import (
     UPLOADS_DIR,
     VAULT_KEEPER_URL,
 )
-from app import chore_chat, db, documents, music, planner_db, show_chat, tone_analysis, web
+from app import chore_chat, db, documents, music, planner_db, show_chat, tone_analysis, web, workout_chat
 from app.pod_go_reference import AMPS_CLEAN, AMPS_CRUNCH, AMPS_HIGH_GAIN, CABS_COMMON, EFFECTS_SHORT
 
 logger = logging.getLogger("hermes")
@@ -180,6 +180,14 @@ def chore_status(name: str | None = None) -> str:
 
 def add_chore(name: str, every_days: int | None = None) -> str:
     return chore_chat.add(name, every_days)
+
+
+def lift_history(exercise: str | None = None) -> str:
+    return workout_chat.lifts(exercise)
+
+
+def activity_totals(activity: str | None = None, period: str | None = None) -> str:
+    return workout_chat.activity_totals(activity, period)
 
 
 def show_status(title: str | None = None) -> str:
@@ -949,6 +957,52 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "lift_history",
+            "description": (
+                "The user's logged weight lifting at the gym: when they last did an exercise, what they lifted, "
+                "and their personal best, e.g. 'when did I last bench?', 'what's my best leg press?' or 'what "
+                "are my PRs?' (PR means personal record here). Use this, not the vault, for lifting. Omit "
+                "`exercise` for the latest gym days and all personal bests. Read-only: it can't record "
+                "anything. Answer with the dates and numbers returned; don't work any out yourself."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "exercise": {"type": "string", "description": "The exercise in the user's words, or omit"}
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "activity_totals",
+            "description": (
+                "Totals for logged activities such as walks: times, minutes and miles, e.g. 'how far have "
+                "I walked this week?' or 'when was my last walk?'. Read-only: chat can't record an "
+                "activity, so if the user reports one, say to add it with the + button on the Workouts "
+                "page. Answer with the totals returned; don't add them up yourself."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "activity": {"type": "string", "description": "e.g. 'walk'. Omit for every activity."},
+                    "period": {
+                        "type": "string",
+                        "description": (
+                            "Only if the user names one: 'today', 'yesterday', 'this week', 'last week', "
+                            "'this month', 'last month', 'this year', 'all time' or 'last N days'"
+                        ),
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "show_status",
             "description": (
                 "The user's TV and movie list: what they're watching, where they are in it, what's coming "
@@ -1606,6 +1660,8 @@ TOOL_HANDLERS = {
     "log_chore": log_chore,
     "chore_status": chore_status,
     "add_chore": add_chore,
+    "lift_history": lift_history,
+    "activity_totals": activity_totals,
     "show_status": show_status,
     "update_show": update_show,
     "add_show": add_show,
@@ -1663,6 +1719,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
     "habits": ["log_habit", "habit_status"],
     "chores": ["log_chore", "chore_status"],
     "chore_add": ["add_chore"],
+    "workouts": ["lift_history", "activity_totals"],
     "shows": ["show_status", "update_show"],
     "show_add": ["add_show"],
     "todo": ["add_todo_item", "list_todo_items", "complete_todo_item"],
@@ -1691,6 +1748,11 @@ GROUP_KEYWORDS: dict[str, list[str]] = {
     "shows": [
         "episode", "season", "watching", "watched", "to watch", "watch list", "watchlist", "movie", "tv show",
         "series", "entertainment", "my list", "recommend", "should watch",
+    ],
+    "workouts": [
+        "workout", "work out", "worked out", "gym", "lift", "personal best", "personal record", "bench", "squat",
+        "deadlift", "dead lift", "curl", "walk", "miles", "my activit", "training volume", "leg press",
+        "pull up", "pullup", "push up", "shrug", "lateral raise", "extensions", "my max", "1rm",
     ],
     "scratch_notes": ["scratch", "jot", "write down", "wrote down", "jotted"],
     "repo_research": ["repo", "repository", "github", "codebase", "clone"],
@@ -1732,6 +1794,12 @@ def select_tools(recent_texts: list[str], has_attachments: bool) -> list[dict]:
     # available the model added a chore nobody asked for after a failed log.
     if "chores" in matched_groups and re.search(r"\b(add|track)\b|new chore", haystack):
         matched_groups.add("chore_add")
+    if "workouts" not in matched_groups:
+        try:
+            if re.search(r"\b(pr|prs|pb|pbs)\b", haystack) or workout_chat.mentions(haystack):
+                matched_groups.add("workouts")
+        except Exception:
+            logger.exception("Couldn't check the message against the workout log")
     # Titles on the watch list are keywords too ("finished Dark Matter").
     if "shows" not in matched_groups:
         try:

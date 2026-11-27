@@ -88,6 +88,8 @@ PLANNER_TEST_DB_URL=postgresql://localhost:5432/planner_test .venv/bin/python -m
 
 **Chores on Today:** Saturdays and Sundays only, chores with an interval that are due appear on Today with a tick to log them (`GET /chores/today`).
 
+**Workouts by chat:** "when did I last do leg extensions?", "what's my best flat bench?", "how far have I walked this week?". Read-only: code finds the exercise or activity and does every date and total.
+
 **Entertainment by chat:** "I'm on episode 4", "I finished Dark Matter", "add Severance to my list", "Sam recommended Severance", "what was I watching?". Code picks the title and saves the change; without a title it uses the one show being watched, and asks if there are several. An episode number is saved as watched through that episode, "another episode" adds one, finishing a season marks the show waiting for the next, and numbers you did not say are ignored. Adding is only offered when the message asks to add.
 
 **Chores by chat:** "I dusted the ceiling fans", "I flipped the mattress last Saturday", "when did I last descale the coffee maker?", "what chores are due?". Code picks the chore and the date; if nothing matches it asks rather than guessing.

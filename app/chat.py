@@ -6,7 +6,7 @@ import logging
 import httpx
 
 from app.config import CHAT_MODEL, CODEBASE_SEARCHER_URL, IRIS_URL, OLLAMA_HOST, OLLAMA_NUM_CTX, SYSTEM_PROMPT
-from app import show_chat
+from app import show_chat, workout_chat
 from app.tools import TOOL_HANDLERS, select_tools
 
 MAX_TOOL_ITERATIONS = 5
@@ -206,6 +206,9 @@ async def run_chat_stream(
     typed = [m.get("content", "") for m in messages if m.get("role") == "user"]
     show_chat.said.set(" ".join(typed[-3:]))
     show_chat.latest.set(typed[-1] if typed else "")
+    note = workout_chat.report_note(typed[-1] if typed else "")
+    if note:
+        messages[0] = {**messages[0], "content": f"{messages[0]['content']} {note}"}
 
     for _ in range(MAX_TOOL_ITERATIONS):
         accumulated_content = ""
