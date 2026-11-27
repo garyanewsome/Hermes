@@ -100,7 +100,7 @@ PLANNER_TEST_DB_URL=postgresql://localhost:5432/planner_test .venv/bin/python -m
 
 **Completion history:** every todo check-off adds a row to `todo_completions` (item text and list name copied, so it survives renames and deletes). Unchecking a one-off removes its latest row; skips aren't recorded. Recurring items never stay checked, so a mistaken check-off on one can't be undone from the UI.
 
-**Workouts page:** upload the training spreadsheet's `.xlsx` export, check the preview, save. A workout is identified by date and tab name, so uploading again replaces rather than duplicates, and the sheet replaces pasted lifts on the same date. History and unique exercise names (with "same as" linking) are on the same page. Routes: `POST /workouts/import[/preview]`, `GET /workouts/exercises`, `POST /workouts/exercises/link|unlink`.
+**Workouts page:** upload the training spreadsheet's `.xlsx` export, check the preview, save. A workout is identified by date and tab name. The preview marks each one new, changed (naming the exercises that differ) or unchanged, and saving writes only the new and changed ones, so uploading again never duplicates, and the sheet replaces pasted lifts on the same date. History and unique exercise names (with "same as" linking) are on the same page. Routes: `POST /workouts/import[/preview]`, `GET /workouts/exercises`, `POST /workouts/exercises/link|unlink`.
 
 **Charts:** Workouts → Charts: weekly lifting volume, top weight over time for an exercise, activity time and distance per week, a workout-day grid and personal bests, over 4 weeks, 3 months or a year. Numbers come from `GET /workouts/charts?weeks=`; the drawing is plain SVG, no chart library.
 

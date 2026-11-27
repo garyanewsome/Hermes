@@ -1,9 +1,12 @@
 """Saves parsed spreadsheet workouts, and lists and links exercise names.
 
-A workout is identified by (date, tab name). Uploading again replaces the
-workouts the file contains and leaves all others alone, so nothing duplicates.
+A workout is identified by (date, tab name). Uploading again saves only the
+workouts that are new or differ from what is stored, replacing those and
+leaving all others alone, so nothing duplicates.
 The sheet is the main record for lifting: it replaces pasted lifts on the same
 date."""
+
+from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
@@ -153,25 +156,62 @@ def _program_name(program: str | None, filename: str | None) -> str:
     return name[:200] or "Untitled program"
 
 
-def _find_replaced(conn, workout: dict) -> dict:
-    """How many stored sets saving this workout would replace."""
-    row = conn.execute(
-        """
-        SELECT count(*) FILTER (WHERE w.session_name = %(session)s) AS sheet,
-               count(*) FILTER (WHERE s.workout_id IS NULL) AS pasted
-        FROM lift_sets s LEFT JOIN workouts w ON w.id = s.workout_id
-        WHERE s.workout_date = %(date)s
+# Stored as NUMERIC(8, 2), so compared at that precision.
+_DECIMAL_COLUMNS = {"weight", "per_side", "base_weight"}
+
+
+def _comparable(item: dict) -> tuple:
+    return tuple(
+        Decimal(str(item[c])).quantize(Decimal("0.01"), ROUND_HALF_UP)
+        if c in _DECIMAL_COLUMNS and item[c] is not None else item[c]
+        for c in SET_COLUMNS
+    )
+
+
+def _changed_exercises(old: list[dict], new: list[dict]) -> list[str]:
+    """Names whose sets differ, in sheet order. A rename lists both names."""
+    def by_name(sets):
+        found: dict[str, list[tuple]] = {}
+        for item in sets:
+            found.setdefault(item["exercise"], []).append(_comparable(item))
+        return found
+
+    before, after = by_name(old), by_name(new)
+    return [name for name in dict.fromkeys([*after, *before]) if before.get(name) != after.get(name)]
+
+
+def _compare(conn, workout: dict) -> dict:
+    """How a parsed workout differs from what is stored: "new", "changed" or
+    "unchanged", how many saved sets saving it would replace, and which
+    exercises differ."""
+    columns = ", ".join(f"s.{c}" for c in SET_COLUMNS)
+    stored = conn.execute(
+        f"""
+        SELECT {columns} FROM lift_sets s JOIN workouts w ON w.id = s.workout_id
+        WHERE s.workout_date = %(date)s AND w.session_name = %(session)s ORDER BY s.position
         """,
         workout,
-    ).fetchone()
-    return {"sets": row["sheet"], "pasted_sets": row["pasted"]}
+    ).fetchall()
+    pasted = conn.execute(
+        "SELECT count(*) AS n FROM lift_sets WHERE workout_id IS NULL AND workout_date = %(date)s", workout
+    ).fetchone()["n"]
+    changes: list[str] = []
+    if not stored and not pasted:
+        status = "new"
+    elif not pasted and [_comparable(s) for s in stored] == [_comparable(s) for s in workout["sets"]]:
+        status = "unchanged"
+    else:
+        status = "changed"
+        if stored:
+            changes = _changed_exercises(stored, workout["sets"])
+    return {"status": status, "replaces": {"sets": len(stored), "pasted_sets": pasted}, "changes": changes}
 
 
 def preview(data: bytes, filename: str | None, program: str | None = None) -> dict:
     result = workout_sheet.parse(data, planner_db._today())
     with planner_db._connect() as conn:
         for workout in result["workouts"]:
-            workout["replaces"] = _find_replaced(conn, workout)
+            workout.update(_compare(conn, workout))
     known = set()
     for entry in list_exercises():
         known.update(exercise_key(v) for v in [entry["name"], *entry["variants"]])
@@ -187,7 +227,8 @@ def preview(data: bytes, filename: str | None, program: str | None = None) -> di
 
 
 def save(data: bytes, filename: str | None, program: str | None = None) -> dict:
-    """All or nothing: any error means nothing is written."""
+    """All or nothing: any error means nothing is written. Unchanged workouts
+    are left as they are."""
     result = workout_sheet.parse(data, planner_db._today())
     name = _program_name(program, filename)
     if result["errors"]:
@@ -196,14 +237,19 @@ def save(data: bytes, filename: str | None, program: str | None = None) -> dict:
     placeholders = ", ".join(["%s"] * len(SET_COLUMNS))
     with planner_db._connect() as conn:
         conn.execute("SELECT pg_advisory_xact_lock(hashtext('workout_save'))")
-        program_id = conn.execute(
-            """
-            INSERT INTO workout_programs (name) VALUES (%s)
-            ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id
-            """,
-            (name,),
-        ).fetchone()["id"]
         for workout in result["workouts"]:
+            workout.update(_compare(conn, workout))
+        writing = [w for w in result["workouts"] if w["status"] != "unchanged"]
+        program_id = None
+        if writing:
+            program_id = conn.execute(
+                """
+                INSERT INTO workout_programs (name) VALUES (%s)
+                ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id
+                """,
+                (name,),
+            ).fetchone()["id"]
+        for workout in writing:
             workout_id = conn.execute(
                 """
                 INSERT INTO workouts (program_id, session_name, workout_date, source_file)

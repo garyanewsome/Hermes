@@ -185,12 +185,60 @@ class ImportTests(unittest.TestCase):
         body = self.upload(build(), "/workouts/import/preview").json()
         self.assertEqual(body["workouts"][0]["replaces"], {"sets": 7, "pasted_sets": 0})
         self.assertEqual(body["new_exercises"], [])
-        # A renamed file must not create a second copy either.
+        # A renamed file must not create a second copy either, and nothing
+        # that hasn't changed is written again.
         self.assertEqual(self.upload(build(), name="Renamed.xlsx").status_code, 200)
         [day] = self.days()
         self.assertEqual(len(day["sets"]), 7)
         self.assertEqual(day["volume"], {"lb": 4610})
-        self.assertEqual(day["sets"][0]["program"], "Renamed")
+        self.assertEqual(day["sets"][0]["program"], "Winter")
+        with self.db._connect() as conn:
+            self.assertEqual([r["name"] for r in conn.execute("SELECT name FROM workout_programs")], ["Winter"])
+
+    def statuses(self, data):
+        body = self.upload(data, "/workouts/import/preview").json()
+        return [(w["date"], w["status"], w["changes"]) for w in body["workouts"]]
+
+    def set_ids(self):
+        with self.db._connect() as conn:
+            return [r["id"] for r in conn.execute("SELECT id FROM lift_sets ORDER BY id")]
+
+    def test_only_new_and_changed_workouts_are_written(self):
+        self.assertEqual(self.statuses(build()), [("2020-01-05", "new", [])])
+        self.upload(build())
+        before = self.set_ids()
+        self.assertEqual(self.statuses(build()), [("2020-01-05", "unchanged", [])])
+        body = self.upload(build()).json()
+        self.assertEqual([w["status"] for w in body["workouts"]], ["unchanged"])
+        self.assertEqual(self.set_ids(), before)
+
+        def rename(book):
+            book.active["A10"] = "Flat Bench Press"
+
+        self.assertEqual(self.statuses(build(rename)), [("2020-01-05", "changed", ["Flat Bench Press", "Flat Bench"])])
+        self.upload(build(rename))
+        self.assertNotEqual(self.set_ids(), before)
+        self.assertEqual(self.statuses(build(rename)), [("2020-01-05", "unchanged", [])])
+
+    def test_any_edited_cell_counts_as_a_change(self):
+        self.upload(build())
+        for cell, value, name in (
+            ("H10", "8", "Flat Bench"), ("F10", 106, "Flat Bench"), ("I11", "4 + 2", "Flat Bench"),
+            ("F18", "free now", "Assisted Pull Ups"), ("D10", "6-8", "Flat Bench"),
+        ):
+            with self.subTest(cell=cell):
+                def edit(book, cell=cell, value=value):
+                    book.active[cell] = value
+
+                [(_, status, changes)] = self.statuses(build(edit))
+                self.assertEqual((status, changes), ("changed", [name]))
+
+    def test_fractions_do_not_look_changed(self):
+        def edit(book):
+            book.active["F10"] = 105.063
+
+        self.upload(build(edit))
+        self.assertEqual(self.statuses(build(edit))[0][1], "unchanged")
 
     def test_breakdown_is_saved(self):
         def edit(book):
@@ -214,6 +262,7 @@ class ImportTests(unittest.TestCase):
 
     def test_sheet_replaces_pasted_lifts_and_keeps_walks(self):
         self.client.post("/workouts", json={"text": "WORKOUT 2020-01-05\nlift | Bench | 100 lb | 5\nwalk | pad | 5 min"})
+        self.assertEqual(self.statuses(build())[0][1], "changed")
         self.upload(build())
         [day] = self.days()
         self.assertEqual((len(day["sets"]), len(day["activities"])), (7, 1))

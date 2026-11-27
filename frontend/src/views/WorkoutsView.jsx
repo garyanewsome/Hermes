@@ -145,7 +145,9 @@ function Import({ onImported }) {
     setError('');
     try {
       const result = await importWorkoutSheet(file);
-      setMessage(`Saved ${plural(result.workouts.length, 'workout')}.`);
+      const saved = result.workouts.filter((w) => w.status !== 'unchanged').length;
+      const same = result.workouts.length - saved;
+      setMessage(`Saved ${plural(saved, 'workout')}.${same ? ` ${same} unchanged.` : ''}`);
       setPreview(null);
       onImported();
     } catch (err) {
@@ -155,6 +157,26 @@ function Import({ onImported }) {
   }
 
   const blocked = preview && preview.errors.length > 0;
+  const withStatus = (status) => preview?.workouts.filter((w) => w.status === status) || [];
+  const [added, changed, unchanged] = [withStatus('new'), withStatus('changed'), withStatus('unchanged')];
+  const writing = [...added, ...changed].sort((a, b) => b.date.localeCompare(a.date));
+  const previewCard = (w) => (
+    <Workout
+      key={`${w.date}-${w.session}`}
+      title={`${longDate(w.date)} · ${w.session}`}
+      summary={`${plural(w.set_count, 'set')} · ${number(w.volume)} lb (${number(w.entered_volume)} as entered)`}
+      sets={w.sets}
+    >
+      {w.status !== 'unchanged' && (
+        <div style={{ fontSize: 12, color: 'var(--accent)', marginTop: 6 }}>
+          {w.status === 'new'
+            ? 'New'
+            : `Changed · replaces ${plural(w.replaces.sets + w.replaces.pasted_sets, 'saved set')}`}
+          {w.changes.length > 0 && <span style={dim}> · {w.changes.join(', ')}</span>}
+        </div>
+      )}
+    </Workout>
+  );
   return (
     <>
       <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
@@ -190,23 +212,25 @@ function Import({ onImported }) {
             </div>
           )}
           {preview.skipped_tabs.length > 0 && <div style={dim}>Tabs not read: {preview.skipped_tabs.join(', ')}</div>}
-          {preview.workouts.map((w) => (
-            <Workout
-              key={`${w.date}-${w.session}`}
-              title={`${longDate(w.date)} · ${w.session}`}
-              summary={`${plural(w.set_count, 'set')} · ${number(w.volume)} lb (${number(w.entered_volume)} as entered)`}
-              sets={w.sets}
-            >
-              {(w.replaces.sets > 0 || w.replaces.pasted_sets > 0) && (
-                <div style={{ ...dim, marginTop: 6 }}>Replaces {plural(w.replaces.sets + w.replaces.pasted_sets, 'saved set')}</div>
-              )}
-            </Workout>
-          ))}
-          {!blocked && (
-            <button type="button" onClick={save} disabled={!!busy} style={{ ...solid, alignSelf: 'flex-start' }}>
-              {busy || `Save ${plural(preview.workouts.length, 'workout')}`}
-            </button>
+          {preview.workouts.length > 0 && (
+            <div style={dim}>
+              {[`${added.length} new`, `${changed.length} changed`, `${unchanged.length} unchanged`].join(' · ')}
+            </div>
           )}
+          {writing.map(previewCard)}
+          {unchanged.length > 0 && (
+            <details>
+              <summary style={{ ...dim, cursor: 'pointer', padding: '4px 0' }}>Show {plural(unchanged.length, 'unchanged workout')}</summary>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>{unchanged.map(previewCard)}</div>
+            </details>
+          )}
+          {!blocked && (writing.length > 0 ? (
+            <button type="button" onClick={save} disabled={!!busy} style={{ ...solid, alignSelf: 'flex-start' }}>
+              {busy || `Save ${plural(writing.length, 'workout')}`}
+            </button>
+          ) : (
+            preview.workouts.length > 0 && <div style={{ fontSize: 13 }}>Nothing new to save. Hermes already matches this file.</div>
+          ))}
         </>
       )}
     </>
