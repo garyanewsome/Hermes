@@ -19,6 +19,15 @@ spec:
       labels:
         app: planner-postgres
     spec:
+      # AppArmor off for this pod only. The host's containerd profile refuses
+      # signals between Postgres' own processes (their label carries an extra
+      # "//&unconfined"), which leaves it stuck in recovery after any unclean
+      # stop: "could not signal for checkpoint: Permission denied". Seen in
+      # dmesg as apparmor="DENIED" operation="signal". Replace with a custom
+      # profile that allows it when there is one.
+      securityContext:
+        appArmorProfile:
+          type: Unconfined
       containers:
       - name: postgres
         image: postgres:16-alpine
