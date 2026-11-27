@@ -43,6 +43,14 @@ spec:
             secretKeyRef:
               name: naradi-auth-secret
               key: session-secret
+        # Optional: without this secret the Claude connector stays off.
+        # See docs/claude-connector.md.
+        - name: CONNECTOR_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: naradi-connector-secret
+              key: token
+              optional: true
         volumeMounts:
         - name: naradi-data
           mountPath: /data

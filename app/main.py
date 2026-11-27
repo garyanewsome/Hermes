@@ -29,7 +29,7 @@ from app.db import (
     rename_conversation,
     update_message_content,
 )
-from app import activities, chores, daily_import, daily_log, entertainment, habit_amounts, nav_order, planner_db, recap, trends, workout_charts, workout_import, workouts
+from app import activities, chores, connector, daily_import, daily_log, entertainment, habit_amounts, nav_order, planner_db, recap, trends, workout_charts, workout_import, workouts
 
 logger = logging.getLogger("naradi")
 
@@ -38,6 +38,7 @@ app.include_router(workouts.router)
 app.include_router(workout_import.router)
 app.include_router(activities.router)
 app.include_router(chores.router)
+app.include_router(connector.router)
 app.include_router(daily_log.router)
 app.include_router(daily_import.router)
 app.include_router(entertainment.router)
@@ -205,6 +206,9 @@ async def require_auth(request: Request, call_next):
     path = request.url.path
     if path in _PUBLIC_PATHS or path.startswith(_PUBLIC_PREFIXES):
         return await call_next(request)
+    # The connector has its own token, good for its read-only routes alone.
+    if path.startswith(connector.PREFIX):
+        return connector.refusal(request) or await call_next(request)
     if not auth.verify_session_token(request.cookies.get(auth.COOKIE_NAME)):
         return JSONResponse({"detail": "Not authenticated"}, status_code=401)
     return await call_next(request)

@@ -90,6 +90,8 @@ PLANNER_TEST_DB_URL=postgresql://localhost:5432/planner_test .venv/bin/python -m
 
 **Chores on Today:** Saturdays and Sundays only, chores with an interval that are due appear on Today with a tick to log them (`GET /chores/today`).
 
+**Claude desktop connector:** a read-only local MCP server (`connector/naradi_connector.py`) that lets a Claude desktop chat look up a day's lifts, an exercise's history and personal bests. It uses its own token on `GET /connector/*` only. Setup: [docs/claude-connector.md](docs/claude-connector.md).
+
 **Workouts by chat:** "when did I last do leg extensions?", "what's my best flat bench?", "how far have I walked this week?". Read-only: code finds the exercise or activity and does every date and total.
 
 **Habits with amounts:** give a habit a unit (minutes, pages, lbs) and each day holds a number. Repeat entries add up (practice time) or replace (weight); the habit's history shows weekly totals or each value as a line chart, and its streak can be hidden. By chat: "practiced bass for 45 minutes", "I weigh 182", "how much did I practice this week?". Only numbers you typed are saved, and hours convert to minutes. Routes: `POST /habits`, `PATCH /habits/{id}`, `PUT /habits/{id}/amount`.
