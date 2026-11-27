@@ -490,3 +490,18 @@ async function slowRecapRequest(url) {
 
 export const updateRecap = (week) => slowRecapRequest(`/recaps/${week}`);
 export const saveRecapToVault = (week) => slowRecapRequest(`/recaps/${week}/vault`);
+
+// ---- Entertainment --------------------------------------------------------
+
+// Every change answers with the fresh list.
+export const listEntertainment = () => workoutRequest('/entertainment');
+const entertainmentWrite = (url, method, payload) =>
+  workoutRequest(url, {
+    method,
+    ...(payload && { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
+  });
+export const saveEntertainment = (entry, id) =>
+  entertainmentWrite(id ? `/entertainment/${id}` : '/entertainment', id ? 'PUT' : 'POST', entry);
+export const deleteEntertainment = (id) => entertainmentWrite(`/entertainment/${id}`, 'DELETE');
+export const previewEntertainmentImport = () => workoutRequest('/entertainment/import');
+export const importEntertainment = (entries) => entertainmentWrite('/entertainment/import', 'POST', { entries });

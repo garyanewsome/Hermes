@@ -80,6 +80,8 @@ Tests need a throwaway Postgres database (never the real one); they're skipped w
 PLANNER_TEST_DB_URL=postgresql://localhost:5432/planner_test .venv/bin/python -m unittest discover -s tests -t .
 ```
 
+**Entertainment:** TV and movies: Continue, Coming up (with a return date), Want to watch, Paused and Done. **+1 episode** moves your place, groups like a franchise stay together. **Import** reads `40 Personal/Entertainment.md` (`ENTERTAINMENT_NOTE`) through vault-keeper into a preview; it only adds, and nothing in the vault is changed. No chat tools or vault mirror yet.
+
 **Sunday recap:** at 8pm Sunday (app time) Hermes builds the week's recap: done, habits against the week before, training and new bests, chores, what's slipping, what's due next week. Code computes and lays out everything; the chat model adds a few sentences, discarded if they contain a number that isn't in the facts. Saved once to the vault (`40 Personal/Weekly Recaps`, `RECAP_FOLDER`) and shown collapsed on Today, with **Update** and **Save to vault** (a new note; nothing is overwritten). Missed runs catch up.
 
 **Trends:** tasks, todos, habit check-ins, chores, gym days and activity minutes per week over 4 weeks, 3 months or a year, plus a year grid for each habit (`GET /trends?weeks=`). Todo history starts when completions began being recorded; a reopened or deleted task no longer counts.

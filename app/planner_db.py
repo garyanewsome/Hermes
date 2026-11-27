@@ -340,6 +340,25 @@ def init_planner_db() -> None:
             )
             """
         )
+        # TV and movies (app/entertainment.py).
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS entertainment (
+                id SERIAL PRIMARY KEY,
+                title TEXT NOT NULL,
+                kind TEXT NOT NULL CHECK (kind IN ('tv', 'movie')),
+                group_name TEXT,
+                status TEXT NOT NULL CHECK (status IN ('want', 'watching', 'waiting', 'paused', 'done')),
+                season INTEGER,
+                episode INTEGER,
+                return_date DATE,
+                where_to_watch TEXT,
+                note TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
         # Simplenote-style scratchpad — no title field, the first line of
         # `content` serves as the title in the list. A quick-capture spot
         # for ideas on the go, meant to get copied into Obsidian later, not

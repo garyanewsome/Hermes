@@ -29,7 +29,7 @@ from app.db import (
     rename_conversation,
     update_message_content,
 )
-from app import activities, chores, nav_order, planner_db, recap, trends, workout_charts, workout_import, workouts
+from app import activities, chores, entertainment, nav_order, planner_db, recap, trends, workout_charts, workout_import, workouts
 
 logger = logging.getLogger("hermes")
 
@@ -38,6 +38,7 @@ app.include_router(workouts.router)
 app.include_router(workout_import.router)
 app.include_router(activities.router)
 app.include_router(chores.router)
+app.include_router(entertainment.router)
 app.include_router(trends.router)
 app.include_router(recap.router)
 app.include_router(nav_order.router)

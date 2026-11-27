@@ -91,6 +91,17 @@ export const ITEMS = [
     ),
   },
   {
+    key: 'entertainment',
+    label: 'Entertainment',
+    icon: (color) => (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="1.8" y="4" width="12.4" height="9" rx="1.6" stroke={color} strokeWidth="1.3" />
+        <path d="M5.5 1.8L8 4l2.5-2.2" stroke={color} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M6.8 6.6l3.2 1.9-3.2 1.9z" stroke={color} strokeWidth="1.1" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  {
     key: 'trends',
     label: 'Trends',
     icon: (color) => (
