@@ -80,13 +80,15 @@ Tests need a throwaway Postgres database (never the real one); they're skipped w
 PLANNER_TEST_DB_URL=postgresql://localhost:5432/planner_test .venv/bin/python -m unittest discover -s tests -t .
 ```
 
-**Entertainment:** TV and movies: Continue, Coming up (with a return date), Want to watch, Paused and Done. **+1 episode** moves your place, groups like a franchise stay together. Hermes is where it's edited: it rewrites `01 Hermes/Entertainment.md` (`ENTERTAINMENT_NOTE`) about 20 seconds after changes stop, and at startup, so the list can be read in Obsidian. Edits to that note are replaced. A failed write is retried every 5 minutes and shown on the page. No chat tools yet.
+**Entertainment:** TV and movies: Continue, Coming up (with a return date), Want to watch, Paused and Done. **+1 episode** moves your place, groups like a franchise stay together. Hermes is where it's edited: it rewrites `01 Hermes/Entertainment.md` (`ENTERTAINMENT_NOTE`) about 20 seconds after changes stop, and at startup, so the list can be read in Obsidian. Edits to that note are replaced. A failed write is retried every 5 minutes and shown on the page.
 
 **Sunday recap:** at 8pm Sunday (app time) Hermes builds the week's recap: done, habits against the week before, training and new bests, chores, what's slipping, what's due next week. Code computes and lays out everything; the chat model adds a few sentences, discarded if they contain a number that isn't in the facts. Saved once to the vault (`01 Hermes/Weekly Recaps`, `RECAP_FOLDER`) and shown collapsed on Today, with **Update** and **Save to vault** (a new note; nothing is overwritten). Missed runs catch up.
 
 **Trends:** tasks, todos, habit check-ins, chores, gym days and activity minutes per week over 4 weeks, 3 months or a year, plus a year grid for each habit (`GET /trends?weeks=`). Todo history starts when completions began being recorded; a reopened or deleted task no longer counts.
 
 **Chores on Today:** Saturdays and Sundays only, chores with an interval that are due appear on Today with a tick to log them (`GET /chores/today`).
+
+**Entertainment by chat:** "I'm on episode 4", "I finished Dark Matter", "add Severance to my list", "what was I watching?". Code picks the title and saves the change; without a title it uses the one show being watched, and asks if there are several. An episode number is saved as watched through that episode, "another episode" adds one, finishing a season marks the show waiting for the next, and numbers you did not say are ignored. Adding is only offered when the message asks to add.
 
 **Chores by chat:** "I dusted the ceiling fans", "I flipped the mattress last Saturday", "when did I last descale the coffee maker?", "what chores are due?". Code picks the chore and the date; if nothing matches it asks rather than guessing.
 

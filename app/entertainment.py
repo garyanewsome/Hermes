@@ -103,6 +103,7 @@ def add(entry: Entry) -> None:
         if _key(values["title"], values["kind"]) in _existing(conn):
             raise ValueError(f"{values['title']} is already on your list")
         _insert(conn, values)
+    _changed.set()
 
 
 def update(entry_id: int, entry: Entry) -> bool:
@@ -112,15 +113,19 @@ def update(entry_id: int, entry: Entry) -> bool:
         if _existing(conn).get(_key(values["title"], values["kind"]), entry_id) != entry_id:
             raise ValueError(f"{values['title']} is already on your list")
         assignments = ", ".join(f"{name} = %({name})s" for name in FIELDS)
-        return conn.execute(
+        found = conn.execute(
             f"UPDATE entertainment SET {assignments}, updated_at = now() WHERE id = %(id)s",
             {**values, "id": entry_id},
         ).rowcount > 0
+    _changed.set()  # after the commit
+    return found
 
 
 def delete(entry_id: int) -> bool:
     with planner_db._connect() as conn:
-        return conn.execute("DELETE FROM entertainment WHERE id = %s", (entry_id,)).rowcount > 0
+        found = conn.execute("DELETE FROM entertainment WHERE id = %s", (entry_id,)).rowcount > 0
+    _changed.set()
+    return found
 
 
 # ---- The copy in the vault -------------------------------------------------
@@ -247,19 +252,16 @@ def get_entertainment():
 @router.post("/entertainment")
 def post_entry(entry: Entry):
     _refuse(lambda: add(entry))
-    _changed.set()
     return _page()
 
 
 @router.put("/entertainment/{entry_id}")
 def put_entry(entry_id: int, entry: Entry):
     _found(_refuse(lambda: update(entry_id, entry)))
-    _changed.set()
     return _page()
 
 
 @router.delete("/entertainment/{entry_id}")
 def remove_entry(entry_id: int):
     _found(delete(entry_id))
-    _changed.set()
     return _page()

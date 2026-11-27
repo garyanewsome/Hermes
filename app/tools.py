@@ -25,7 +25,7 @@ from app.config import (
     UPLOADS_DIR,
     VAULT_KEEPER_URL,
 )
-from app import chore_chat, db, documents, music, planner_db, tone_analysis, web
+from app import chore_chat, db, documents, music, planner_db, show_chat, tone_analysis, web
 from app.pod_go_reference import AMPS_CLEAN, AMPS_CRUNCH, AMPS_HIGH_GAIN, CABS_COMMON, EFFECTS_SHORT
 
 logger = logging.getLogger("hermes")
@@ -180,6 +180,20 @@ def chore_status(name: str | None = None) -> str:
 
 def add_chore(name: str, every_days: int | None = None) -> str:
     return chore_chat.add(name, every_days)
+
+
+def show_status(title: str | None = None) -> str:
+    return show_chat.status(title)
+
+
+def update_show(title: str | None = None, season: int | None = None, episode: int | None = None,
+                status: str | None = None, finished_season: int | None = None) -> str:
+    return show_chat.update(title, season, episode, status, finished_season)
+
+
+def add_show(title: str, kind: str = "tv", status: str | None = None, season: int | None = None,
+             episode: int | None = None) -> str:
+    return show_chat.add(title, kind, status, season, episode)
 
 
 _WEEKDAY_NAMES = {1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday", 7: "Sunday"}
@@ -935,6 +949,83 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "show_status",
+            "description": (
+                "The user's TV and movie list: what they're watching, where they are in it, what's coming "
+                "back and what they want to watch, e.g. 'what was I watching?' or 'when is 3 Body Problem "
+                "back?'. Omit `title` for the whole list. Answer only from what is returned."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"title": {"type": "string", "description": "One title, or omit for all"}},
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_show",
+            "description": (
+                "Save the user's progress in a TV show or movie, e.g. 'I'm on episode 4', 'finished Dark "
+                "Matter', 'I started Silicon Valley', 'pausing Devs', 'watched another episode'. Call it every "
+                "time they report watching something, even straight after an earlier update and even with no "
+                "title: nothing is saved unless you call it. Never call it for a question."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": "The title as the user said it. Omit if they didn't name one; don't guess.",
+                    },
+                    "season": {"type": "integer", "description": "Only if the user says a season number"},
+                    "episode": {"type": "integer", "description": "Only if the user says an episode number"},
+                    "finished_season": {
+                        "type": "integer",
+                        "description": "The season they say they finished, when the show isn't over",
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": ["watching", "done", "paused", "want", "waiting"],
+                        "description": (
+                            "'done' means finished the whole show or movie; for one season use "
+                            "finished_season instead. Omit when they only give a season or episode."
+                        ),
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_show",
+            "description": (
+                "Add a TV show or movie to the user's watch list. Only for things to watch, and only when "
+                "they ask for it to be added; groceries and to-dos go on to-do lists."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "kind": {"type": "string", "enum": ["tv", "movie"]},
+                    "status": {
+                        "type": "string",
+                        "enum": ["want", "watching"],
+                        "description": "'watching' only if they say they've started it",
+                    },
+                    "season": {"type": "integer", "description": "Only if the user said where they are"},
+                    "episode": {"type": "integer", "description": "Only if the user said where they are"},
+                },
+                "required": ["title", "kind"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "add_todo_item",
             "description": (
                 "Add an item to a plain everyday to-do list (groceries, errands, "
@@ -1508,6 +1599,9 @@ TOOL_HANDLERS = {
     "log_chore": log_chore,
     "chore_status": chore_status,
     "add_chore": add_chore,
+    "show_status": show_status,
+    "update_show": update_show,
+    "add_show": add_show,
     "add_todo_item": add_todo_item,
     "list_todo_items": list_todo_items,
     "complete_todo_item": complete_todo_item,
@@ -1562,6 +1656,8 @@ TOOL_GROUPS: dict[str, list[str]] = {
     "habits": ["log_habit", "habit_status"],
     "chores": ["log_chore", "chore_status"],
     "chore_add": ["add_chore"],
+    "shows": ["show_status", "update_show"],
+    "show_add": ["add_show"],
     "todo": ["add_todo_item", "list_todo_items", "complete_todo_item"],
     "scratch_notes": ["add_scratch_note", "search_scratch_notes", "list_recent_scratch_notes", "save_scratch_note_to_vault"],
     "repo_research": ["research_repo", "forget_repo"],
@@ -1584,6 +1680,10 @@ GROUP_KEYWORDS: dict[str, list[str]] = {
     "chores": [
         "chore", "dusted", "dusting", "cleaned", "cleaning", "descale", "vacuum", "mopped", "mopping",
         "scrubbed", "washed the", "changed the filter", "replaced the filter", "when did i last", "last time i",
+    ],
+    "shows": [
+        "episode", "season", "watching", "watched", "to watch", "watch list", "watchlist", "movie", "tv show",
+        "series", "entertainment", "my list",
     ],
     "scratch_notes": ["scratch", "jot", "write down", "wrote down", "jotted"],
     "repo_research": ["repo", "repository", "github", "codebase", "clone"],
@@ -1625,5 +1725,17 @@ def select_tools(recent_texts: list[str], has_attachments: bool) -> list[dict]:
     # available the model added a chore nobody asked for after a failed log.
     if "chores" in matched_groups and re.search(r"\b(add|track)\b|new chore", haystack):
         matched_groups.add("chore_add")
+    # Titles on the watch list are keywords too ("finished Dark Matter").
+    if "shows" not in matched_groups:
+        try:
+            if show_chat.mentions_a_title(haystack):
+                matched_groups.add("shows")
+        except Exception:
+            logger.exception("Couldn't check the message against the watch list")
+    if "shows" in matched_groups and re.search(r"\b(add|put)\b", haystack):
+        matched_groups.add("show_add")
+    # "Add X to my list" could be either kind of list, so offer both.
+    if "show_add" in matched_groups and "my list" in haystack:
+        matched_groups.add("todo")
     matched_names = {name for group in matched_groups for name in TOOL_GROUPS[group]}
     return [t for t in TOOLS if t["function"]["name"] in matched_names]

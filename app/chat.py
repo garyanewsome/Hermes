@@ -6,6 +6,7 @@ import logging
 import httpx
 
 from app.config import CHAT_MODEL, CODEBASE_SEARCHER_URL, IRIS_URL, OLLAMA_HOST, OLLAMA_NUM_CTX, SYSTEM_PROMPT
+from app import show_chat
 from app.tools import TOOL_HANDLERS, select_tools
 
 MAX_TOOL_ITERATIONS = 5
@@ -202,6 +203,9 @@ async def run_chat_stream(
     # "yes, add it" still matches whatever the assistant just proposed.
     has_attachments = any(m.get("attachments") for m in messages)
     active_tools = select_tools([m.get("content", "") for m in messages[-2:]], has_attachments)
+    typed = [m.get("content", "") for m in messages if m.get("role") == "user"]
+    show_chat.said.set(" ".join(typed[-3:]))
+    show_chat.latest.set(typed[-1] if typed else "")
 
     for _ in range(MAX_TOOL_ITERATIONS):
         accumulated_content = ""
