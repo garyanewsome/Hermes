@@ -117,7 +117,8 @@ migrate() {
   local url_data url new_url
   url_data="$(kubectl get secret planner-postgres-secret -o 'jsonpath={.data.hermes-db-url}')"
   url="$(printf %s "$url_data" | base64 -d)"
-  new_url="${url/\/\/hermes:/\/\/naradi:}"
+  local from_user='//hermes:' to_user='//naradi:'
+  new_url="${url/"$from_user"/$to_user}"
   [ -n "$url" ] && [ "$new_url" != "$url" ] || die "hermes-db-url isn't in the expected postgresql://hermes:... form"
 
   cat <<MSG
