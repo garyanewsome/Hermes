@@ -96,6 +96,8 @@ PLANNER_TEST_DB_URL=postgresql://localhost:5432/planner_test .venv/bin/python -m
 
 **Habits with amounts:** give a habit a unit (minutes, pages, lbs) and each day holds a number. Repeat entries add up (practice time) or replace (weight); the habit's history shows weekly totals or each value as a line chart, and its streak can be hidden. By chat: "practiced bass for 45 minutes", "I weigh 182", "how much did I practice this week?". Only numbers you typed are saved, and hours convert to minutes. Routes: `POST /habits`, `PATCH /habits/{id}`, `PUT /habits/{id}/amount`.
 
+**Save guard:** when a message could be asking for a save, chat holds the reply until it can compare it with the tools that ran. A reply claiming a save when none happened is retried once with a short, fresh context; if that doesn't save either, the answer is **Nothing was saved**. It can't tell that only part of a request was saved. Those replies appear all at once instead of streaming.
+
 **Entertainment by chat:** "I'm on episode 4", "I finished Dark Matter", "add Severance to my list", "Sam recommended Severance", "what was I watching?". Code picks the title and saves the change; without a title it uses the one show being watched, and asks if there are several. An episode number is saved as watched through that episode, "another episode" adds one, finishing a season marks the show waiting for the next, and numbers you did not say are ignored. Adding is only offered when the message asks to add.
 
 **Chores by chat:** "I dusted the ceiling fans", "I flipped the mattress last Saturday", "when did I last descale the coffee maker?", "what chores are due?". Code picks the chore and the date; if nothing matches it asks rather than guessing.

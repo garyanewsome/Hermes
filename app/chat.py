@@ -6,7 +6,7 @@ import logging
 import httpx
 
 from app.config import CHAT_MODEL, CODEBASE_SEARCHER_URL, IRIS_URL, OLLAMA_HOST, OLLAMA_NUM_CTX, SYSTEM_PROMPT
-from app import daily_chat, habit_chat, show_chat, workout_chat
+from app import daily_chat, habit_chat, save_guard, show_chat, workout_chat
 from app.tools import TOOL_HANDLERS, select_tools
 
 MAX_TOOL_ITERATIONS = 5
@@ -218,6 +218,63 @@ async def run_chat_stream(
     if note:
         messages[0] = {**messages[0], "content": f"{messages[0]['content']} {note}"}
 
+    latest = typed[-1] if typed else ""
+    offered = {t["function"]["name"] for t in active_tools}
+    if not save_guard.should_check(latest, offered):
+        async for event in _run_turn(messages, model, think, active_tools, conversation_id, set()):
+            yield event
+        return
+
+    # The reply is held back until what it claims can be compared with what ran.
+    wrote: set[str] = set()
+    reply = ""
+    async for kind, value in _held(_run_turn(list(messages), model, think, active_tools, conversation_id, wrote)):
+        if kind == "content":
+            reply += value
+        else:
+            yield (kind, value)
+    if wrote or not save_guard.claims(reply, offered):
+        yield ("content", reply)
+        return
+
+    logger.warning("Reply claimed a save that didn't happen; trying once more")
+    yield ("status", "Checking that it saved…")
+    recent = select_tools([m.get("content", "") for m in messages[-6:]], has_attachments)
+    tools = list({t["function"]["name"]: t for t in [*active_tools, *recent]}.values())
+    offered = {t["function"]["name"] for t in tools}
+    habit_chat.saved.set(set())
+    reply = ""
+    retry = _run_turn(save_guard.fresh_context(messages), model, think, tools, conversation_id, wrote)
+    async for kind, value in _held(retry):
+        if kind == "content":
+            reply += value
+        else:
+            yield (kind, value)
+    if not reply.strip() or (not wrote and save_guard.claims(reply, offered)):
+        logger.warning("The second try didn't save either")
+        reply = save_guard.NOTHING_SAVED
+    yield ("content", reply)
+
+
+async def _held(events):
+    """Passes a turn's events through, adding a keep-alive while its text is
+    being held, so the browser doesn't give up on a long quiet reply."""
+    loop = asyncio.get_running_loop()
+    last = loop.time()
+    async for kind, value in events:
+        if kind != "content":
+            last = loop.time()
+        elif loop.time() - last >= KEEPALIVE_SECONDS:
+            last = loop.time()
+            yield ("ping", None)
+        yield (kind, value)
+
+
+async def _run_turn(
+    messages: list[dict], model: str, think: bool, active_tools: list[dict], conversation_id: str | None, wrote: set
+):
+    """One reply from the model, running the tools it asks for. Adds to
+    `wrote` the names of the tools that saved something."""
     for _ in range(MAX_TOOL_ITERATIONS):
         accumulated_content = ""
         tool_calls = None
@@ -331,6 +388,8 @@ async def run_chat_stream(
                     }
                 )
             else:
+                if save_guard.saved(name, result):
+                    wrote.add(name)
                 messages.append({"role": "tool", "content": result})
 
     yield ("content", "\n\nI wasn't able to finish that — too many tool calls in a row.")
