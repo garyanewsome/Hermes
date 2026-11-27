@@ -1,4 +1,4 @@
-// Shared by the Workouts page's tabs.
+// Shared by the Fitness page's tabs.
 import { parseISODate } from '../lib/dates.js';
 
 export const card = { background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px' };

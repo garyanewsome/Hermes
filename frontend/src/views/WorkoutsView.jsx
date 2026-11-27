@@ -1,20 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
-import AddActivityButton from '../components/AddActivityButton.jsx';
+import AddButton from '../components/AddButton.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
 import { importWorkoutSheet, listExercises, listWorkouts, previewWorkoutSheet } from '../api.js';
 import { minutesText, paceText } from '../lib/activities.js';
 import ActivityTab from './ActivityTab.jsx';
 import ChartsTab from './ChartsTab.jsx';
+import DailyTab from './DailyTab.jsx';
 import ExercisesTab from './ExercisesTab.jsx';
 import { card, dim, longDate, number, outline, solid } from './workoutStyles.js';
 
 const TABS = [
+  ['daily', 'Daily'],
   ['history', 'History'],
-  ['exercises', 'Search'],
   ['charts', 'Charts'],
-  ['activity', 'Activity'],
+  ['exercises', 'Search'],
   ['import', 'Import'],
+];
+const HISTORY_VIEWS = [
+  ['all', 'Everything'],
+  ['activities', 'Activities'],
 ];
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
@@ -89,7 +94,7 @@ function Workout({ title, summary, sets, children }) {
 
 function History({ days }) {
   if (days === null) return <div style={dim}>Loading…</div>;
-  if (days.length === 0) return <div style={dim}>Nothing yet. Upload your spreadsheet on the Import tab, or tap + to add an activity.</div>;
+  if (days.length === 0) return <div style={dim}>No workouts or activities yet. Upload your spreadsheet on the Import tab, or tap + to add an activity.</div>;
   return days.map((day) => {
     const sessions = [...new Set(day.sets.map((s) => s.session).filter(Boolean))];
     const volume = Object.entries(day.volume).map(([unit, total]) => `${number(total)} ${unit}`);
@@ -238,7 +243,9 @@ function Import({ onImported }) {
 }
 
 export default function WorkoutsView({ onOpenDrawer, active }) {
-  const [tab, setTab] = useState('history');
+  const [tab, setTab] = useState('daily');
+  const [historyView, setHistoryView] = useState('all');
+  const [focus, setFocus] = useState(0);
   const [days, setDays] = useState(null);
   const [exercises, setExercises] = useState(null);
   const [error, setError] = useState('');
@@ -263,7 +270,7 @@ export default function WorkoutsView({ onOpenDrawer, active }) {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      <TopBar title="Workouts" onOpenDrawer={onOpenDrawer}>
+      <TopBar title="Fitness" onOpenDrawer={onOpenDrawer}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {TABS.map(([key, label]) => (
             <button key={key} type="button" onClick={() => setTab(key)} aria-pressed={tab === key} style={{ ...(tab === key ? solid : outline), ...(isMobile && { padding: '6px 9px', fontSize: 12 }) }}>
@@ -276,11 +283,24 @@ export default function WorkoutsView({ onOpenDrawer, active }) {
         {/* The bottom padding lets the last card scroll clear of the + button. */}
         <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 88 }}>
           {error && <div role="alert" style={{ fontSize: 13, color: '#ff6b6b' }}>{error}</div>}
-          {tab === 'history' && <History days={days} />}
+          {/* Stays mounted so half-typed numbers aren't lost. */}
+          <div style={{ display: tab === 'daily' ? 'contents' : 'none' }}>
+            <DailyTab active={active && tab === 'daily'} focus={focus} />
+          </div>
+          {tab === 'history' && (
+            <div style={{ display: 'flex', gap: 6 }}>
+              {HISTORY_VIEWS.map(([key, text]) => (
+                <button key={key} type="button" onClick={() => setHistoryView(key)} aria-pressed={historyView === key} style={{ ...(historyView === key ? solid : outline), padding: '5px 12px', fontSize: 12 }}>
+                  {text}
+                </button>
+              ))}
+            </div>
+          )}
+          {tab === 'history' && historyView === 'all' && <History days={days} />}
           {tab === 'charts' && <ChartsTab active={active} version={version} />}
           {/* Stays mounted so a half-typed entry isn't lost. */}
-          <div style={{ display: tab === 'activity' ? 'contents' : 'none' }}>
-            <ActivityTab active={active && tab === 'activity'} version={version} onChange={refresh} />
+          <div style={{ display: tab === 'history' && historyView === 'activities' ? 'contents' : 'none' }}>
+            <ActivityTab active={active && tab === 'history' && historyView === 'activities'} version={version} onChange={refresh} />
           </div>
           {/* Stays mounted so a preview survives a look at another tab. */}
           <div style={{ display: tab === 'import' ? 'contents' : 'none' }}>
@@ -292,7 +312,11 @@ export default function WorkoutsView({ onOpenDrawer, active }) {
           </div>
         </div>
       </div>
-      <AddActivityButton
+      <AddButton
+        onDaily={() => {
+          setTab('daily');
+          setFocus((n) => n + 1);
+        }}
         onAdded={() => {
           setVersion((n) => n + 1);
           refresh();

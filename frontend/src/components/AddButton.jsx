@@ -1,18 +1,19 @@
 import { useEffect, useState } from 'react';
 import { listActivities } from '../api.js';
 import { ActivityForm } from '../views/ActivityTab.jsx';
-import { card, dim, outline } from '../views/workoutStyles.js';
+import { card, dim, outline, solid } from '../views/workoutStyles.js';
 
-// The floating + on the Workouts page: adding an activity from any tab.
-export default function AddActivityButton({ onAdded }) {
+// The floating + on the Fitness page: today's numbers or an activity, from any
+// tab.
+export default function AddButton({ onDaily, onAdded }) {
   const [open, setOpen] = useState(false);
+  const [activity, setActivity] = useState(false); // chosen from the two
   const [types, setTypes] = useState(null);
   const [error, setError] = useState('');
   const [added, setAdded] = useState('');
 
-  async function show() {
-    setOpen(true);
-    setAdded('');
+  async function showActivity() {
+    setActivity(true);
     setError('');
     try {
       setTypes((await listActivities()).types);
@@ -39,9 +40,13 @@ export default function AddActivityButton({ onAdded }) {
     <>
       <button
         type="button"
-        onClick={show}
-        aria-label="Add activity"
-        title="Add activity"
+        onClick={() => {
+          setActivity(false);
+          setAdded('');
+          setOpen(true);
+        }}
+        aria-label="Add"
+        title="Add"
         style={{ ...corner, zIndex: 30, width: 64, height: 64, borderRadius: '50%', border: 'none', background: 'var(--accent)', color: 'var(--accent-text)', boxShadow: '0 4px 20px var(--accent-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
       >
         <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true">
@@ -58,8 +63,24 @@ export default function AddActivityButton({ onAdded }) {
           onClick={() => setOpen(false)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14, zIndex: 50 }}
         >
-          <div role="dialog" aria-modal="true" aria-label="Add activity" onClick={(e) => e.stopPropagation()} style={{ width: 460, maxWidth: '100%', maxHeight: '100%', overflowY: 'auto' }}>
-            {types ? (
+          <div role="dialog" aria-modal="true" aria-label={activity ? 'Add activity' : 'Add'} onClick={(e) => e.stopPropagation()} style={{ width: 460, maxWidth: '100%', maxHeight: '100%', overflowY: 'auto' }}>
+            {!activity ? (
+              <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <button
+                  type="button"
+                  autoFocus
+                  onClick={() => {
+                    setOpen(false);
+                    onDaily();
+                  }}
+                  style={{ ...solid, padding: 14, fontSize: 15 }}
+                >
+                  Daily numbers
+                </button>
+                <button type="button" onClick={showActivity} style={{ ...outline, padding: 14, fontSize: 15 }}>Activity</button>
+                <button type="button" onClick={() => setOpen(false)} style={{ ...outline, border: 'none', color: 'var(--text-dim)' }}>Cancel</button>
+              </div>
+            ) : types ? (
               <ActivityForm
                 types={types}
                 onCancel={() => setOpen(false)}

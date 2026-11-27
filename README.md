@@ -102,15 +102,17 @@ PLANNER_TEST_DB_URL=postgresql://localhost:5432/planner_test .venv/bin/python -m
 
 **Completion history:** every todo check-off adds a row to `todo_completions` (item text and list name copied, so it survives renames and deletes). Unchecking a one-off removes its latest row; skips aren't recorded. Recurring items never stay checked, so a mistaken check-off on one can't be undone from the UI.
 
-**Workouts page:** upload the training spreadsheet's `.xlsx` export, check the preview, save. A workout is identified by date and tab name. The preview marks each one new, changed (naming the exercises that differ) or unchanged, and saving writes only the new and changed ones, so uploading again never duplicates, and the sheet replaces pasted lifts on the same date. History and unique exercise names (with "same as" linking) are on the same page. Routes: `POST /workouts/import[/preview]`, `GET /workouts/exercises`, `POST /workouts/exercises/link|unlink`.
+**Daily numbers:** the Fitness page opens on **Daily**: weight (lb), calories burned (total and active), calories eaten and protein, carbs and fat, one row per day, filled in a piece at a time. Hermes works out the surplus or deficit (eaten minus total burned) and this week's and last week's daily averages; Charts shows weight, calories and macros. Not yet in chat or the Sunday recap. Routes: `GET /daily`, `PUT /daily/{date}` (only the fields sent change).
 
-**Charts:** Workouts → Charts: weekly lifting volume, top weight over time for an exercise, activity time and distance per week, a workout-day grid and personal bests, over 4 weeks, 3 months or a year. Numbers come from `GET /workouts/charts?weeks=`; the drawing is plain SVG, no chart library.
+**Fitness page:** upload the training spreadsheet's `.xlsx` export, check the preview, save. A workout is identified by date and tab name. The preview marks each one new, changed (naming the exercises that differ) or unchanged, and saving writes only the new and changed ones, so uploading again never duplicates, and the sheet replaces pasted lifts on the same date. History and unique exercise names (with "same as" linking) are on the same page. Routes: `POST /workouts/import[/preview]`, `GET /workouts/exercises`, `POST /workouts/exercises/link|unlink`.
 
-**Exercise search:** Workouts → Search. Type part of a name (any word order, linked names too) and open it to see last time, best (heaviest, then most reps) and every set by date. "Same as…" linking is inside each exercise.
+**Charts:** Fitness → Charts: weekly lifting volume, top weight over time for an exercise, activity time and distance per week, a workout-day grid and personal bests, over 4 weeks, 3 months or a year. Numbers come from `GET /workouts/charts?weeks=`; the drawing is plain SVG, no chart library.
+
+**Exercise search:** Fitness → Search. Type part of a name (any word order, linked names too) and open it to see last time, best (heaviest, then most reps) and every set by date. "Same as…" linking is inside each exercise.
 
 **Myo column:** `12 + 3` is rest-pause, `30 ++ 10` is partials, and they can be combined. Reps holds the total, which is what volume counts. Format the column as plain text in Google Sheets. A breakdown that doesn't add up to Reps is flagged in the preview.
 
-**Activities:** the **+** button on the Workouts page logs anything that isn't lifting (work walk, bike, a deep squat sit): date, time, optional distance. Several a day, editable, with totals by day, week or activity. Routes: `GET|POST /activities`, `PUT|DELETE /activities/{id}`.
+**Activities:** the **+** button on the Fitness page logs anything that isn't lifting (work walk, bike, a deep squat sit): date, time, optional distance. Several a day, editable, with totals by day, week or activity. Routes: `GET|POST /activities`, `PUT|DELETE /activities/{id}`.
 
 **Walk notes (paste):** no screen yet. `POST /workouts/preview` and `POST /workouts` take `{"text": ...}` in the [paste format](docs/workout-format.md); `GET /workouts?start=&end=` returns saved days.
 

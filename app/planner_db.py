@@ -92,6 +92,22 @@ def init_planner_db() -> None:
             """
         )
         conn.execute("ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS amount NUMERIC(10, 2)")
+        # Daily body and food numbers (app/daily_log.py). Weight is in pounds.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS daily_log (
+                log_date DATE PRIMARY KEY,
+                weight NUMERIC(6, 2),
+                burned_total INTEGER,
+                burned_active INTEGER,
+                calories_in INTEGER,
+                protein_g NUMERIC(6, 1),
+                carbs_g NUMERIC(6, 1),
+                fat_g NUMERIC(6, 1),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
         # Deliberately separate from `tasks` — a plain everyday checklist
         # (groceries, errands), kept simple on purpose so it never grows
         # the quadrant/notes/due-date machinery that makes sense for the

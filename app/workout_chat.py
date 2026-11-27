@@ -26,9 +26,9 @@ def report_note(text: str) -> str | None:
     if not report or "?" in text:
         return None
     how = (
-        "lifting is added by uploading the workout spreadsheet on the Workouts page"
+        "lifting is added by uploading the workout spreadsheet on the Fitness page"
         if _LIFTING.search(report.group(0))
-        else "they can add it with the + button on the Workouts page"
+        else "they can add it with the + button on the Fitness page"
     )
     return (
         "The user is telling you about exercise they did. You cannot record workouts or activities from chat: "

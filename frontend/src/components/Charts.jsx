@@ -1,4 +1,4 @@
-// Small single-series SVG charts for the Workouts page. Hovering, tapping or
+// Small single-series SVG charts for the Fitness page. Hovering, tapping or
 // tabbing to a mark puts its details in the line above the plot, which works
 // the same with a mouse, a thumb or a keyboard.
 import { useEffect, useRef, useState } from 'react';
@@ -151,6 +151,9 @@ export function Bars({ title, controls, points, valueHeading }) {
   );
 }
 
+// Daily series get crowded, so their dots shrink and lose the ring.
+const dot = (count, active) => ({ r: active ? 6 : count > 20 ? 2.5 : 4, strokeWidth: active || count <= 20 ? 2 : 0 });
+
 // points: [{ date, value, detail }], oldest first. Spaced by date.
 export function Line({ title, controls, points, start, end, valueHeading }) {
   const [ref, width] = useWidth();
@@ -184,11 +187,79 @@ export function Line({ title, controls, points, start, end, valueHeading }) {
             {points.map((point, i) => (
               <g key={point.date} {...interactive(i, setActive, `${shortDate(point.date)}: ${point.detail}`)}>
                 <circle cx={x(point.date)} cy={y(point.value)} r="12" fill="transparent" />
-                <circle cx={x(point.date)} cy={y(point.value)} r={active === i ? 6 : 4} fill="var(--accent)" stroke="var(--panel)" strokeWidth="2" />
+                <circle cx={x(point.date)} cy={y(point.value)} {...dot(points.length, active === i)} fill="var(--accent)" stroke="var(--panel)" />
               </g>
             ))}
           </svg>
         )}
+      </div>
+    </ChartCard>
+  );
+}
+
+// Two series on one scale: the first solid in the accent color, the second
+// dashed and neutral, so they differ by more than color. points:
+// [{ date, a, b, detail }], oldest first; a or b may be null.
+export function PairLine({ title, names, points, start, end }) {
+  const [ref, width] = useWidth();
+  const [active, setActive] = useState(null);
+  const shown = points[active] || points[points.length - 1];
+  const all = points.flatMap((p) => [p.a, p.b]).filter((v) => v !== null);
+  const pad = Math.max((Math.max(...all) - Math.min(...all)) * 0.15, Math.max(...all) * 0.05, 1);
+  const values = ticks(Math.max(Math.min(...all) - pad, 0), Math.max(...all) + pad);
+  const [low, high] = [values[0], values[values.length - 1]];
+  const day = (iso) => parseISODate(iso).getTime();
+  const left = MARGIN.left + 8;
+  const right = width - MARGIN.right - 8;
+  const x = (iso) => left + ((day(iso) - day(start)) / (day(end) - day(start) || 1)) * (right - left);
+  const y = (value) => MARGIN.top + (HEIGHT - MARGIN.top - MARGIN.bottom) * (1 - (value - low) / (high - low));
+  const styles = [
+    { key: 'a', color: 'var(--accent)', dash: undefined },
+    { key: 'b', color: 'var(--text-dim)', dash: '5 4' },
+  ];
+
+  return (
+    <ChartCard
+      title={title}
+      readout={shown ? `${shortDate(shown.date)} · ${shown.detail}` : ''}
+      table={{
+        headings: ['Date', ...names],
+        rows: [...points].reverse().map((p) => [shortDate(p.date), p.a === null ? '—' : number(p.a), p.b === null ? '—' : number(p.b)]),
+      }}
+    >
+      <div ref={ref} onPointerLeave={() => setActive(null)}>
+        {width > 0 && (
+          <svg width={width} height={HEIGHT} style={{ display: 'block' }}>
+            <YAxis values={values} y={y} width={width} />
+            <text x={left} y={HEIGHT - 6} style={AXIS}>{shortDate(start)}</text>
+            <text x={right} y={HEIGHT - 6} textAnchor="end" style={AXIS}>{shortDate(end)}</text>
+            {styles.map(({ key, color, dash }) => (
+              <polyline key={key} points={points.filter((p) => p[key] !== null).map((p) => `${x(p.date)},${y(p[key])}`).join(' ')} fill="none" stroke={color} strokeWidth="2" strokeDasharray={dash} strokeLinejoin="round" strokeLinecap="round" />
+            ))}
+            {points.map((point, i) => (
+              <g key={point.date} {...interactive(i, setActive, `${shortDate(point.date)}: ${point.detail}`)}>
+                {styles.map(({ key, color }) =>
+                  point[key] === null ? null : (
+                    <g key={key}>
+                      <circle cx={x(point.date)} cy={y(point[key])} r="12" fill="transparent" />
+                      <circle cx={x(point.date)} cy={y(point[key])} {...dot(points.length, active === i)} fill={color} stroke="var(--panel)" />
+                    </g>
+                  )
+                )}
+              </g>
+            ))}
+          </svg>
+        )}
+      </div>
+      <div style={{ ...dim, display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+        {styles.map(({ key, color, dash }, i) => (
+          <span key={key}>
+            <svg width="22" height="8" aria-hidden="true" style={{ marginRight: 5 }}>
+              <line x1="1" x2="21" y1="4" y2="4" stroke={color} strokeWidth="2" strokeDasharray={dash} />
+            </svg>
+            {names[i]}
+          </span>
+        ))}
       </div>
     </ChartCard>
   );

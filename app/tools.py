@@ -971,7 +971,7 @@ TOOLS = [
             "description": (
                 "Totals for logged activities such as walks: times, minutes and miles, e.g. 'how far have "
                 "I walked this week?' or 'when was my last walk?'. Read-only: chat can't record an "
-                "activity, so if the user reports one, say to add it with the + button on the Workouts "
+                "activity, so if the user reports one, say to add it with the + button on the Fitness "
                 "page. Answer with the totals returned; don't add them up yourself."
             ),
             "parameters": {

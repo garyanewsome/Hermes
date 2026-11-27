@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { exerciseHistory, workoutCharts } from '../api.js';
 import { Bars, ChartCard, DayGrid, Line, Table, shortDate } from '../components/Charts.jsx';
+import DailyCharts from '../components/DailyCharts.jsx';
 import { minutesText } from '../lib/activities.js';
 import { dim, number, outline, solid } from './workoutStyles.js';
 
@@ -98,7 +99,7 @@ function ActivityChart({ data }) {
   if (!chosen) {
     return (
       <ChartCard title="Activities">
-        <div style={dim}>No activities in this range. Add one on the Activity tab.</div>
+        <div style={dim}>No activities in this range. Tap + to add one.</div>
       </ChartCard>
     );
   }
@@ -177,6 +178,7 @@ export default function ChartsTab({ active, version }) {
       <Toggle options={RANGES} value={weeks} onChange={setWeeks} />
       {error && <div role="alert" style={{ fontSize: 13, color: '#ff6b6b' }}>{error}</div>}
       {!data && !error && <div style={dim}>Loading…</div>}
+      <DailyCharts active={active} weeks={weeks} />
       {data && (
         <>
           <DayGrid start={data.start} today={data.today} weeks={data.range} days={data.days} describe={describe} />
