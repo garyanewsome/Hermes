@@ -290,6 +290,7 @@ def parse(data: bytes, today: date) -> dict:
             if not block["has_reps"]:
                 warnings.append(f"{label}: dated but has no reps yet, so it was skipped")
                 continue
+            first_warning = len(warnings)
             sets = _read_block(sheet, block, rows, end, label, warnings)
             if not sets:
                 continue
@@ -301,6 +302,8 @@ def parse(data: bytes, today: date) -> dict:
                     warnings.append(
                         f"{label}: sheet's '{heading}' total is {shown:g} but its sets add up to {workout[key]:g}"
                     )
+            # Which warnings are about this workout, so saved ones can be hidden.
+            workout["warnings"] = warnings[first_warning:]
             workouts.append(workout)
 
     if not workouts and not errors:

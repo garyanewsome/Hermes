@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
 import AddButton from '../components/AddButton.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
-import { importWorkoutSheet, listExercises, listWorkouts, previewWorkoutSheet } from '../api.js';
+import { importWorkoutSheet, listExercises, listWorkouts, previewWorkoutSheet, setWarningDismissed } from '../api.js';
 import { minutesText, paceText } from '../lib/activities.js';
 import ActivityTab from './ActivityTab.jsx';
 import ChartsTab from './ChartsTab.jsx';
@@ -118,6 +118,62 @@ function History({ days }) {
   });
 }
 
+// Sheet warnings worth checking, with the hidden ones folded away underneath.
+function Warnings({ shown, hidden, onChange }) {
+  const [error, setError] = useState('');
+  const small = { ...outline, padding: '3px 9px', fontSize: 11, fontWeight: 400, flexShrink: 0 };
+  const row = { display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 8, fontSize: 13 };
+
+  async function set(text, dismissed) {
+    setError('');
+    try {
+      await setWarningDismissed(text, dismissed);
+      // A restored warning is shown again, whatever hid it before.
+      onChange(
+        dismissed ? shown.filter((t) => t !== text) : [...shown, text],
+        dismissed ? [...hidden, { text, reason: 'dismissed' }] : hidden.filter((h) => h.text !== text)
+      );
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <>
+      {shown.length > 0 && (
+        <div style={{ ...card, borderColor: '#ffb020' }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#ffb020' }}>Worth checking ({shown.length})</div>
+          {shown.map((text) => (
+            <div key={text} style={row}>
+              <span style={{ minWidth: 0, flex: 1, overflowWrap: 'anywhere' }}>{text}</span>
+              <button type="button" onClick={() => set(text, true)} aria-label={`Dismiss: ${text}`} style={small}>Dismiss</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {error && <div role="alert" style={{ fontSize: 13, color: '#ff6b6b' }}>{error}</div>}
+      {hidden.length > 0 && (
+        <details>
+          <summary style={{ ...dim, cursor: 'pointer', padding: '4px 0' }}>Show {plural(hidden.length, 'hidden warning')}</summary>
+          <div style={card}>
+            {hidden.map((item) => (
+              <div key={item.text} style={row}>
+                <span style={{ minWidth: 0, flex: 1, overflowWrap: 'anywhere' }}>
+                  {item.text}
+                  <span style={{ ...dim, display: 'block' }}>{item.reason === 'dismissed' ? 'Dismissed' : 'In a saved, unchanged workout'}</span>
+                </span>
+                {item.reason === 'dismissed' && (
+                  <button type="button" onClick={() => set(item.text, false)} aria-label={`Restore: ${item.text}`} style={small}>Restore</button>
+                )}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+    </>
+  );
+}
+
 function Import({ onImported }) {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -203,12 +259,11 @@ function Import({ onImported }) {
               {preview.errors.map((text, i) => <div key={i} style={{ fontSize: 13, marginTop: 6 }}>{text}</div>)}
             </div>
           )}
-          {preview.warnings.length > 0 && (
-            <div style={{ ...card, borderColor: '#ffb020' }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#ffb020' }}>Worth checking ({preview.warnings.length})</div>
-              {preview.warnings.map((text, i) => <div key={i} style={{ fontSize: 13, marginTop: 6 }}>{text}</div>)}
-            </div>
-          )}
+          <Warnings
+            shown={preview.warnings}
+            hidden={preview.hidden_warnings}
+            onChange={(warnings, hidden_warnings) => setPreview((current) => ({ ...current, warnings, hidden_warnings }))}
+          />
           {preview.new_exercises.length > 0 && (
             <div style={card}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>New exercise names ({preview.new_exercises.length})</div>

@@ -134,6 +134,15 @@ def init_planner_db() -> None:
             )
             """
         )
+        # Spreadsheet import warnings the user has dismissed, by their text.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sheet_warning_dismissals (
+                warning TEXT PRIMARY KEY,
+                dismissed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
         # Deliberately separate from `tasks` — a plain everyday checklist
         # (groceries, errands), kept simple on purpose so it never grows
         # the quadrant/notes/due-date machinery that makes sense for the

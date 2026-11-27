@@ -443,6 +443,12 @@ function sheetUpload(url, file) {
 
 export const previewWorkoutSheet = (file) => sheetUpload('/workouts/import/preview', file);
 export const importWorkoutSheet = (file) => sheetUpload('/workouts/import', file);
+export const setWarningDismissed = (warning, dismissed) =>
+  workoutRequest('/workouts/import/warnings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ warning, dismissed }),
+  });
 export const dailyLog = (weeks) => workoutRequest(`/daily?weeks=${weeks}`);
 export const saveDay = (date, fields) =>
   workoutRequest(`/daily/${date}`, {

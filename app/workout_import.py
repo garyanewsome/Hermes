@@ -10,7 +10,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app import planner_db, workout_sheet
 
@@ -207,11 +207,42 @@ def _compare(conn, workout: dict) -> dict:
     return {"status": status, "replaces": {"sets": len(stored), "pasted_sets": pasted}, "changes": changes}
 
 
+def _sort_warnings(conn, result: dict) -> None:
+    """Leaves in "warnings" only the ones worth showing. A warning is hidden if
+    it was dismissed, or if it's about a workout that is saved and unchanged."""
+    dismissed = {r["warning"] for r in conn.execute("SELECT warning FROM sheet_warning_dismissals").fetchall()}
+    saved = set()
+    for workout in result["workouts"]:
+        about = workout.pop("warnings", [])
+        if workout["status"] == "unchanged":
+            saved.update(about)
+    shown, hidden = [], []
+    for text in result["warnings"]:
+        if text in dismissed:
+            hidden.append({"text": text, "reason": "dismissed"})
+        elif text in saved:
+            hidden.append({"text": text, "reason": "saved"})
+        else:
+            shown.append(text)
+    result["warnings"], result["hidden_warnings"] = shown, hidden
+
+
+def set_dismissed(warning: str, dismissed: bool) -> None:
+    with planner_db._connect() as conn:
+        if dismissed:
+            conn.execute(
+                "INSERT INTO sheet_warning_dismissals (warning) VALUES (%s) ON CONFLICT DO NOTHING", (warning,)
+            )
+        else:
+            conn.execute("DELETE FROM sheet_warning_dismissals WHERE warning = %s", (warning,))
+
+
 def preview(data: bytes, filename: str | None, program: str | None = None) -> dict:
     result = workout_sheet.parse(data, planner_db._today())
     with planner_db._connect() as conn:
         for workout in result["workouts"]:
             workout.update(_compare(conn, workout))
+        _sort_warnings(conn, result)
     known = set()
     for entry in list_exercises():
         known.update(exercise_key(v) for v in [entry["name"], *entry["variants"]])
@@ -296,6 +327,17 @@ async def post_import(file: UploadFile, program: str | None = None):
     if not result["saved"]:
         raise HTTPException(status_code=422, detail=result["errors"])
     return result
+
+
+class WarningRequest(BaseModel):
+    warning: str = Field(min_length=1, max_length=1000)
+    dismissed: bool
+
+
+@router.post("/workouts/import/warnings")
+def post_warning(request: WarningRequest):
+    set_dismissed(request.warning, request.dismissed)
+    return {"status": "ok"}
 
 
 class LinkRequest(BaseModel):

@@ -163,7 +163,8 @@ class ImportTests(unittest.TestCase):
 
     def setUp(self):
         with self.db._connect() as conn:
-            for table in ("lift_sets", "activities", "walks", "workout_pastes", "workouts", "workout_programs", "exercise_aliases"):
+            for table in ("lift_sets", "activities", "walks", "workout_pastes", "workouts", "workout_programs", "exercise_aliases",
+                          "sheet_warning_dismissals"):
                 conn.execute(f"DELETE FROM {table}")
 
     tearDown = setUp
@@ -219,6 +220,58 @@ class ImportTests(unittest.TestCase):
         self.upload(build(rename))
         self.assertNotEqual(self.set_ids(), before)
         self.assertEqual(self.statuses(build(rename)), [("2020-01-05", "unchanged", [])])
+
+    def warnings(self, data):
+        body = self.upload(data, "/workouts/import/preview").json()
+        self.assertNotIn("warnings", body["workouts"][0] if body["workouts"] else {})
+        return body["warnings"], {h["text"]: h["reason"] for h in body["hidden_warnings"]}
+
+    def dismiss(self, warning, dismissed=True):
+        response = self.client.post("/workouts/import/warnings", json={"warning": warning, "dismissed": dismissed})
+        self.assertEqual(response.status_code, 200)
+
+    def test_warnings_are_hidden_once_their_workout_is_saved(self):
+        shown, hidden = self.warnings(build())
+        self.assertTrue(shown)
+        self.assertEqual(hidden, {})
+        self.upload(build())
+        shown_after, hidden = self.warnings(build())
+        self.assertEqual((shown_after, set(hidden), set(hidden.values())), ([], set(shown), {"saved"}))
+
+        def edit(book):
+            book.active["H10"] = "8"
+
+        again, hidden = self.warnings(build(edit))  # changed: worth a look again
+        # The totals in the text move with the edit; the row warnings don't.
+        rows = {w for w in shown if ", row " in w}
+        self.assertTrue(rows <= set(again))
+        self.assertEqual(hidden, {})
+
+    def test_dismissed_warnings_stay_hidden_until_restored(self):
+        shown, _ = self.warnings(build())
+        self.dismiss(shown[0])
+        self.dismiss(shown[0])
+        now, hidden = self.warnings(build())
+        self.assertEqual((len(now), hidden), (len(shown) - 1, {shown[0]: "dismissed"}))
+        self.dismiss(shown[0], False)
+        self.assertEqual(self.warnings(build())[0], shown)
+
+    def test_a_skipped_day_keeps_warning_until_dismissed(self):
+        def edit(book):
+            ws = book.active
+            ws["L1"] = "Date:"
+            ws["P1"] = "2020.01.12"
+
+        self.upload(build(edit))
+        shown, _ = self.warnings(build(edit))
+        self.assertEqual(len(shown), 1)
+        self.assertIn("dated but has no reps", shown[0])
+        self.dismiss(shown[0])
+        self.assertEqual(self.warnings(build(edit))[0], [])
+
+    def test_a_bad_dismissal_is_refused(self):
+        for payload in ({"warning": "", "dismissed": True}, {"warning": "x" * 1001, "dismissed": True}, {"warning": "x"}):
+            self.assertEqual(self.client.post("/workouts/import/warnings", json=payload).status_code, 422)
 
     def test_any_edited_cell_counts_as_a_change(self):
         self.upload(build())
