@@ -1,13 +1,7 @@
 import { useEffect, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
-import {
-  deleteEntertainment,
-  importEntertainment,
-  listEntertainment,
-  previewEntertainmentImport,
-  saveEntertainment,
-} from '../api.js';
+import { deleteEntertainment, listEntertainment, saveEntertainment } from '../api.js';
 import { card, dim, longDate, outline, solid } from './workoutStyles.js';
 
 const STATUSES = [
@@ -164,72 +158,6 @@ function EntryForm({ entry, groups, onSave, onDelete, onClose }) {
   );
 }
 
-// Shows what the vault note would add, with each status adjustable.
-function Import({ onDone, onClose }) {
-  const [rows, setRows] = useState(null);
-  const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    previewEntertainmentImport()
-      .then((preview) => {
-        setNote(preview.note);
-        setRows(preview.entries.map((e, id) => ({ ...e, id, include: !e.exists })));
-      })
-      .catch((err) => setError(err.message));
-  }, []);
-
-  const change = (id, patch) => setRows((current) => current.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  const chosen = rows ? rows.filter((r) => r.include && !r.exists) : [];
-
-  async function save() {
-    setBusy(true);
-    setError('');
-    try {
-      await onDone(chosen.map(body));
-      onClose();
-    } catch (err) {
-      setError(err.message);
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Overlay label="Import from your note" onClose={onClose}>
-      <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div style={{ fontSize: 14, fontWeight: 600 }}>Import from your note</div>
-        <div style={dim}>{note ? `From ${note}. ` : ''}Your note isn’t changed. Anything already on the list is left as it is.</div>
-        {error && <div role="alert" style={alertText}>{error}</div>}
-        {!rows && !error && <div style={dim}>Reading…</div>}
-        {rows?.length === 0 && <div style={dim}>Nothing found in the note.</div>}
-        {rows?.map((row) => (
-          <div key={row.id} style={{ display: 'flex', alignItems: 'center', gap: 10, borderTop: '1px solid var(--border)', paddingTop: 8, opacity: row.exists ? 0.5 : 1 }}>
-            <input type="checkbox" checked={row.include} disabled={row.exists} onChange={(e) => change(row.id, { include: e.target.checked })} aria-label={`Import ${row.title}`} style={{ width: 18, height: 18, flexShrink: 0, accentColor: 'var(--accent)' }} />
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 13, overflowWrap: 'anywhere' }}>{row.title}</div>
-              <div style={dim}>
-                {[row.kind === 'movie' ? 'Movie' : 'TV', row.season && `Season ${row.season}`, row.return_date && longDate(row.return_date), row.exists && 'already listed'].filter(Boolean).join(' · ')}
-              </div>
-            </div>
-            {!row.exists && (
-              <select value={row.status} onChange={(e) => change(row.id, { status: e.target.value })} aria-label={`Status of ${row.title}`} style={{ ...field, width: 130, flexShrink: 0, fontSize: 13, padding: '6px 8px' }}>
-                {STATUSES.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
-              </select>
-            )}
-          </div>
-        ))}
-        <div style={{ display: 'flex', gap: 10, position: 'sticky', bottom: 0, background: 'var(--panel)', padding: '8px 0' }}>
-          <button type="button" disabled={busy || chosen.length === 0} onClick={save} style={{ ...solid, opacity: chosen.length === 0 ? 0.5 : 1 }}>
-            {busy ? 'Importing…' : `Import ${chosen.length}`}
-          </button>
-          <button type="button" onClick={onClose} style={outline}>Cancel</button>
-        </div>
-      </div>
-    </Overlay>
-  );
-}
-
 function Row({ entry, detail, actions, onEdit }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderTop: '1px solid var(--border)' }}>
@@ -269,7 +197,6 @@ function Folding({ title, count, children }) {
 export default function EntertainmentView({ onOpenDrawer, active }) {
   const [data, setData] = useState(null);
   const [editing, setEditing] = useState(null); // an entry, 'new', or null
-  const [importing, setImporting] = useState(false);
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState('');
   const isMobile = useIsMobile();
@@ -316,16 +243,12 @@ export default function EntertainmentView({ onOpenDrawer, active }) {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      <TopBar title="Entertainment" onOpenDrawer={onOpenDrawer}>
-        {data && (
-          <button type="button" onClick={() => setImporting(true)} style={small}>Import from note</button>
-        )}
-      </TopBar>
+      <TopBar title="Entertainment" onOpenDrawer={onOpenDrawer} />
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: isMobile ? 14 : 24 }}>
         <div style={{ maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 10, paddingBottom: 88 }}>
           {error && <div role="alert" style={alertText}>{error}</div>}
           {!data && !error && <div style={dim}>Loading…</div>}
-          {data && entries.length === 0 && <div style={dim}>Nothing yet. Import your note, or tap + to add something.</div>}
+          {data && entries.length === 0 && <div style={dim}>Nothing yet. Tap + to add something.</div>}
 
           {watching.length > 0 && (
             <section style={card}>
@@ -387,6 +310,12 @@ export default function EntertainmentView({ onOpenDrawer, active }) {
           {by('done').length > 0 && (
             <Folding title="Done" count={by('done').length}>{list(by('done'))}</Folding>
           )}
+          {data?.vault &&
+            (data.vault.error ? (
+              <div role="alert" style={alertText}>The vault copy wasn’t updated: {data.vault.error} Hermes will keep trying.</div>
+            ) : (
+              <div style={dim}>Copied to {data.vault.path} shortly after changes.</div>
+            ))}
         </div>
       </div>
 
@@ -411,7 +340,6 @@ export default function EntertainmentView({ onOpenDrawer, active }) {
           onDelete={async () => setData(await deleteEntertainment(editing.id))}
         />
       )}
-      {importing && <Import onClose={() => setImporting(false)} onDone={async (values) => setData(await importEntertainment(values))} />}
     </div>
   );
 }

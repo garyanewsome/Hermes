@@ -503,5 +503,3 @@ const entertainmentWrite = (url, method, payload) =>
 export const saveEntertainment = (entry, id) =>
   entertainmentWrite(id ? `/entertainment/${id}` : '/entertainment', id ? 'PUT' : 'POST', entry);
 export const deleteEntertainment = (id) => entertainmentWrite(`/entertainment/${id}`, 'DELETE');
-export const previewEntertainmentImport = () => workoutRequest('/entertainment/import');
-export const importEntertainment = (entries) => entertainmentWrite('/entertainment/import', 'POST', { entries });

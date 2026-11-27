@@ -73,10 +73,11 @@ CODEBASE_SEARCHER_URL = os.environ.get("CODEBASE_SEARCHER_URL", "http://192.168.
 VAULT_KEEPER_URL = os.environ.get("VAULT_KEEPER_URL", "http://192.168.1.157:8310")
 
 # Vault folder the Sunday recap is saved into (app/recap.py).
-RECAP_FOLDER = os.environ.get("RECAP_FOLDER", "40 Personal/Weekly Recaps")
+RECAP_FOLDER = os.environ.get("RECAP_FOLDER", "01 Hermes/Weekly Recaps")
 
-# The hand-written watch list the entertainment log imports from.
-ENTERTAINMENT_NOTE = os.environ.get("ENTERTAINMENT_NOTE", "40 Personal/Entertainment.md")
+# The copy of the entertainment list Hermes keeps in the vault. vault-keeper
+# only rewrites notes under "01 Hermes".
+ENTERTAINMENT_NOTE = os.environ.get("ENTERTAINMENT_NOTE", "01 Hermes/Entertainment.md")
 
 # What "today" means for habit logging/streaks. Deliberately explicit rather
 # than trusting the pod's system clock — K3s containers default to UTC

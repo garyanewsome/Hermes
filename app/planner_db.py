@@ -340,6 +340,14 @@ def init_planner_db() -> None:
             )
             """
         )
+        # Recaps moved under "01 Hermes" in the vault (2026-11-26); keep the
+        # saved paths pointing at where the notes are now.
+        conn.execute(
+            """
+            UPDATE recaps SET vault_path = replace(vault_path, '40 Personal/Weekly Recaps/', '01 Hermes/Weekly Recaps/')
+            WHERE vault_path LIKE '40 Personal/Weekly Recaps/%'
+            """
+        )
         # TV and movies (app/entertainment.py).
         conn.execute(
             """

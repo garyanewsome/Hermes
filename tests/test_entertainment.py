@@ -10,51 +10,48 @@ if TEST_DB_URL:
 from app import entertainment
 
 TODAY = date(2026, 11, 26)
-NOTE = """---
-tags: [x]
----
-## TV
-
-### Star Trek
-- Star Trek TOS - ✅
-- Star Trek Lower Decks
-- Star Trek Strange New Worlds - Season 4
-
-### Others
-- 3 Body Problem - Season 2 - 2027.01.14
-- Mission - Impossible
-- Old Show - Season 3 - ✅
-## MOVIES
-- Spiderverse 3
-- 
-"""
+def entry(title, **fields):
+    blank = dict.fromkeys(entertainment.FIELDS)
+    return {**blank, "title": title, "kind": "tv", "status": "want", **fields}
 
 
-def summary(entries):
-    return [(e["title"], e["kind"], e["group_name"], e["status"], e["season"], e["return_date"]) for e in entries]
-
-
-class ParseTests(unittest.TestCase):
-    def test_reads_the_note_style(self):
-        self.assertEqual(
-            summary(entertainment.parse_note(NOTE, TODAY)),
+class RenderTests(unittest.TestCase):
+    def test_note_style(self):
+        note = entertainment.render(
             [
-                ("Star Trek TOS", "tv", "Star Trek", "done", None, None),
-                ("Star Trek Lower Decks", "tv", "Star Trek", "want", None, None),
-                ("Star Trek Strange New Worlds", "tv", "Star Trek", "watching", 4, None),
-                ("3 Body Problem", "tv", None, "waiting", 2, "2027-01-14"),
-                ("Mission - Impossible", "tv", None, "want", None, None),
-                ("Old Show", "tv", None, "done", 3, None),
-                ("Spiderverse 3", "movie", None, "want", None, None),
+                entry("Spiderverse 3", kind="movie"),
+                entry("Devs", season=1, episode=3, status="watching", where_to_watch="Hulu", note="so\ngood"),
+                entry("TOS", group_name="Star Trek", status="done"),
+                entry("3 Body Problem", season=2, status="waiting", return_date="2027-01-14"),
+                entry("You", status="paused"),
+                entry("Later", status="waiting"),
+            ]
+        )
+        self.assertEqual(
+            note.split("\n")[1:],
+            [
+                "",
+                "## TV",
+                "",
+                "### Star Trek",
+                "- TOS - ✅",
+                "",
+                "### Others",
+                "- Devs - Season 1, watched E3 - on Hulu - ▶️ watching",
+                "    - so good",
+                "- 3 Body Problem - Season 2 - 2027.01.14",
+                "- You - ⏸️ paused",
+                "- Later - ⏳ waiting",
+                "",
+                "## Movies",
+                "",
+                "- Spiderverse 3",
+                "",
             ],
         )
 
-    def test_odd_lines(self):
-        [past] = entertainment.parse_note("- Show - Season 2 - 2026.01.01", TODAY)
-        self.assertEqual(past["status"], "watching")  # it's out already
-        [bad] = entertainment.parse_note("- Show - 2027.13.40", TODAY)
-        self.assertEqual((bad["title"], bad["status"]), ("Show - 2027.13.40", "want"))
-        self.assertEqual(entertainment.parse_note("just text\n\n## TV\n-\n- ✅", TODAY), [])
+    def test_no_others_heading_without_groups(self):
+        self.assertNotIn("###", entertainment.render([entry("Devs")]))
 
 
 @unittest.skipUnless(TEST_DB_URL, "PLANNER_TEST_DB_URL not set")
@@ -120,24 +117,46 @@ class EntertainmentTests(unittest.TestCase):
 
     def vault(self, status=200):
         response = mock.Mock(status_code=status)
-        response.json.return_value = {"content": NOTE, "detail": "No note there"}
+        response.json.return_value = {"detail": "Not allowed there"}
         return mock.patch.object(entertainment.httpx, "post", return_value=response)
 
-    def test_import_adds_once_and_changes_nothing_existing(self):
-        self.add(title="Spiderverse 3", kind="movie", status="done")
-        with self.vault():
-            preview = self.client.get("/entertainment/import").json()["entries"]
-        self.assertEqual([e["exists"] for e in preview], [False] * 6 + [True])
-        body = {"entries": [{k: v for k, v in e.items() if k != "exists"} for e in preview]}
-        self.assertEqual(self.client.post("/entertainment/import", json=body).json()["added"], 6)
-        self.assertEqual(self.client.post("/entertainment/import", json=body).json()["added"], 0)
-        statuses = {e["title"]: e["status"] for e in self.entries()}
-        self.assertEqual((len(statuses), statuses["Spiderverse 3"]), (7, "done"))
-        self.assertEqual([e["title"] for e in self.entries()][1:3], ["Star Trek TOS", "Star Trek Lower Decks"])
+    def test_changes_ask_for_the_note_to_be_rewritten(self):
+        entertainment._changed.clear()
+        self.assertEqual(self.add().status_code, 200)
+        self.assertTrue(entertainment._changed.is_set())
+        entertainment._changed.clear()
+        self.add()  # refused as a duplicate
+        self.assertFalse(entertainment._changed.is_set())
+        self.client.delete(f"/entertainment/{self.entries()[0]['id']}")
+        self.assertTrue(entertainment._changed.is_set())
 
-    def test_missing_note(self):
-        with self.vault(status=404):
-            self.assertEqual(self.client.get("/entertainment/import").status_code, 404)
+    def test_write_note(self):
+        self.add()
+        with self.vault() as post:
+            self.assertTrue(entertainment.write_note())
+        sent = post.call_args.kwargs["json"]
+        self.assertTrue(post.call_args.args[0].endswith("/owned/write"))
+        self.assertEqual((sent["path"], sent["source"]), ("01 Hermes/Entertainment.md", "hermes-sync"))
+        self.assertIn("- Devs", sent["content"])
+
+    def test_startup_never_blanks_the_note(self):
+        with self.vault() as post:
+            self.assertTrue(entertainment.write_note(skip_empty=True))
+            post.assert_not_called()
+            entertainment.write_note()  # emptied by the user
+            post.assert_called_once()
+
+    def test_failures_show_on_the_page_until_a_write_works(self):
+        self.add()
+        for status, words in ((403, "Not allowed there"), (404, "needs updating")):
+            with self.vault(status=status):
+                self.assertFalse(entertainment.write_note())
+            self.assertIn(words, self.client.get("/entertainment").json()["vault"]["error"])
+        with mock.patch.object(entertainment.httpx, "post", side_effect=entertainment.httpx.ConnectError("x")):
+            self.assertFalse(entertainment.write_note())
+        with self.vault():
+            entertainment.write_note()
+        self.assertIsNone(self.client.get("/entertainment").json()["vault"]["error"])
 
 
 if __name__ == "__main__":

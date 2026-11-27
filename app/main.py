@@ -65,6 +65,11 @@ def _start_weekly_recap():
     recap.start_background()
 
 
+@app.on_event("startup")
+def _start_entertainment_note():
+    entertainment.start_background()
+
+
 class AttachmentRef(BaseModel):
     kind: str = "image"
     path: str

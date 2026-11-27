@@ -15,7 +15,7 @@ import httpx
 from app import planner_db
 from app.config import VAULT_KEEPER_URL
 
-DEFAULT_FOLDER = "Hermes/Imported"
+DEFAULT_FOLDER = "01 Hermes/Imported"
 
 
 class ExportRefused(Exception):

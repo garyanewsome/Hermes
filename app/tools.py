@@ -447,7 +447,7 @@ def read_vault_note(path: str) -> str:
 
 def suggest_vault_edit(path: str, proposed_content: str, reason: str) -> str:
     # Existing vault notes are never edited directly. This files a suggestion
-    # note (diff + full proposed text) under Hermes/Suggestions/ for the
+    # note (diff + full proposed text) under 01 Hermes/Suggestions/ for the
     # user to review in Obsidian. proposed_content is the note's *whole*
     # new text, since vault-keeper diffs it against the current file.
     response = httpx.post(
@@ -1187,7 +1187,7 @@ TOOLS = [
                     },
                     "folder": {
                         "type": "string",
-                        "description": "Vault folder to put it in. Leave out unless the user names one; the default is 'Hermes/Imported'.",
+                        "description": "Vault folder to put it in. Leave out unless the user names one; the default is '01 Hermes/Imported'.",
                     },
                 },
                 "required": ["query"],
