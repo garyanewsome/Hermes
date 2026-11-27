@@ -27,7 +27,7 @@ async function apiFetch(url, opts, _attempt = 1) {
   try {
     const res = await fetch(url, { ...opts, signal: controller.signal });
     if (res.status === 401) {
-      window.dispatchEvent(new Event('hermes:unauthorized'));
+      window.dispatchEvent(new Event('naradi:unauthorized'));
     }
     return res;
   } catch (err) {
@@ -511,7 +511,7 @@ export const latestRecap = async () => (await workoutRequest('/recaps/latest')).
 // usual timeout and are never retried (a retry could save two vault notes).
 async function slowRecapRequest(url) {
   const res = await fetch(url, { method: 'POST', signal: AbortSignal.timeout(300000) });
-  if (res.status === 401) window.dispatchEvent(new Event('hermes:unauthorized'));
+  if (res.status === 401) window.dispatchEvent(new Event('naradi:unauthorized'));
   if (!res.ok) throw new Error(await failureText(res));
   return (await res.json()).recap;
 }

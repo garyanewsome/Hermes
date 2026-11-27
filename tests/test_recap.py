@@ -146,7 +146,7 @@ class RecapTests(unittest.TestCase):
 
         self.assertIn("0 board tasks and 0 todos finished.", recap.render(recap_facts.week_facts(MONDAY), None))
 
-    def vault(self, status=200, path="01 Hermes/Weekly Recaps/Week of 2026-11-16.md"):
+    def vault(self, status=200, path="01 Naradi/Weekly Recaps/Week of 2026-11-16.md"):
         response = mock.Mock(status_code=status)
         response.json.return_value = {"note_path": path, "detail": "Daily write limit reached"}
         return mock.patch.object(recap.httpx, "post", return_value=response)

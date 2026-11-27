@@ -1,9 +1,9 @@
-"""Single-password session auth. Hermes is a personal, single-user app —
+"""Single-password session auth. Naradi is a personal, single-user app —
 there's no account system, just one shared password gating access, backed
 by a signed cookie so the browser doesn't have to keep resending it.
 
-Deliberately app-level rather than enforced at the Traefik Ingress: Hermes
-is also reachable via a NodePort (see k8s/hermes-api.yaml) so phones/tablets
+Deliberately app-level rather than enforced at the Traefik Ingress: Naradi
+is also reachable via a NodePort (see k8s/naradi-api.yaml) so phones/tablets
 on the LAN can hit it by bare IP:port with no DNS/hosts setup, and a
 NodePort routes straight to the pod, bypassing Traefik and any
 ingress-level middleware entirely. Checking auth inside the app itself
@@ -16,7 +16,7 @@ from hashlib import sha256
 
 from app.config import AUTH_PASSWORD, SESSION_SECRET
 
-COOKIE_NAME = "hermes_session"
+COOKIE_NAME = "naradi_session"
 SESSION_LIFETIME_SECONDS = 90 * 24 * 60 * 60  # 90 days — a phone shouldn't need re-login every visit
 
 

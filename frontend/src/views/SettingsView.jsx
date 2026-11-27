@@ -10,7 +10,7 @@ function MenuOrder({ active }) {
   const [order, loadFailed] = useNavOrder(active);
   const [saveError, setSaveError] = useState('');
   const items = arrange(ITEMS.filter((item) => !item.pinned), order);
-  const error = saveError || (loadFailed && 'Couldn’t reach Hermes; this may not be the latest order.');
+  const error = saveError || (loadFailed && 'Couldn’t reach Naradi; this may not be the latest order.');
 
   function save(next) {
     setSaveError('');

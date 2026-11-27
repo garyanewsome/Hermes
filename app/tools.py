@@ -28,7 +28,7 @@ from app.config import (
 from app import chore_chat, daily_chat, db, documents, habit_chat, music, planner_db, show_chat, tone_analysis, web, workout_chat
 from app.pod_go_reference import AMPS_CLEAN, AMPS_CRUNCH, AMPS_HIGH_GAIN, CABS_COMMON, EFFECTS_SHORT
 
-logger = logging.getLogger("hermes")
+logger = logging.getLogger("naradi")
 
 
 def search_vault(query: str) -> str:
@@ -81,7 +81,7 @@ def generate_image(prompt: str, conversation_id: str | None = None) -> str:
     )
     response.raise_for_status()
     image_url = response.json()["image_url"]
-    # Markdown image syntax — Hermes' renderer displays this as an actual
+    # Markdown image syntax — Naradi's renderer displays this as an actual
     # <img>, not just a link (see static/index.html's renderMarkdown).
     return f"![{prompt}]({image_url})"
 
@@ -455,7 +455,7 @@ def read_vault_note(path: str) -> str:
 
 def suggest_vault_edit(path: str, proposed_content: str, reason: str) -> str:
     # Existing vault notes are never edited directly. This files a suggestion
-    # note (diff + full proposed text) under 01 Hermes/Suggestions/ for the
+    # note (diff + full proposed text) under 01 Naradi/Suggestions/ for the
     # user to review in Obsidian. proposed_content is the note's *whole*
     # new text, since vault-keeper diffs it against the current file.
     response = httpx.post(
@@ -478,7 +478,7 @@ def _local_now() -> datetime:
 
 
 def log_to_daily_note(text: str) -> str:
-    # One line under the "Hermes" section of today's daily note. Append-only
+    # One line under the "Naradi" section of today's daily note. Append-only
     # and today-only by construction: vault-keeper enforces that, this just
     # supplies the user's local date and time (it only knows UTC).
     now = _local_now()
@@ -1252,7 +1252,7 @@ TOOLS = [
                             "rewrite it. A full GitHub URL if they pasted one (e.g. "
                             "'https://github.com/someone/their-repo'), 'owner/repo' if they "
                             "named someone else's repo that way (e.g. 'someone/their-repo'), "
-                            "or just the bare name (e.g. 'Hermes') only when it's the user's "
+                            "or just the bare name (e.g. 'Naradi') only when it's the user's "
                             "own repo. Stripping a third-party URL down to a bare name is "
                             "wrong — it gets resolved as if it were the user's own repo of "
                             "that name, which will fail."
@@ -1360,7 +1360,7 @@ TOOLS = [
                     },
                     "folder": {
                         "type": "string",
-                        "description": "Vault folder to put it in. Leave out unless the user names one; the default is '01 Hermes/Imported'.",
+                        "description": "Vault folder to put it in. Leave out unless the user names one; the default is '01 Naradi/Imported'.",
                     },
                 },
                 "required": ["query"],
@@ -1372,7 +1372,7 @@ TOOLS = [
         "function": {
             "name": "log_to_daily_note",
             "description": (
-                "Add one short line to the 'Hermes' section of today's daily note in the user's "
+                "Add one short line to the 'Naradi' section of today's daily note in the user's "
                 "Obsidian vault, stamped with the current time. Use it when the user asks to log, "
                 "jot down or record something for today ('log that I shelved the burl Intel work', "
                 "'note in my daily that the deploy went out'). It only ever adds a line to today's "

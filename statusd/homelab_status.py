@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """homelab-status: a small, read-only JSON status endpoint for this host.
 
-Hermes runs inside a K3s container and can't see the host's disks, Docker,
-GPU or services, so this runs on the host itself and Hermes' System page
+Naradi runs inside a K3s container and can't see the host's disks, Docker,
+GPU or services, so this runs on the host itself and Naradi's System page
 reads it (GET /status). Python standard library only — nothing to install.
 
 Read-only by design: it only ever lists and measures, never starts, stops or

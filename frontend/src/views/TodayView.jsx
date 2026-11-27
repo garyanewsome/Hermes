@@ -30,7 +30,7 @@ const CHORE_COLOR = '#8c9eff';
 
 // Other views (which stay mounted) refresh themselves on this.
 function announceChange() {
-  window.dispatchEvent(new Event('hermes:data-changed'));
+  window.dispatchEvent(new Event('naradi:data-changed'));
 }
 
 function WeatherIcon({ kind, size = 30 }) {
@@ -513,8 +513,8 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
   }
 
   // A failure to fetch alerts is itself left silent here: this banner is
-  // for the services Hermes watches, and the page is already unusable if
-  // Hermes' own API is down.
+  // for the services Naradi watches, and the page is already unusable if
+  // Naradi's own API is down.
   async function refreshAlerts() {
     try {
       setAlerts(await getAlerts());
@@ -532,10 +532,10 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
   useEffect(() => {
     refreshAll();
     const interval = setInterval(refreshAll, POLL_INTERVAL_MS);
-    window.addEventListener('hermes:wake', refreshAll);
+    window.addEventListener('naradi:wake', refreshAll);
     return () => {
       clearInterval(interval);
-      window.removeEventListener('hermes:wake', refreshAll);
+      window.removeEventListener('naradi:wake', refreshAll);
     };
   }, []);
 

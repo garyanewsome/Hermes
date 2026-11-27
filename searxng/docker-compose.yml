@@ -1,8 +1,8 @@
-# Self-hosted web search for Hermes' web_search tool — queries go out from
+# Self-hosted web search for Naradi's web_search tool — queries go out from
 # the homelab's own connection through SearXNG (a metasearch engine that
 # strips identifying details), with no API key or account.
 #
-# Runs on the host (like Hindsight and Iris), not in K3s, so the Hermes pod
+# Runs on the host (like Hindsight and Iris), not in K3s, so the Naradi pod
 # reaches it at http://<host LAN IP>:8180. LAN-only by design: it has no
 # login, so don't port-forward it.
 #

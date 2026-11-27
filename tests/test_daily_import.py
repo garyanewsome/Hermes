@@ -52,7 +52,7 @@ NOTE = """## 💻 Work
 \t- In: 1900
 \t- Macros: g C / g F / 120g P
 
-## 🤖 Hermes
+## 🤖 Naradi
 - walk: 10:00 1mi
 """
 
@@ -317,7 +317,7 @@ class ImportTests(unittest.TestCase):
         again = self.auto(notes)
         self.assertEqual((again["saved"], again["review"], self.stored()["2026-11-27"]["weight"]), ([], [], 225))
 
-    def test_auto_follows_the_note_until_you_edit_in_hermes(self):
+    def test_auto_follows_the_note_until_you_edit_in_naradi(self):
         def notes(eaten, body):
             return {TODAY: f"## AI Fitness Dump\n### Body Update\n- {body}\n### Calories\n- Today's Numbers:\n\t- In: {eaten}\n"}
 

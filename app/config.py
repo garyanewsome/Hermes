@@ -21,20 +21,20 @@ AUDIO_MODEL = os.environ.get("AUDIO_MODEL", "gemma4:12b")
 
 # Athenaeum is reached via its LAN Ingress hostname. Targeted directly by
 # IP + explicit Host header for now (avoids needing local DNS / /etc/hosts
-# entries on every client) — revisit once Hermes itself runs inside K3s,
+# entries on every client) — revisit once Naradi itself runs inside K3s,
 # where in-cluster service DNS (http://athenaeum-api:8000) is simpler.
 ATHENAEUM_URL = os.environ.get("ATHENAEUM_URL", "http://192.168.1.157")
 ATHENAEUM_HOST_HEADER = os.environ.get("ATHENAEUM_HOST_HEADER", "athenaeum.home.local")
 
 # Iris runs bare-metal on the host (not K3s — see its own README for why),
-# so it's reached the same way whether Hermes runs locally or in-cluster —
+# so it's reached the same way whether Naradi runs locally or in-cluster —
 # no Ingress/Host-header trick needed, just the host's LAN IP:port.
 IRIS_URL = os.environ.get("IRIS_URL", "http://192.168.1.157:8100")
 
 # Hindsight runs bare-metal on the host via Docker Compose (not K3s — no
 # derived resources here, just the published image), reached the same way
-# whether Hermes runs locally or in-cluster. HINDSIGHT_BANK_ID scopes
-# memory to a single project rather than mixing in everything Hermes ever
+# whether Naradi runs locally or in-cluster. HINDSIGHT_BANK_ID scopes
+# memory to a single project rather than mixing in everything Naradi ever
 # discusses — see the tool descriptions in tools.py.
 HINDSIGHT_URL = os.environ.get("HINDSIGHT_URL", "http://192.168.1.157:8888")
 HINDSIGHT_BANK_ID = os.environ.get("HINDSIGHT_BANK_ID", "vst-test")
@@ -51,12 +51,12 @@ SYSTEM_STATUS_URL = os.environ.get("SYSTEM_STATUS_URL", "http://192.168.1.157:81
 KAVITA_URL = os.environ.get("KAVITA_URL", "http://192.168.1.157:5000")
 IMAGES_AFTER_DARK_URL = os.environ.get("IMAGES_AFTER_DARK_URL", "http://192.168.1.157:8200")
 
-DB_PATH = os.environ.get("DB_PATH", "./hermes.db")
+DB_PATH = os.environ.get("DB_PATH", "./naradi.db")
 
 # Chat attachments (images, later documents) — reuses the same PVC as the
-# sqlite DB (see k8s/hermes-pv.yaml) rather than provisioning a second
+# sqlite DB (see k8s/naradi-pv.yaml) rather than provisioning a second
 # volume like Iris's separate IMAGES_DIR; just a subdirectory alongside
-# hermes.db.
+# naradi.db.
 UPLOADS_DIR = os.environ.get("UPLOADS_DIR", os.path.join(os.path.dirname(DB_PATH) or ".", "uploads"))
 
 # Bare-metal on the host, not K3s (like Iris) — embedding needs the GPU,
@@ -68,7 +68,7 @@ CODEBASE_SEARCHER_URL = os.environ.get("CODEBASE_SEARCHER_URL", "http://192.168.
 
 # Owns the Obsidian vault's write clone, deploy key, write limits and audit
 # log (a small FastAPI service, bare-metal like the two above). Every vault
-# read/write Hermes does -- notes, suggestions, daily-note log -- goes
+# read/write Naradi does -- notes, suggestions, daily-note log -- goes
 # through it; CodebaseSearcher used to be that and no longer is.
 VAULT_KEEPER_URL = os.environ.get("VAULT_KEEPER_URL", "http://192.168.1.157:8310")
 
@@ -76,11 +76,11 @@ VAULT_KEEPER_URL = os.environ.get("VAULT_KEEPER_URL", "http://192.168.1.157:8310
 DAILY_NOTES_FOLDER = os.environ.get("DAILY_NOTES_FOLDER", "00 System/Daily Notes")
 
 # Vault folder the Sunday recap is saved into (app/recap.py).
-RECAP_FOLDER = os.environ.get("RECAP_FOLDER", "01 Hermes/Weekly Recaps")
+RECAP_FOLDER = os.environ.get("RECAP_FOLDER", "01 Naradi/Weekly Recaps")
 
-# The copy of the entertainment list Hermes keeps in the vault. vault-keeper
-# only rewrites notes under "01 Hermes".
-ENTERTAINMENT_NOTE = os.environ.get("ENTERTAINMENT_NOTE", "01 Hermes/Entertainment.md")
+# The copy of the entertainment list Naradi keeps in the vault. vault-keeper
+# only rewrites notes under "01 Naradi".
+ENTERTAINMENT_NOTE = os.environ.get("ENTERTAINMENT_NOTE", "01 Naradi/Entertainment.md")
 
 # What "today" means for habit logging/streaks. Deliberately explicit rather
 # than trusting the pod's system clock — K3s containers default to UTC
@@ -95,16 +95,16 @@ APP_TIMEZONE = os.environ.get("APP_TIMEZONE", "America/New_York")
 # state (status flags, streak counts), not semantic memory to recall by
 # similarity, so it doesn't belong in Hindsight's bank.
 PLANNER_DB_URL = os.environ.get(
-    "PLANNER_DB_URL", "postgresql://hermes:hermes@localhost:5432/planner"
+    "PLANNER_DB_URL", "postgresql://naradi:naradi@localhost:5432/planner"
 )
 
 # Single shared password gating the whole app — appropriate for a personal,
-# single-user tool, not a multi-account system. Required because Hermes is
-# now reachable via a NodePort (see k8s/hermes-api.yaml) as well as the
+# single-user tool, not a multi-account system. Required because Naradi is
+# now reachable via a NodePort (see k8s/naradi-api.yaml) as well as the
 # hostname-based Ingress, and a NodePort bypasses Traefik entirely, so any
 # auth enforced at the ingress/reverse-proxy layer wouldn't cover it. Auth
 # lives in the app itself so both paths are covered by the same check.
-AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "hermes")
+AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "naradi")
 # Signs the session cookie issued after a successful login. Must be set to a
 # real random value in production (K8s secret) — the dev default is fine
 # locally but would let anyone forge a valid session if used in deployment.
@@ -112,7 +112,8 @@ SESSION_SECRET = os.environ.get("SESSION_SECRET", "dev-only-insecure-secret")
 
 SYSTEM_PROMPT = os.environ.get(
     "SYSTEM_PROMPT",
-    "You are Hermes, a helpful personal assistant. You have access to tools — "
+    "You are Naradi, a helpful personal assistant. Your name is a feminine form of Narada, the "
+    "wandering musician and messenger of Hindu tradition; say so only if asked. You have access to tools — "
     "use them when they'd help answer the user's question, especially anything "
     "involving the user's personal notes. Don't mention tool names or internal "
     "mechanics to the user; just use them naturally. If the user asks whether "

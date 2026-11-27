@@ -580,7 +580,7 @@ export default function NotesView({ onOpenDrawer }) {
     const interval = setInterval(refresh, POLL_INTERVAL_MS);
     // Coming back from idle: refresh right away instead of showing whatever
     // was on screen until the next 20s tick.
-    window.addEventListener('hermes:wake', refresh);
+    window.addEventListener('naradi:wake', refresh);
 
     // Push out an unsaved edit the moment the tab is hidden or closed —
     // otherwise a refresh/discard inside the 600ms debounce loses it.
@@ -596,7 +596,7 @@ export default function NotesView({ onOpenDrawer }) {
     window.addEventListener('pagehide', flushPending);
     return () => {
       clearInterval(interval);
-      window.removeEventListener('hermes:wake', refresh);
+      window.removeEventListener('naradi:wake', refresh);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('pagehide', flushPending);
     };

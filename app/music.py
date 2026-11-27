@@ -11,7 +11,7 @@ import tempfile
 
 from app.audio import MAX_ANALYSIS_SECONDS, transcode_to_wav
 
-logger = logging.getLogger("hermes")
+logger = logging.getLogger("naradi")
 
 CHORD_SAMPLE_RATE = 44100
 

@@ -4,7 +4,7 @@ Two sources, kept separate so one being down never blanks the other:
 
 - the host status service (statusd/homelab_status.py) for what only the host
   can see: disks, load, temperatures, GPU, Docker, systemd, K3s pods;
-- direct "is it answering?" probes from Hermes itself to each app, plus
+- direct "is it answering?" probes from Naradi itself to each app, plus
   Ollama's own /api/ps for which model currently holds the GPU.
 
 Everything here is read-only.
@@ -31,7 +31,7 @@ from app.config import (
     SYSTEM_STATUS_URL,
 )
 
-logger = logging.getLogger("hermes")
+logger = logging.getLogger("naradi")
 
 PROBE_TIMEOUT = 3.0
 

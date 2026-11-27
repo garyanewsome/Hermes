@@ -1,6 +1,6 @@
 # Standalone Postgres for tasks/habits — deliberately separate from
 # Hindsight's embedded pg0 instance (that one runs inside Hindsight's own
-# container, not exposed as a shared service) and from Hermes' SQLite
+# container, not exposed as a shared service) and from Naradi' SQLite
 # conversation history. Password lives in a Secret created imperatively,
 # not here — see README's deploy note.
 apiVersion: apps/v1
@@ -38,7 +38,7 @@ spec:
         - name: POSTGRES_DB
           value: planner
         - name: POSTGRES_USER
-          value: hermes
+          value: naradi
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -53,7 +53,7 @@ spec:
           mountPath: /var/lib/postgresql/data
         readinessProbe:
           exec:
-            command: ["pg_isready", "-U", "hermes", "-d", "planner"]
+            command: ["pg_isready", "-U", "naradi", "-d", "planner"]
           initialDelaySeconds: 5
           periodSeconds: 5
       volumes:

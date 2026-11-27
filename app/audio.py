@@ -27,7 +27,7 @@ import httpx
 
 from app.config import AUDIO_MODEL, OLLAMA_HOST
 
-logger = logging.getLogger("hermes")
+logger = logging.getLogger("naradi")
 
 # The model is asked to say this exact phrase for non-speech audio (singing,
 # an instrumental riff, a whole song) rather than guessing at lyrics or

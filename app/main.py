@@ -31,9 +31,9 @@ from app.db import (
 )
 from app import activities, chores, daily_import, daily_log, entertainment, habit_amounts, nav_order, planner_db, recap, trends, workout_charts, workout_import, workouts
 
-logger = logging.getLogger("hermes")
+logger = logging.getLogger("naradi")
 
-app = FastAPI(title="Hermes")
+app = FastAPI(title="Naradi")
 app.include_router(workouts.router)
 app.include_router(workout_import.router)
 app.include_router(activities.router)

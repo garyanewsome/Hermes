@@ -27,7 +27,7 @@ from app.audio import MAX_ANALYSIS_SECONDS, transcode_to_wav
 from app.config import CHAT_MODEL, OLLAMA_HOST, OLLAMA_NUM_CTX
 from app.pod_go_reference import AMPS_CLEAN, AMPS_CRUNCH, AMPS_HIGH_GAIN, CABS_COMMON, EFFECTS_SHORT
 
-logger = logging.getLogger("hermes")
+logger = logging.getLogger("naradi")
 
 SAMPLE_RATE = 44100
 

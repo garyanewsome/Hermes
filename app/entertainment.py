@@ -1,5 +1,5 @@
 """The entertainment log: TV and movies to watch, being watched, waited on,
-paused or finished. Hermes is where it's edited, and after changes it rewrites
+paused or finished. Naradi is where it's edited, and after changes it rewrites
 a copy in the vault to read in Obsidian."""
 
 import datetime
@@ -16,7 +16,7 @@ from app import planner_db
 from app.config import ENTERTAINMENT_NOTE, VAULT_KEEPER_URL
 
 router = APIRouter()
-logger = logging.getLogger("hermes.entertainment")
+logger = logging.getLogger("naradi.entertainment")
 
 # The note is written once changes stop for a bit, so a run of taps is one write.
 QUIET_SECONDS = 20
@@ -159,7 +159,7 @@ def _line(entry: dict) -> str:
 def render(entries: list[dict]) -> str:
     """The list in the style of the hand-written note: TV then movies, named
     groups first, then the rest. Recommendations have their own heading."""
-    out = ["> Written by Hermes from its Entertainment page. Anything typed here is replaced."]
+    out = ["> Written by Naradi from its Entertainment page. Anything typed here is replaced."]
     for kind, heading in (("tv", "TV"), ("movie", "Movies")):
         mine = [e for e in entries if e["kind"] == kind and e["status"] != "recommended"]
         if not mine:
@@ -196,7 +196,7 @@ def write_note(skip_empty: bool = False) -> bool:
                 "path": ENTERTAINMENT_NOTE,
                 "content": render(entries),
                 # Its own source, so these don't use up chat's daily writes.
-                "source": "hermes-sync",
+                "source": "naradi-sync",
                 "kind": "entertainment",
             },
             timeout=60.0,

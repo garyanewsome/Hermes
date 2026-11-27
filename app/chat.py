@@ -11,7 +11,7 @@ from app.tools import TOOL_HANDLERS, select_tools
 
 MAX_TOOL_ITERATIONS = 5
 
-logger = logging.getLogger("hermes")
+logger = logging.getLogger("naradi")
 
 
 async def _unload_ollama_model(model: str) -> None:
@@ -68,7 +68,7 @@ async def _stream_ollama(messages: list[dict], model: str, think: bool, tools: l
 
     `think` controls Ollama's hybrid-reasoning mode (Qwen3 and similar):
     when on, the model runs a hidden chain-of-thought pass that streams
-    under `thinking`, not `content` — Hermes never surfaces that field, so
+    under `thinking`, not `content` — Naradi never surfaces that field, so
     the request looks silently stuck until it finishes (measured: ~10s for
     a one-sentence reply, far worse under a real tool-decision prompt).
     Ignored harmlessly by models with no thinking mode (verified against
@@ -97,7 +97,7 @@ async def _stream_ollama(messages: list[dict], model: str, think: bool, tools: l
 
 
 def list_models() -> list[str]:
-    """Only models with Ollama's "tools" capability — Hermes requires
+    """Only models with Ollama's "tools" capability — Naradi requires
     tool-calling to reach Athenaeum, so anything else (embedding models,
     older completion-only models) would silently break mid-conversation
     if selected."""

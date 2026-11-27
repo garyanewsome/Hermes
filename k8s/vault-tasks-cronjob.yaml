@@ -1,5 +1,5 @@
-# Nightly Obsidian -> Todo import (see app/vault_tasks.py). Runs the Hermes
-# image itself: it needs planner Postgres access (same secret hermes-api
+# Nightly Obsidian -> Todo import (see app/vault_tasks.py). Runs the Naradi
+# image itself: it needs planner Postgres access (same secret naradi-api
 # uses) and Athenaeum's /tasks over in-cluster DNS, nothing else.
 #
 # Note: deploy.sh does NOT `kubectl apply` manifests — after changing this
@@ -28,7 +28,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: vault-tasks-import
-              image: hermes:latest
+              image: naradi:latest
               imagePullPolicy: Never
               command: ["python", "-m", "app.vault_tasks"]
               env:
@@ -40,4 +40,4 @@ spec:
                   valueFrom:
                     secretKeyRef:
                       name: planner-postgres-secret
-                      key: hermes-db-url
+                      key: naradi-db-url

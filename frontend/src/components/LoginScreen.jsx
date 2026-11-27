@@ -48,7 +48,7 @@ export default function LoginScreen({ onSuccess }) {
         }}
       >
         <div style={{ color: '#e8e8e8', fontSize: 20, fontWeight: 600, textAlign: 'center', letterSpacing: 0.5 }}>
-          Hermes
+          Naradi
         </div>
         <input
           type="password"

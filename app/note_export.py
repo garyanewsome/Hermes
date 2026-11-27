@@ -5,7 +5,7 @@ A copy, not a move: the scratch note stays where it is. Scratch notes are
 quick capture "meant to get copied into Obsidian later" (planner_db), and
 deleting someone's note as a side effect of saving it is not a thing to do
 by default. The write goes through vault-keeper's /write_note, so it is
-subject to the same vault limits as anything else Hermes writes.
+subject to the same vault limits as anything else Naradi writes.
 """
 
 import re
@@ -15,7 +15,7 @@ import httpx
 from app import planner_db
 from app.config import VAULT_KEEPER_URL
 
-DEFAULT_FOLDER = "01 Hermes/Imported"
+DEFAULT_FOLDER = "01 Naradi/Imported"
 
 
 class ExportRefused(Exception):

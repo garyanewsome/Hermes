@@ -1,6 +1,6 @@
 {
-  "name": "Hermes",
-  "short_name": "Hermes",
+  "name": "Naradi",
+  "short_name": "Naradi",
   "description": "Chat, image generation, tasks, and habit tracking.",
   "start_url": "/",
   "display": "standalone",

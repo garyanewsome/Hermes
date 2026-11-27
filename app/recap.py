@@ -2,7 +2,7 @@
 sentences from the chat model on top.
 
 Generated for the week (Monday to Sunday) on Sunday at 8pm, saved to the
-vault once, and shown on the Today page. If Hermes was down then, it catches
+vault once, and shown on the Today page. If Naradi was down then, it catches
 up the next time it's running. The model only writes words: a summary with
 any number that isn't in the facts is thrown away."""
 
@@ -20,7 +20,7 @@ from app import planner_db, recap_facts
 from app.config import CHAT_MODEL, OLLAMA_HOST, OLLAMA_NUM_CTX, RECAP_FOLDER, VAULT_KEEPER_URL
 from app.trends import monday_of
 
-logger = logging.getLogger("hermes")
+logger = logging.getLogger("naradi")
 router = APIRouter()
 
 RECAP_HOUR = 20  # Sunday, app time

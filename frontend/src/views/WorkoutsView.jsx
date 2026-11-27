@@ -234,7 +234,7 @@ function Import({ onImported }) {
               {busy || `Save ${plural(writing.length, 'workout')}`}
             </button>
           ) : (
-            preview.workouts.length > 0 && <div style={{ fontSize: 13 }}>Nothing new to save. Hermes already matches this file.</div>
+            preview.workouts.length > 0 && <div style={{ fontSize: 13 }}>Nothing new to save. Naradi already matches this file.</div>
           ))}
         </>
       )}

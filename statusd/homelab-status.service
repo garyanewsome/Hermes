@@ -1,4 +1,4 @@
-# systemd unit for homelab_status.py (read-only status JSON for Hermes'
+# systemd unit for homelab_status.py (read-only status JSON for Naradi's
 # System page, port 8190, LAN/tailnet only).
 #
 # One-time setup on the homelab (needs sudo once; nothing after that):
@@ -15,7 +15,7 @@
 #   RULE
 #   sudo chmod 440 /etc/sudoers.d/homelab-status && sudo visudo -cf /etc/sudoers.d/homelab-status
 [Unit]
-Description=Homelab status endpoint for Hermes
+Description=Homelab status endpoint for Naradi
 After=network-online.target docker.service
 Wants=network-online.target
 

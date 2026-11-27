@@ -3,7 +3,7 @@
 --   planner_writer  SELECT, INSERT, UPDATE, DELETE (no DROP, ALTER or TRUNCATE)
 -- No passwords here: set them afterwards (see db/README.md). Until then
 -- neither login can connect over the network.
--- Run as the hermes user, which owns the tables.
+-- Run as the naradi user, which owns the tables.
 
 DO $$
 BEGIN
@@ -28,7 +28,7 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO planner_reader;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO planner_writer;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO planner_writer;
 
--- Tables Hermes creates later get the same access.
+-- Tables Naradi creates later get the same access.
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO planner_reader;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO planner_writer;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO planner_writer;

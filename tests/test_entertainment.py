@@ -174,7 +174,7 @@ class EntertainmentTests(unittest.TestCase):
             self.assertTrue(entertainment.write_note())
         sent = post.call_args.kwargs["json"]
         self.assertTrue(post.call_args.args[0].endswith("/owned/write"))
-        self.assertEqual((sent["path"], sent["source"]), ("01 Hermes/Entertainment.md", "hermes-sync"))
+        self.assertEqual((sent["path"], sent["source"]), ("01 Naradi/Entertainment.md", "naradi-sync"))
         self.assertIn("- Devs", sent["content"])
 
     def test_startup_never_blanks_the_note(self):

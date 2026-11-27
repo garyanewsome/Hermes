@@ -146,9 +146,9 @@ export const ITEMS = [
     ),
   },
   {
-    // Not a Hermes view: opens the Kavita library (books/PDFs) in a new tab.
-    // Same host you reached Hermes on, so it works unchanged on the LAN and
-    // over Tailscale. (The .home.local ingress name only routes Hermes
+    // Not a Naradi view: opens the Kavita library (books/PDFs) in a new tab.
+    // Same host you reached Naradi on, so it works unchanged on the LAN and
+    // over Tailscale. (The .home.local ingress name only routes Naradi
     // itself, so fall back to the server's LAN address for that one.)
     key: 'library',
     label: 'Library',

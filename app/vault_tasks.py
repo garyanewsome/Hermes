@@ -5,7 +5,7 @@ to the dev backlog board in the vault instead (see DEV_TAG); it must read
 `[dev] Project: title`, and one without a project goes to the Inbox.
 
 One-way and additive on purpose: it only ever creates items. Checking a
-task off in Hermes does not write back to the vault (Athenaeum's deploy key
+task off in Naradi does not write back to the vault (Athenaeum's deploy key
 is read-only), and a task you complete or delete here is never re-imported
 even though its checkbox is still open in Obsidian (see planner_db's
 vault_task_imports table).
@@ -57,7 +57,7 @@ def fetch_vault_tasks(extra_files: list[str]) -> list[dict]:
 
 def add_to_backlog(text: str) -> bool:
     """True if the backlog now has this card (added, or already there)."""
-    response = httpx.post(f"{VAULT_KEEPER_URL}/backlog/add", json={"text": text, "source": "hermes"}, timeout=60.0)
+    response = httpx.post(f"{VAULT_KEEPER_URL}/backlog/add", json={"text": text, "source": "naradi"}, timeout=60.0)
     response.raise_for_status()
     return True
 

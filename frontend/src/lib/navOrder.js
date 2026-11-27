@@ -4,8 +4,8 @@ import { getNavOrder, saveNavOrder } from '../api.js';
 // The menu order lives on the server. A copy is kept in this browser so the
 // menu is already right after a refresh, instead of drawing the default order
 // and then shifting once the request comes back.
-const CACHE_KEY = 'hermes:navOrder';
-const CHANGED = 'hermes:nav-order';
+const CACHE_KEY = 'naradi:navOrder';
+const CHANGED = 'naradi:nav-order';
 
 function readCache() {
   try {

@@ -17,7 +17,7 @@ import SystemView from './views/SystemView.jsx';
 import { checkAuth, pingHealth } from './api.js';
 
 const VIEWS = ['today', 'chat', 'tasks', 'todo', 'notes', 'habits', 'chores', 'workouts', 'entertainment', 'trends', 'sketch', 'settings', 'system'];
-const LAST_VIEW_KEY = 'hermes:lastView';
+const LAST_VIEW_KEY = 'naradi:lastView';
 
 function initialView() {
   try {
@@ -68,8 +68,8 @@ export default function App() {
     // expires mid-use — drop back to the login screen instead of leaving
     // views stuck silently failing every request.
     const onUnauthorized = () => setAuthenticated(false);
-    window.addEventListener('hermes:unauthorized', onUnauthorized);
-    return () => window.removeEventListener('hermes:unauthorized', onUnauthorized);
+    window.addEventListener('naradi:unauthorized', onUnauthorized);
+    return () => window.removeEventListener('naradi:unauthorized', onUnauthorized);
   }, []);
 
   useEffect(() => {
@@ -80,7 +80,7 @@ export default function App() {
     // refresh right away rather than waiting out their own interval.
     let hiddenAt = null;
     const wake = () => {
-      pingHealth().then(() => window.dispatchEvent(new Event('hermes:wake')));
+      pingHealth().then(() => window.dispatchEvent(new Event('naradi:wake')));
     };
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') {

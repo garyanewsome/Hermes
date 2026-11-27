@@ -86,7 +86,7 @@ function MsgActionButton({ onClick, label, children }) {
   );
 }
 
-const LAST_CONVERSATION_KEY = 'hermes:lastConversationId';
+const LAST_CONVERSATION_KEY = 'naradi:lastConversationId';
 
 export default function ChatView({ onOpenDrawer }) {
   const [conversations, setConversations] = useState([]);
@@ -217,7 +217,7 @@ export default function ChatView({ onOpenDrawer }) {
       });
       resetStallTimer();
       if (response.status === 401) {
-        window.dispatchEvent(new Event('hermes:unauthorized'));
+        window.dispatchEvent(new Event('naradi:unauthorized'));
         throw new Error('Not logged in');
       }
       if (!response.ok) throw new Error('Request failed: ' + response.status);
@@ -325,7 +325,7 @@ export default function ChatView({ onOpenDrawer }) {
 
   async function startRecording() {
     // Browsers only hand out the microphone on secure pages (https, or
-    // localhost). Hermes over plain http on the LAN isn't one, so
+    // localhost). Naradi over plain http on the LAN isn't one, so
     // navigator.mediaDevices doesn't exist there at all — that was the
     // "reading 'getUserMedia' of undefined" error on the phone. Fall back to
     // the phone's own recorder: a file input with `capture` opens it on
@@ -453,7 +453,7 @@ export default function ChatView({ onOpenDrawer }) {
   return (
     <div style={{ flex: 1, display: 'flex', minWidth: 0 }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <TopBar title="Hermes" onOpenDrawer={onOpenDrawer}>
+        <TopBar title="Naradi" onOpenDrawer={onOpenDrawer}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: 'var(--text-dim)' }}>
             <input type="checkbox" checked={think} onChange={(e) => setThink(e.target.checked)} />
             Thinking

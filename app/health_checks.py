@@ -5,7 +5,7 @@ enough: Hindsight reported `healthy` for nine days while every call that
 needed its LLM returned 404, because its configured model had been removed
 from Ollama. The checks here exercise the failing path itself:
 
-- every model Hermes is configured to use is actually installed in Ollama;
+- every model Naradi is configured to use is actually installed in Ollama;
 - vault-keeper can reach the vault's git remote with its deploy key;
 - Hindsight can run its own fact extraction end to end. This uses its
   dry-run-extract endpoint, which calls the LLM but stores nothing.
@@ -22,7 +22,7 @@ import httpx
 
 from app.config import AUDIO_MODEL, CHAT_MODEL, HINDSIGHT_BANK_ID, HINDSIGHT_URL, OLLAMA_HOST, VAULT_KEEPER_URL
 
-logger = logging.getLogger("hermes")
+logger = logging.getLogger("naradi")
 
 INTERVAL_SECONDS = 30 * 60
 EXTRACT_TIMEOUT = 120.0
@@ -43,7 +43,7 @@ def _check_models() -> dict:
     wanted = {"chat": CHAT_MODEL, "audio": AUDIO_MODEL}
     missing = sorted({m for m in wanted.values() if m not in installed})
     if missing:
-        return {"ok": False, "text": f"Hermes is set to use {', '.join(missing)}, which Ollama doesn't have"}
+        return {"ok": False, "text": f"Naradi is set to use {', '.join(missing)}, which Ollama doesn't have"}
     return {"ok": True, "text": "Configured models are installed"}
 
 

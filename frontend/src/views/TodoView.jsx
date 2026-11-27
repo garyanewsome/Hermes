@@ -27,7 +27,7 @@ function StarIcon() {
 // Distinct from the 'text/plain' id both list and item drags already set, so
 // a drop target can tell "an item, to move into this list" apart from "a
 // list, to reorder".
-const ITEM_DRAG_TYPE = 'application/x-hermes-todo-item';
+const ITEM_DRAG_TYPE = 'application/x-naradi-todo-item';
 
 function OverdueMark({ title }) {
   return (
@@ -1016,18 +1016,18 @@ export default function TodoView({ onOpenDrawer, onAttentionChange }) {
     // whatever else — not just when Todo happens to be the active view.
     const interval = setInterval(refreshLists, TODO_POLL_INTERVAL_MS);
     // Refresh immediately when the tab wakes from idle (see App.jsx).
-    window.addEventListener('hermes:wake', refreshLists);
+    window.addEventListener('naradi:wake', refreshLists);
     // The Today page can complete/skip items; pick that up, including the
     // open list's own items (the poll above only refreshes lists + agenda).
     const onChanged = () => {
       refreshLists();
       if (typeof activeIdRef.current === 'number') refreshItems(activeIdRef.current);
     };
-    window.addEventListener('hermes:data-changed', onChanged);
+    window.addEventListener('naradi:data-changed', onChanged);
     return () => {
       clearInterval(interval);
-      window.removeEventListener('hermes:wake', refreshLists);
-      window.removeEventListener('hermes:data-changed', onChanged);
+      window.removeEventListener('naradi:wake', refreshLists);
+      window.removeEventListener('naradi:data-changed', onChanged);
     };
   }, []);
 

@@ -4,7 +4,7 @@ never written to.
 
 There are two ways in. The manual import offers everything the notes say. The
 automatic one runs when Daily is opened and only saves what is clear and hasn't
-been changed in Hermes."""
+been changed in Naradi."""
 
 import datetime
 
@@ -279,7 +279,7 @@ def _auto_day(conn, on: datetime.date, entry: dict) -> tuple[bool, list[str]]:
         saved = True
     if entry["walks"]:
         walks = _walk_list(entry["walks"])
-        # Unchanged since last time: a walk deleted in Hermes stays deleted.
+        # Unchanged since last time: a walk deleted in Naradi stays deleted.
         if seen.get("walks") != walks:
             saved = _add_walks(conn, on, entry["walks"]) > 0 or saved
             remember["walks"] = walks

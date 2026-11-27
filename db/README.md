@@ -4,22 +4,22 @@ Two logins: `planner_reader` for everyday queries, `planner_writer` for
 deliberate fixes. Nothing new is exposed on the network: connections go through
 SSH to the homelab.
 
-## One-time setup (on the homelab, from the Hermes folder)
+## One-time setup (on the homelab, from the Naradi folder)
 
 Create the logins:
 
 ```bash
-kubectl exec -i deploy/planner-postgres -- psql -U hermes -d planner -v ON_ERROR_STOP=1 < db/query-logins.sql
+kubectl exec -i deploy/planner-postgres -- psql -U naradi -d planner -v ON_ERROR_STOP=1 < db/query-logins.sql
 ```
 
 Set a different password for each (typed at a prompt, never stored in a file):
 
 ```bash
-kubectl exec -it deploy/planner-postgres -- psql -U hermes -d planner -c '\password planner_reader'
+kubectl exec -it deploy/planner-postgres -- psql -U naradi -d planner -c '\password planner_reader'
 ```
 
 ```bash
-kubectl exec -it deploy/planner-postgres -- psql -U hermes -d planner -c '\password planner_writer'
+kubectl exec -it deploy/planner-postgres -- psql -U naradi -d planner -c '\password planner_writer'
 ```
 
 Find the database's cluster address (it stays the same unless the Service is

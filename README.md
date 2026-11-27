@@ -1,12 +1,14 @@
-# Hermes
+# Naradi
+
+Formerly Hermes. Moving an existing homelab install to the new names is a one-time step: see [docs/renaming-from-hermes.md](docs/renaming-from-hermes.md).
 
 General-purpose personal assistant with a growing tool registry — not scoped to any single tool.
 
 ## What it does
 
-`POST /chat {"message": "...", "conversation_id": "...", "model": "...", "think": false}` — streams the reply back as NDJSON lines while the model generates. `conversation_id` can be `null` to start a new conversation; server owns and persists conversation history (SQLite). `think` toggles Ollama's hybrid-reasoning mode (relevant for Qwen3-family models) — defaults off, since the hidden chain-of-thought pass streams under a field Hermes doesn't surface, making a request look stuck until it finishes; has no effect on models without a thinking mode.
+`POST /chat {"message": "...", "conversation_id": "...", "model": "...", "think": false}` — streams the reply back as NDJSON lines while the model generates. `conversation_id` can be `null` to start a new conversation; server owns and persists conversation history (SQLite). `think` toggles Ollama's hybrid-reasoning mode (relevant for Qwen3-family models) — defaults off, since the hidden chain-of-thought pass streams under a field Naradi doesn't surface, making a request look stuck until it finishes; has no effect on models without a thinking mode.
 
-When the model decides a tool would help, Hermes executes it and feeds the result back — transparent to the client, tool-call turns just produce no visible tokens until the model's actual answer streams.
+When the model decides a tool would help, Naradi executes it and feeds the result back — transparent to the client, tool-call turns just produce no visible tokens until the model's actual answer streams.
 
 **Tools:**
 - `search_vault` — semantic search over the vault (calls Athenaeum's `/search`)
@@ -15,11 +17,11 @@ When the model decides a tool would help, Hermes executes it and feeds the resul
 - The chat loop never lets a broken connection to Ollama (GPU OOM on reload, timeout, restart, ...) kill the HTTP stream outright — that surfaced to clients as an opaque "Error in input stream" with no indication of what happened. It's caught and surfaced as a normal in-chat message instead, ending that turn cleanly.
 - `save_project_memory` / `recall_project_memory` — persistent memory for VST/audio plugin development work (calls a self-hosted Hindsight instance). Scoped deliberately narrow via the tool description — most messages should not trigger a save, only durable decisions/facts worth recalling later.
 - `add_task` / `list_tasks` / `complete_task` — to-dos filed directly into one of four quadrants (`do` / `schedule` / `next` / `backlog`), backed by a dedicated `planner` Postgres database (see below).
-- `log_habit` / `habit_status` — daily habit tracking, same `planner` database. `habit_status` returns each of the last 7 days' actual logged/missed dates (not just the streak number), so you can ask Hermes things like "how'd I do this week" or "did I miss Tuesday" and it has real data to answer from. "Today" for logging/streaks is computed in `APP_TIMEZONE` (`America/New_York` by default), not the pod's system clock — K3s containers run UTC regardless of the host's actual local time, so a naive `date.today()` rolled over to the next day hours before it actually was tomorrow locally (confirmed live: still showing today's log as done at 7:39pm Eastern, because UTC had already ticked past midnight).
+- `log_habit` / `habit_status` — daily habit tracking, same `planner` database. `habit_status` returns each of the last 7 days' actual logged/missed dates (not just the streak number), so you can ask Naradi things like "how'd I do this week" or "did I miss Tuesday" and it has real data to answer from. "Today" for logging/streaks is computed in `APP_TIMEZONE` (`America/New_York` by default), not the pod's system clock — K3s containers run UTC regardless of the host's actual local time, so a naive `date.today()` rolled over to the next day hours before it actually was tomorrow locally (confirmed live: still showing today's log as done at 7:39pm Eastern, because UTC had already ticked past midnight).
 - `add_todo_item` / `list_todo_items` / `complete_todo_item` — the plain everyday Todo lists (see UI section), deliberately a separate tool set from `add_task`/etc. so the model doesn't conflate "add milk to my grocery list" with the music-production/dev Tasks board. Naming a list that doesn't exist yet creates it (same as `log_habit`); omitting one uses/creates "General". Fuzzy-matched by name/text throughout, and `complete_todo_item` returns a disambiguation prompt instead of guessing when more than one item matches.
 - `add_scratch_note` / `search_scratch_notes` / `list_recent_scratch_notes` — the Notes scratchpad (see UI section). Named with a `scratch_note`/`scratch_notes` prefix specifically to avoid colliding with the existing `list_notes` tool, which is Athenaeum's vault folder browser — an unrelated feature that happens to share the word "notes". Deliberately looser-firing than `save_project_memory`: this is meant to catch anything the user explicitly asks to jot down, not just durable VST/audio decisions.
 - `research_repo` / `forget_repo` — calls a separate [CodebaseSearcher](https://github.com/garyanewsome/CodebaseSearcher) service (`CODEBASE_SEARCHER_URL`) to look at one of the user's GitHub repos on demand: clone/pull, semantic-search its code for a question, write the findings into the Obsidian vault as a note. On-demand, not a background sync like `search_vault`'s Athenaeum — re-indexes only if the repo's commit actually moved since the last time it was asked about. `forget_repo` deletes the local clone/index (disposable, regenerable) without touching any findings note already written to the vault.
-- `write_vault_note` / `read_vault_note` / `suggest_vault_edit` / `log_to_daily_note` / `read_daily_note` / `save_scratch_note_to_vault` / `add_to_backlog` — all go through [vault-keeper](https://github.com/garyanewsome/vault-keeper) (`VAULT_KEEPER_URL`), which owns the vault's write clone, deploy key, write limits and audit log. New notes only (apart from Hermes' own copies under `01 Hermes/`, such as the entertainment list), except that `log_to_daily_note` adds one timestamped line to the "Hermes" section of *today's* daily note (and nothing else); `add_to_backlog` adds one card to the Ideas, Backlog, Ready or Bugs column of the dev backlog board (`10 Development/Backlog.md`, add-only; the `User` column is Gary's and off limits). The nightly `vault_tasks` import sends any daily-note task containing `[dev]` there instead of the Inbox. Changes to any other existing note are filed as suggestions for review in Obsidian. `/system` and the Today page alerts include a deep vault-keeper check (can it reach the vault's git remote with its key).
+- `write_vault_note` / `read_vault_note` / `suggest_vault_edit` / `log_to_daily_note` / `read_daily_note` / `save_scratch_note_to_vault` / `add_to_backlog` — all go through [vault-keeper](https://github.com/garyanewsome/vault-keeper) (`VAULT_KEEPER_URL`), which owns the vault's write clone, deploy key, write limits and audit log. New notes only (apart from Naradi's own copies under `01 Naradi/`, such as the entertainment list), except that `log_to_daily_note` adds one timestamped line to the "Naradi" section of *today's* daily note (and nothing else); `add_to_backlog` adds one card to the Ideas, Backlog, Ready or Bugs column of the dev backlog board (`10 Development/Backlog.md`, add-only; the `User` column is Gary's and off limits). The nightly `vault_tasks` import sends any daily-note task containing `[dev]` there instead of the Inbox. Changes to any other existing note are filed as suggestions for review in Obsidian. `/system` and the Today page alerts include a deep vault-keeper check (can it reach the vault's git remote with its key).
 
 **Other endpoints:**
 - `GET /models` — chat-capable models available (filtered to Ollama's `tools`-capability models only)
@@ -34,9 +36,9 @@ When the model decides a tool would help, Hermes executes it and feeds the resul
 
 ## Auth
 
-A single shared password gates the whole app — no accounts, this is a personal single-user tool. A FastAPI middleware (not per-route `Depends`) enforces this deny-by-default: everything needs a valid signed session cookie *unless* explicitly public (`/login`, `/logout`, `/health`, and the static SPA shell — index.html, the JS/CSS bundle, icons, the manifest — since the shell is just code and can't fetch anything real without logging in first). An earlier version did the opposite — an allow-list of *protected* prefixes — which meant a new API route was unprotected by default unless someone remembered to add it there; that's backwards for a security check, and the kind of gap that stays invisible until something new ships through it. The frontend checks `/auth/check` on load and shows a login screen if it 401s; any other API call that gets a 401 (session expired mid-use) fires a `hermes:unauthorized` window event that does the same, so a stale session doesn't just leave views silently failing.
+A single shared password gates the whole app — no accounts, this is a personal single-user tool. A FastAPI middleware (not per-route `Depends`) enforces this deny-by-default: everything needs a valid signed session cookie *unless* explicitly public (`/login`, `/logout`, `/health`, and the static SPA shell — index.html, the JS/CSS bundle, icons, the manifest — since the shell is just code and can't fetch anything real without logging in first). An earlier version did the opposite — an allow-list of *protected* prefixes — which meant a new API route was unprotected by default unless someone remembered to add it there; that's backwards for a security check, and the kind of gap that stays invisible until something new ships through it. The frontend checks `/auth/check` on load and shows a login screen if it 401s; any other API call that gets a 401 (session expired mid-use) fires a `naradi:unauthorized` window event that does the same, so a stale session doesn't just leave views silently failing.
 
-Deliberately app-level rather than a Traefik `BasicAuth` middleware on the Ingress: Hermes is also reachable via a NodePort (see Deployment) which routes straight to the pod, bypassing Traefik entirely, so ingress-level auth would only ever cover the hostname path and leave the NodePort one wide open. One check inside the app covers both.
+Deliberately app-level rather than a Traefik `BasicAuth` middleware on the Ingress: Naradi is also reachable via a NodePort (see Deployment) which routes straight to the pod, bypassing Traefik entirely, so ingress-level auth would only ever cover the hostname path and leave the NodePort one wide open. One check inside the app covers both.
 
 Session cookie is `HttpOnly` + `SameSite=Lax`, signed (HMAC-SHA256 over an expiry timestamp, `SESSION_SECRET`) rather than random+server-stored, since there's no session store to look one up in. No `Secure` flag — this runs over plain HTTP on the LAN, not HTTPS, and `Secure` would silently stop the cookie from being set at all. `AUTH_PASSWORD` and `SESSION_SECRET` come from a K8s secret in deployment (see Deployment); both have insecure dev-only defaults in `app/config.py` so local dev doesn't need a `.env` just to log in.
 
@@ -65,7 +67,7 @@ React app in `frontend/`, built to `static/` and served by the same FastAPI app 
 Backend:
 ```bash
 python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
-PLANNER_DB_URL=postgresql://hermes@localhost:5432/planner .venv/bin/uvicorn app.main:app --reload --port 8001
+PLANNER_DB_URL=postgresql://naradi@localhost:5432/planner .venv/bin/uvicorn app.main:app --reload --port 8001
 ```
 Needs a local Postgres with a `planner` database (`createdb planner`) — `init_planner_db()` creates the tables on startup.
 
@@ -80,9 +82,9 @@ Tests need a throwaway Postgres database (never the real one); they're skipped w
 PLANNER_TEST_DB_URL=postgresql://localhost:5432/planner_test .venv/bin/python -m unittest discover -s tests -t .
 ```
 
-**Entertainment:** TV and movies: Continue, Coming up (with a return date), Recommended (others' suggestions, with an optional name, until you add or start them), Want to watch, Paused and Done. **+1 episode** moves your place, groups like a franchise stay together. Hermes is where it's edited: it rewrites `01 Hermes/Entertainment.md` (`ENTERTAINMENT_NOTE`) about 20 seconds after changes stop, and at startup, so the list can be read in Obsidian. Edits to that note are replaced. A failed write is retried every 5 minutes and shown on the page.
+**Entertainment:** TV and movies: Continue, Coming up (with a return date), Recommended (others' suggestions, with an optional name, until you add or start them), Want to watch, Paused and Done. **+1 episode** moves your place, groups like a franchise stay together. Naradi is where it's edited: it rewrites `01 Naradi/Entertainment.md` (`ENTERTAINMENT_NOTE`) about 20 seconds after changes stop, and at startup, so the list can be read in Obsidian. Edits to that note are replaced. A failed write is retried every 5 minutes and shown on the page.
 
-**Sunday recap:** at 8pm Sunday (app time) Hermes builds the week's recap: done, habits against the week before, training and new bests, chores, what's slipping, what's due next week. Code computes and lays out everything; the chat model adds a few sentences, discarded if they contain a number that isn't in the facts. Saved once to the vault (`01 Hermes/Weekly Recaps`, `RECAP_FOLDER`) and shown collapsed on Today, with **Update** and **Save to vault** (a new note; nothing is overwritten). Missed runs catch up.
+**Sunday recap:** at 8pm Sunday (app time) Naradi builds the week's recap: done, habits against the week before, training and new bests, chores, what's slipping, what's due next week. Code computes and lays out everything; the chat model adds a few sentences, discarded if they contain a number that isn't in the facts. Saved once to the vault (`01 Naradi/Weekly Recaps`, `RECAP_FOLDER`) and shown collapsed on Today, with **Update** and **Save to vault** (a new note; nothing is overwritten). Missed runs catch up.
 
 **Trends:** tasks, todos, habit check-ins, chores, gym days and activity minutes per week over 4 weeks, 3 months or a year, plus a year grid for each habit (`GET /trends?weeks=`). Todo history starts when completions began being recorded; a reopened or deleted task no longer counts.
 
@@ -102,9 +104,9 @@ PLANNER_TEST_DB_URL=postgresql://localhost:5432/planner_test .venv/bin/python -m
 
 **Completion history:** every todo check-off adds a row to `todo_completions` (item text and list name copied, so it survives renames and deletes). Unchecking a one-off removes its latest row; skips aren't recorded. Recurring items never stay checked, so a mistaken check-off on one can't be undone from the UI.
 
-**Daily numbers:** the Fitness page opens on **Daily**: weight (lb), calories burned (total and active), calories eaten and protein, carbs and fat, one row per day, filled in a piece at a time. Hermes works out the surplus or deficit (eaten minus total burned) and this week's and last week's daily averages; Charts shows weight, calories and macros. Weight is kept separately for home and PF. The Sunday recap has a **Body and food** section (averages beside the week before, from whatever has been imported by then), and chat answers "what's my weight trend?", "how was my protein last week?" or "what did I eat yesterday?" read-only. Routes: `GET /daily`, `PUT /daily/{date}` (only the fields sent change).
+**Daily numbers:** the Fitness page opens on **Daily**: weight (lb), calories burned (total and active), calories eaten and protein, carbs and fat, one row per day, filled in a piece at a time. Naradi works out the surplus or deficit (eaten minus total burned) and this week's and last week's daily averages; Charts shows weight, calories and macros. Weight is kept separately for home and PF. The Sunday recap has a **Body and food** section (averages beside the week before, from whatever has been imported by then), and chat answers "what's my weight trend?", "how was my protein last week?" or "what did I eat yesterday?" read-only. Routes: `GET /daily`, `PUT /daily/{date}` (only the fields sent change).
 
-**Daily note import:** **Import from daily note** on Daily reads the "AI Fitness Dump" section of daily notes (`DAILY_NOTES_FOLDER`) through vault-keeper's `/read_notes`, shows what each day would add or change, and saves what you confirm. Home and PF weigh-ins (pick the number when a line is vague), yesterday's totals as final and today's as "so far" (left out of averages; macros are written `196g C / 86g F / 173g P`), body and gym notes, and `walk: 30:48 1.23mi` lines as "Work walk" activities. Older single-block calorie entries count as "so far" unless you tick the box to count them as final. Notes are never written to, blanks never erase, and walks added by hand are not repeated. Opening Daily also imports the last 7 days by itself (no schedule): clear values, notes and walks are saved, vague weights and note problems are listed for you, final totals replace "so far" numbers, and anything changed or deleted in Hermes is left alone. Routes: `GET|POST /daily-import`, `POST /daily-import/auto`.
+**Daily note import:** **Import from daily note** on Daily reads the "AI Fitness Dump" section of daily notes (`DAILY_NOTES_FOLDER`) through vault-keeper's `/read_notes`, shows what each day would add or change, and saves what you confirm. Home and PF weigh-ins (pick the number when a line is vague), yesterday's totals as final and today's as "so far" (left out of averages; macros are written `196g C / 86g F / 173g P`), body and gym notes, and `walk: 30:48 1.23mi` lines as "Work walk" activities. Older single-block calorie entries count as "so far" unless you tick the box to count them as final. Notes are never written to, blanks never erase, and walks added by hand are not repeated. Opening Daily also imports the last 7 days by itself (no schedule): clear values, notes and walks are saved, vague weights and note problems are listed for you, final totals replace "so far" numbers, and anything changed or deleted in Naradi is left alone. Routes: `GET|POST /daily-import`, `POST /daily-import/auto`.
 
 **Fitness page:** upload the training spreadsheet's `.xlsx` export, check the preview, save. A workout is identified by date and tab name. The preview marks each one new, changed (naming the exercises that differ) or unchanged, and saving writes only the new and changed ones, so uploading again never duplicates, and the sheet replaces pasted lifts on the same date. History and unique exercise names (with "same as" linking) are on the same page. Routes: `POST /workouts/import[/preview]`, `GET /workouts/exercises`, `POST /workouts/exercises/link|unlink`.
 
@@ -123,34 +125,34 @@ PLANNER_TEST_DB_URL=postgresql://localhost:5432/planner_test .venv/bin/python -m
 `static/` is generated by the frontend build, not committed — the Dockerfile's first stage runs `npm run build` and copies its output in, so `./deploy.sh` builds both without any extra steps.
 
 Runs in K3s:
-- `k8s/hermes-api.yaml` — Deployment + two Services + Ingress. The `hermes-api` Service backs the `hermes.home.local` Ingress (needs per-device `/etc/hosts`, fine on computers you control); `hermes-api-nodeport` is a NodePort on `30080` reachable as `http://<any-node-ip>:30080` from any device on the LAN with zero setup — this is the one to bookmark on a phone or tablet, since editing hosts files isn't practically possible there.
-- `k8s/hermes-pv.yaml` — PersistentVolume/Claim for the conversation database
+- `k8s/naradi-api.yaml` — Deployment + two Services + Ingress. The `naradi-api` Service backs the `naradi.home.local` Ingress (needs per-device `/etc/hosts`, fine on computers you control); `naradi-api-nodeport` is a NodePort on `30080` reachable as `http://<any-node-ip>:30080` from any device on the LAN with zero setup — this is the one to bookmark on a phone or tablet, since editing hosts files isn't practically possible there.
+- `k8s/naradi-pv.yaml` — PersistentVolume/Claim for the conversation database
 - `k8s/planner-postgres.yaml` — Deployment + Service + PersistentVolume/Claim for the `planner` Postgres (tasks/habits)
 - `k8s/planner-postgres-backup-cronjob.yaml` — daily `pg_dump` of the planner Postgres to `/mnt/storage/planner-backups`, keeping the last 7 (plain `.sql` files, not `pg_dump`'s custom format — a backup should be a file you can read and `psql <` without needing `pg_restore`). Exists because a bad migration guard once silently dropped the tasks table on a routine deploy with nothing to recover from — see git history on `planner_db.py` if curious. Has explicit `activeDeadlineSeconds` + history limits from the start, learned from the vault-sync incident (a hung CronJob run with neither will pile up stuck job objects forever instead of just failing).
 
 Reaches Athenaeum over in-cluster service DNS (`http://athenaeum-api:8000`) and Iris directly by host IP:port (Iris runs bare-metal, not in K3s — see Iris' own README). Reaches `planner-postgres` over in-cluster DNS too.
 
-**One-time setup before the first deploy with planner support:** create the Secret both `hermes-api` and `planner-postgres` read from (not stored in the yaml — this needs `kubectl`, which only works from the homelab's own terminal, not over the `homelab-agent` SSH connection):
+**One-time setup before the first deploy with planner support:** create the Secret both `naradi-api` and `planner-postgres` read from (not stored in the yaml — this needs `kubectl`, which only works from the homelab's own terminal, not over the `homelab-agent` SSH connection):
 ```bash
 kubectl create secret generic planner-postgres-secret \
   --from-literal=password='<pick a password>' \
-  --from-literal=hermes-db-url='postgresql://hermes:<same password>@planner-postgres:5432/planner'
+  --from-literal=naradi-db-url='postgresql://naradi:<same password>@planner-postgres:5432/planner'
 kubectl apply -f k8s/planner-postgres.yaml
 kubectl apply -f k8s/planner-postgres-backup-cronjob.yaml
 ```
 
-**One-time setup before the first deploy with auth enabled:** create the Secret `hermes-api` reads `AUTH_PASSWORD`/`SESSION_SECRET` from:
+**One-time setup before the first deploy with auth enabled:** create the Secret `naradi-api` reads `AUTH_PASSWORD`/`SESSION_SECRET` from:
 ```bash
-kubectl create secret generic hermes-auth-secret \
+kubectl create secret generic naradi-auth-secret \
   --from-literal=auth-password='<pick a login password>' \
   --from-literal=session-secret="$(openssl rand -hex 32)"
 ```
-Without this secret the pod falls back to `app/config.py`'s dev defaults (`AUTH_PASSWORD=hermes`, a fixed `SESSION_SECRET`) — fine for local dev, not for anything reachable on the LAN, so create this before exposing the NodePort.
+Without this secret the pod falls back to `app/config.py`'s dev defaults (`AUTH_PASSWORD=naradi`, a fixed `SESSION_SECRET`) — fine for local dev, not for anything reachable on the LAN, so create this before exposing the NodePort.
 
 **Restoring from a backup:**
 ```bash
 kubectl exec -i deploy/planner-postgres -- sh -c \
-  'PGPASSWORD=$POSTGRES_PASSWORD psql -U hermes -d planner' < /mnt/storage/planner-backups/planner-<timestamp>.sql
+  'PGPASSWORD=$POSTGRES_PASSWORD psql -U naradi -d planner' < /mnt/storage/planner-backups/planner-<timestamp>.sql
 ```
 `-i` (not `-it`) is deliberate — piping a file into stdin needs no tty, and `-t` fights it. Run from the homelab host, where that path is a real file; `kubectl cp` it out of the CronJob's PV first if running this from elsewhere.
 
@@ -160,7 +162,7 @@ To redeploy after a code change: `./deploy.sh` — builds the image, reimports i
 
 Reported live: "every page... if idle too long or sometimes on a restart it just seems stuck," fixed with two changes on either side of the connection:
 
-- **`k8s/hermes-api.yaml`** now has a `readinessProbe`/`livenessProbe` against `/health`. Without them, a rolling restart had no way to know the new pod could actually serve traffic yet — Kubernetes' default is to treat "container process started" as "ready," so requests could land on a pod mid-`init_planner_db()`, before Uvicorn was even listening. A genuinely wedged app (hung event loop, exhausted connection pool) also had no way to get detected or auto-restarted — it would just sit broken until someone noticed and manually restarted it.
+- **`k8s/naradi-api.yaml`** now has a `readinessProbe`/`livenessProbe` against `/health`. Without them, a rolling restart had no way to know the new pod could actually serve traffic yet — Kubernetes' default is to treat "container process started" as "ready," so requests could land on a pod mid-`init_planner_db()`, before Uvicorn was even listening. A genuinely wedged app (hung event loop, exhausted connection pool) also had no way to get detected or auto-restarted — it would just sit broken until someone noticed and manually restarted it.
 - **`frontend/src/api.js`** — no fetch anywhere had a timeout, so a stale connection (a browser-cached keep-alive left over from a long-idle tab, or the backend pod mid-restart) just hung forever with no recovery short of a manual page refresh. Every regular API call now times out at 15s and retries once automatically on a fresh connection — a hang is essentially always a dead connection, not a slow server, so the retry succeeds silently rather than surfacing an error. `checkAuth()` gets the same treatment despite bypassing the shared `apiFetch` wrapper (it runs before login, so it can't dispatch the same "session expired" event) — and `App.jsx` now catches a `checkAuth()` that fails even after the retry, falling to the login screen instead of leaving the blank "still checking" state up forever, which is exactly what an uncaught rejection there used to do.
 - **`ChatView.jsx`**'s streaming `/chat` fetch gets its own stall-timeout (45s of receiving nothing at all, reset on every chunk so an actively-streaming reply is never cut short) — a normal request timeout doesn't apply to a stream that's supposed to stay open, so this needed its own mechanism rather than reusing `apiFetch`.
 
@@ -174,13 +176,13 @@ Verified live: simulated a completely hung backend (a fake server that never res
 - [x] Tasks (four-quadrant board, tracked by which quadrant a task is filed under) and habit tracking, backed by a dedicated `planner` Postgres
 - [x] React UI: black + per-view neon theme, hamburger view switcher, Chat/Tasks/Habits — verified end to end locally (real Ollama model, real Postgres) before this landed
 - [x] Deployed, verified against real live services (not mocks)
-- [x] Single-password login gating the whole app (session cookie, `app/auth.py`) — needed once the NodePort made Hermes reachable from more than just hosts-file-configured computers
+- [x] Single-password login gating the whole app (session cookie, `app/auth.py`) — needed once the NodePort made Naradi reachable from more than just hosts-file-configured computers
 - [x] NodePort (`30080`) for zero-setup LAN access from phones/tablets, alongside the existing hostname Ingress
 - [x] Mobile layout pass (overlay drawers, stacked Tasks board, wrapping Habits rows, touch-friendly quadrant moves) — verified against real phone/tablet widths, not just resized-desktop-window guessing
 - [x] Home-screen install with a custom icon/favicon (little grey alien)
 - [x] Todo view — separate multi-list checklist, deliberately kept simpler than the Tasks board (see UI section)
 - [x] Auth middleware fixed to deny-by-default (was an allow-list of protected routes — backwards; a new route needs no special handling now to be covered)
-- [x] Remote access via Tailscale (the homelab and phone/tablet are on the same tailnet) — reaches Hermes from anywhere, not just the home LAN, with no port-forwarding and no public exposure; set up on the homelab side (`sudo tailscale up`), not tracked in this repo
+- [x] Remote access via Tailscale (the homelab and phone/tablet are on the same tailnet) — reaches Naradi from anywhere, not just the home LAN, with no port-forwarding and no public exposure; set up on the homelab side (`sudo tailscale up`), not tracked in this repo
 - [x] Notes view — Simplenote-style plain-text scratchpad with debounced autosave, meant to feed ideas into Obsidian later (see UI section)
 - [x] Sketch view — freehand drawing with real stylus pressure support, stored as vector strokes (JSONB, not a raster blob), with PNG/SVG export (see UI section)
 - [x] Chat tool access for Todo (`add_todo_item`/`list_todo_items`/`complete_todo_item`) and Notes (`add_scratch_note`/`search_scratch_notes`/`list_recent_scratch_notes`) — verified end to end through the real chat tool-call pipeline (fake-Ollama-driven, not just direct handler calls), not just the REST API. Sketch deliberately has no chat tools — no clear value in a model calling a drawing canvas.
@@ -190,4 +192,4 @@ Verified live: simulated a completely hung backend (a fake server that never res
 
 ## Not yet decided / open
 
-- No HTTPS — login password and session cookie travel as plaintext HTTP, both on the LAN and over Tailscale's own encrypted tunnel (which wraps the plaintext HTTP but doesn't change what Hermes itself speaks). Acceptable given Tailscale's tunnel is itself encrypted end-to-end, but worth revisiting if that assumption ever changes
+- No HTTPS — login password and session cookie travel as plaintext HTTP, both on the LAN and over Tailscale's own encrypted tunnel (which wraps the plaintext HTTP but doesn't change what Naradi itself speaks). Acceptable given Tailscale's tunnel is itself encrypted end-to-end, but worth revisiting if that assumption ever changes

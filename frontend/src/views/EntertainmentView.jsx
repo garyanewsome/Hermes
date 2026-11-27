@@ -340,7 +340,7 @@ export default function EntertainmentView({ onOpenDrawer, active }) {
           )}
           {data?.vault &&
             (data.vault.error ? (
-              <div role="alert" style={alertText}>The vault copy wasn’t updated: {data.vault.error} Hermes will keep trying.</div>
+              <div role="alert" style={alertText}>The vault copy wasn’t updated: {data.vault.error} Naradi will keep trying.</div>
             ) : (
               <div style={dim}>Copied to {data.vault.path} shortly after changes.</div>
             ))}

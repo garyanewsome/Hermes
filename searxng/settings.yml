@@ -1,6 +1,6 @@
 # Layered on top of SearXNG's defaults (engines, categories, ...). Only what
-# Hermes needs is overridden: JSON output on (the tool reads the JSON API)
-# and the bot limiter off (it's LAN-only and Hermes is the only client).
+# Naradi needs is overridden: JSON output on (the tool reads the JSON API)
+# and the bot limiter off (it's LAN-only and Naradi is the only client).
 use_default_settings: true
 
 server:

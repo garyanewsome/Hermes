@@ -314,7 +314,7 @@ function ServicesCard({ agent, probes, desktop }) {
   );
 }
 
-const EXPANDED_KEY = 'hermes:systemContainersExpanded';
+const EXPANDED_KEY = 'naradi:systemContainersExpanded';
 
 function readExpanded() {
   try {
@@ -508,10 +508,10 @@ export default function SystemView({ onOpenDrawer, active }) {
     if (!active) return undefined;
     refresh();
     const interval = setInterval(refresh, POLL_INTERVAL_MS);
-    window.addEventListener('hermes:wake', refresh);
+    window.addEventListener('naradi:wake', refresh);
     return () => {
       clearInterval(interval);
-      window.removeEventListener('hermes:wake', refresh);
+      window.removeEventListener('naradi:wake', refresh);
     };
   }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -95,8 +95,8 @@ export default function HabitsView({ onOpenDrawer }) {
     const onChanged = () => {
       refresh();
     };
-    window.addEventListener('hermes:data-changed', onChanged);
-    return () => window.removeEventListener('hermes:data-changed', onChanged);
+    window.addEventListener('naradi:data-changed', onChanged);
+    return () => window.removeEventListener('naradi:data-changed', onChanged);
   }, []);
 
   async function refresh() {

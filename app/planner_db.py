@@ -123,7 +123,7 @@ def init_planner_db() -> None:
             """
         )
         # What the daily notes last said, so an automatic import can tell a
-        # change in a note from a correction made in Hermes.
+        # change in a note from a correction made in Naradi.
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS daily_note_seen (
@@ -201,7 +201,7 @@ def init_planner_db() -> None:
         # Every Obsidian task the nightly import (app/vault_tasks.py) has
         # ever brought in, keyed by a hash of its normalized text. Kept
         # separately from todo_items on purpose: a task you complete OR
-        # delete in Hermes must never get re-imported the next night just
+        # delete in Naradi must never get re-imported the next night just
         # because it's still an open checkbox in the vault, so "already
         # imported" can't be inferred from whether the item still exists.
         # todo_item_id is informational only — no FK, so deleting the item
@@ -395,12 +395,24 @@ def init_planner_db() -> None:
             )
             """
         )
-        # Recaps moved under "01 Hermes" in the vault (2026-11-26); keep the
-        # saved paths pointing at where the notes are now.
+        # Saved vault paths follow the notes: recaps moved under "01 Hermes"
+        # (2026-11-26), and that folder became "01 Naradi" with the rename.
         conn.execute(
             """
-            UPDATE recaps SET vault_path = replace(vault_path, '40 Personal/Weekly Recaps/', '01 Hermes/Weekly Recaps/')
+            UPDATE recaps SET vault_path = replace(vault_path, '40 Personal/Weekly Recaps/', '01 Naradi/Weekly Recaps/')
             WHERE vault_path LIKE '40 Personal/Weekly Recaps/%'
+            """
+        )
+        conn.execute(
+            """
+            UPDATE recaps SET vault_path = '01 Naradi/' || substr(vault_path, length('01 Hermes/') + 1)
+            WHERE vault_path LIKE '01 Hermes/%'
+            """
+        )
+        conn.execute(
+            """
+            UPDATE note_vault_exports SET vault_path = '01 Naradi/' || substr(vault_path, length('01 Hermes/') + 1)
+            WHERE vault_path LIKE '01 Hermes/%'
             """
         )
         # TV and movies (app/entertainment.py).
