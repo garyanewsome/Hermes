@@ -77,7 +77,7 @@ def update(activity_id: int, request: ActivityRequest) -> bool:
         return conn.execute(
             """
             UPDATE activities SET activity = %(activity)s, activity_date = %(date)s, distance = %(distance)s,
-                   distance_unit = %(unit)s, duration_seconds = %(seconds)s, paste_id = NULL
+                   distance_unit = %(unit)s, duration_seconds = %(seconds)s, paste_id = NULL, source = NULL
             WHERE id = %(id)s
             """,
             {**_clean(conn, request), "id": activity_id},

@@ -450,6 +450,13 @@ export const saveDay = (date, fields) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(fields),
   });
+export const previewDailyImport = (days, countOld) => workoutRequest(`/daily-import?days=${days}&count_old=${countOld}`);
+export const saveDailyImport = (days) =>
+  workoutRequest('/daily-import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ days }),
+  });
 export const listWorkouts = async () => (await workoutRequest('/workouts')).days;
 export const listExercises = async () => (await workoutRequest('/workouts/exercises')).exercises;
 

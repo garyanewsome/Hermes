@@ -12,8 +12,13 @@ from app import planner_db
 
 router = APIRouter()
 
-FIELDS = ("weight", "burned_total", "burned_active", "calories_in", "protein_g", "carbs_g", "fat_g")
-_PLACES = {"weight": "0.01", "protein_g": "0.1", "carbs_g": "0.1", "fat_g": "0.1"}
+# "weight" is the home weigh-in, "weight_pf" the one at the gym.
+WEIGHTS = ("weight", "weight_pf")
+CALORIES = ("burned_total", "burned_active", "calories_in", "carbs_g", "fat_g", "protein_g")
+NUMBERS = (*WEIGHTS, *CALORIES)
+TEXTS = ("weight_note", "weight_pf_note", "calories_as_of", "body_note", "gym_session", "gym_note")
+FIELDS = (*NUMBERS, "calories_partial", *TEXTS)
+_PLACES = {"weight": "0.01", "weight_pf": "0.01", "carbs_g": "0.1", "fat_g": "0.1", "protein_g": "0.1"}
 
 
 def _number(low: float, high: float):
@@ -32,49 +37,75 @@ class DayRequest(BaseModel):
     protein_g: float | None = _number(0, 2000)
     carbs_g: float | None = _number(0, 2000)
     fat_g: float | None = _number(0, 2000)
+    weight_pf: float | None = _number(40, 1000)
+    # True while the day's calories are still "so far": left out of averages.
+    calories_partial: bool | None = None
+    weight_note: str | None = Field(default=None, max_length=2000)
+    weight_pf_note: str | None = Field(default=None, max_length=2000)
+    calories_as_of: str | None = Field(default=None, max_length=20)
+    body_note: str | None = Field(default=None, max_length=2000)
+    gym_session: str | None = Field(default=None, max_length=2000)
+    gym_note: str | None = Field(default=None, max_length=2000)
 
 
-def _public(row: dict) -> dict:
-    day = {name: None if row[name] is None else float(row[name]) for name in FIELDS}
+def public(row: dict) -> dict:
+    day = {name: None if row[name] is None else float(row[name]) for name in NUMBERS}
+    day.update({name: row[name] for name in TEXTS})
+    day["calories_partial"] = row["calories_partial"]
     both = day["calories_in"] is not None and day["burned_total"] is not None
     # Eaten minus burned: negative is a deficit.
     day["balance"] = round(day["calories_in"] - day["burned_total"]) if both else None
     return {"date": row["log_date"].isoformat(), **day}
 
 
-def save(on: datetime.date, request: DayRequest) -> dict | None:
+def _value(name: str, value):
+    if name in NUMBERS:
+        return None if value is None else Decimal(str(value)).quantize(Decimal(_PLACES.get(name, "1")), ROUND_HALF_UP)
+    if name == "calories_partial":
+        return bool(value)
+    return (value or "").strip() or None
+
+
+def save(on: datetime.date, request: DayRequest, conn=None) -> dict | None:
     """Changes the fields sent and returns the day, or None if nothing is
     left on it."""
     if on > planner_db._today():
         raise ValueError("That date is in the future")
-    sent = {
-        name: None if value is None else Decimal(str(value)).quantize(Decimal(_PLACES.get(name, "1")), ROUND_HALF_UP)
-        for name, value in request.model_dump(exclude_unset=True).items()
-    }
+    sent = {name: _value(name, value) for name, value in request.model_dump(exclude_unset=True).items()}
     if not sent:
         raise ValueError("Nothing to save")
-    with planner_db._connect() as conn:
-        conn.execute("SELECT pg_advisory_xact_lock(hashtext('daily_log'))")
-        row = conn.execute("SELECT * FROM daily_log WHERE log_date = %s", (on,)).fetchone()
-        merged = {name: sent[name] if name in sent else (row[name] if row else None) for name in FIELDS}
-        total, active = merged["burned_total"], merged["burned_active"]
-        if total is not None and active is not None and active > total:
-            raise ValueError("Active calories can't be more than total calories burned")
-        if all(value is None for value in merged.values()):
-            conn.execute("DELETE FROM daily_log WHERE log_date = %s", (on,))
-            return None
-        columns = ", ".join(FIELDS)
-        marks = ", ".join(f"%({name})s" for name in FIELDS)
-        updates = ", ".join(f"{name} = EXCLUDED.{name}" for name in FIELDS)
-        saved = conn.execute(
-            f"""
-            INSERT INTO daily_log (log_date, {columns}) VALUES (%(log_date)s, {marks})
-            ON CONFLICT (log_date) DO UPDATE SET {updates}, updated_at = now()
-            RETURNING *
-            """,
-            {**merged, "log_date": on},
-        ).fetchone()
-    return _public(saved)
+    if conn is not None:
+        return _save(conn, on, sent)
+    with planner_db._connect() as own:
+        return _save(own, on, sent)
+
+
+def _save(conn, on: datetime.date, sent: dict) -> dict | None:
+    conn.execute("SELECT pg_advisory_xact_lock(hashtext('daily_log'))")
+    row = conn.execute("SELECT * FROM daily_log WHERE log_date = %s", (on,)).fetchone()
+    merged = {name: sent[name] if name in sent else (row[name] if row else None) for name in FIELDS}
+    merged["calories_partial"] = bool(merged["calories_partial"])
+    total, active = merged["burned_total"], merged["burned_active"]
+    if total is not None and active is not None and active > total:
+        raise ValueError(f"{on:%b %-d}: active calories can't be more than total calories burned")
+    if all(merged[name] is None for name in (*NUMBERS, *TEXTS)):
+        conn.execute("DELETE FROM daily_log WHERE log_date = %s", (on,))
+        return None
+    # With no calories left there is nothing to be partial about.
+    if all(merged[name] is None for name in CALORIES):
+        merged["calories_partial"], merged["calories_as_of"] = False, None
+    columns = ", ".join(FIELDS)
+    marks = ", ".join(f"%({name})s" for name in FIELDS)
+    updates = ", ".join(f"{name} = EXCLUDED.{name}" for name in FIELDS)
+    saved = conn.execute(
+        f"""
+        INSERT INTO daily_log (log_date, {columns}) VALUES (%(log_date)s, {marks})
+        ON CONFLICT (log_date) DO UPDATE SET {updates}, updated_at = now()
+        RETURNING *
+        """,
+        {**merged, "log_date": on},
+    ).fetchone()
+    return public(saved)
 
 
 def week_summary(days: list[dict], start: datetime.date) -> dict:
@@ -82,8 +113,10 @@ def week_summary(days: list[dict], start: datetime.date) -> dict:
     end = start + datetime.timedelta(days=6)
     inside = [d for d in days if start.isoformat() <= d["date"] <= end.isoformat()]
     averages, counts = {}, {}
-    for name in (*FIELDS, "balance"):
-        values = [d[name] for d in inside if d[name] is not None]
+    for name in (*NUMBERS, "balance"):
+        # Unfinished calorie days would drag the averages down.
+        counted = [d for d in inside if not (d["calories_partial"] and name not in WEIGHTS)]
+        values = [d[name] for d in counted if d[name] is not None]
         places = 1 if name in _PLACES else 0
         averages[name] = round(sum(values) / len(values), places) if values else None
         counts[name] = len(values)
@@ -99,7 +132,7 @@ def log(weeks: int) -> dict:
         rows = conn.execute(
             "SELECT * FROM daily_log WHERE log_date >= %s ORDER BY log_date DESC", (min(start, last_monday),)
         ).fetchall()
-    days = [_public(row) for row in rows]
+    days = [public(row) for row in rows]
     return {
         "today": today.isoformat(),
         "start": start.isoformat(),

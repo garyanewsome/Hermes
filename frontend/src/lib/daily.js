@@ -8,7 +8,7 @@ export function balanceText(balance) {
 }
 
 export const macroText = (day) =>
-  [['P', day.protein_g], ['C', day.carbs_g], ['F', day.fat_g]]
+  [['C', day.carbs_g], ['F', day.fat_g], ['P', day.protein_g]]
     .filter(([, grams]) => grams !== null)
     .map(([letter, grams]) => `${letter} ${number(grams)}`)
     .join(' · ');

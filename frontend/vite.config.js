@@ -26,6 +26,7 @@ export default defineConfig({
       '/nav-order': BACKEND,
       '/activities': BACKEND,
       '/daily': BACKEND,
+      '/daily-import': BACKEND,
       '/notes': BACKEND,
       '/weather': BACKEND,
       '/system': BACKEND,

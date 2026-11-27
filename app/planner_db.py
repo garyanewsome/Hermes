@@ -108,6 +108,20 @@ def init_planner_db() -> None:
             )
             """
         )
+        # What the daily note also records (app/daily_import.py).
+        conn.execute(
+            """
+            ALTER TABLE daily_log
+                ADD COLUMN IF NOT EXISTS weight_pf NUMERIC(6, 2),
+                ADD COLUMN IF NOT EXISTS calories_partial BOOLEAN NOT NULL DEFAULT false,
+                ADD COLUMN IF NOT EXISTS weight_note TEXT,
+                ADD COLUMN IF NOT EXISTS weight_pf_note TEXT,
+                ADD COLUMN IF NOT EXISTS calories_as_of TEXT,
+                ADD COLUMN IF NOT EXISTS body_note TEXT,
+                ADD COLUMN IF NOT EXISTS gym_session TEXT,
+                ADD COLUMN IF NOT EXISTS gym_note TEXT
+            """
+        )
         # Deliberately separate from `tasks` — a plain everyday checklist
         # (groceries, errands), kept simple on purpose so it never grows
         # the quadrant/notes/due-date machinery that makes sense for the
@@ -329,6 +343,8 @@ def init_planner_db() -> None:
                 FROM walks ORDER BY workout_date, position
                 """
             )
+        # Where an activity came from, so a re-import only replaces its own.
+        conn.execute("ALTER TABLE activities ADD COLUMN IF NOT EXISTS source TEXT")
         # Chores (app/chores.py): never finished, so they only have a log of
         # the days they were done.
         conn.execute(

@@ -72,6 +72,9 @@ CODEBASE_SEARCHER_URL = os.environ.get("CODEBASE_SEARCHER_URL", "http://192.168.
 # through it; CodebaseSearcher used to be that and no longer is.
 VAULT_KEEPER_URL = os.environ.get("VAULT_KEEPER_URL", "http://192.168.1.157:8310")
 
+# Obsidian's daily notes, "<folder>/YYYY/MM/YYYY-MM-DD.md" (app/daily_import.py).
+DAILY_NOTES_FOLDER = os.environ.get("DAILY_NOTES_FOLDER", "00 System/Daily Notes")
+
 # Vault folder the Sunday recap is saved into (app/recap.py).
 RECAP_FOLDER = os.environ.get("RECAP_FOLDER", "01 Hermes/Weekly Recaps")
 

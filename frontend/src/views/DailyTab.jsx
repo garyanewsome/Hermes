@@ -1,30 +1,40 @@
 import { useEffect, useRef, useState } from 'react';
 import { dailyLog, saveDay } from '../api.js';
 import { Table, shortDate } from '../components/Charts.jsx';
+import DailyImport from '../components/DailyImport.jsx';
 import { todayISO } from '../lib/dates.js';
 import { balanceText, macroText } from '../lib/daily.js';
 import { card, dim, longDate, number, outline, solid } from './workoutStyles.js';
 
 const GROUPS = [
-  ['Body', [['weight', 'Weight (lb)']]],
+  ['Weigh-in', [['weight', 'Home (lb)'], ['weight_pf', 'PF (lb)']]],
   ['Burned', [['burned_total', 'Total calories'], ['burned_active', 'Active calories']]],
-  ['Eaten', [['calories_in', 'Calories'], ['protein_g', 'Protein (g)'], ['carbs_g', 'Carbs (g)'], ['fat_g', 'Fat (g)']]],
+  ['Eaten', [['calories_in', 'Calories'], ['carbs_g', 'Carbs (g)'], ['fat_g', 'Fat (g)'], ['protein_g', 'Protein (g)']]],
 ];
+const NOTES = [
+  ['weight_note', 'Home weigh-in note'], ['weight_pf_note', 'PF weigh-in note'], ['body_note', 'Body update'],
+  ['gym_session', 'Gym session'], ['gym_note', 'Focus, feel, notes'],
+];
+const TEXT_KEYS = NOTES.map(([key]) => key);
+const CALORIE_KEYS = ['burned_total', 'burned_active', 'calories_in', 'carbs_g', 'fat_g', 'protein_g'];
 const AVERAGES = [
-  ['weight', 'Weight (lb)'], ['calories_in', 'Eaten'], ['burned_total', 'Burned'], ['burned_active', 'Active'],
-  ['balance', 'Balance'], ['protein_g', 'Protein (g)'], ['carbs_g', 'Carbs (g)'], ['fat_g', 'Fat (g)'],
+  ['weight', 'Home (lb)'], ['weight_pf', 'PF (lb)'], ['calories_in', 'Eaten'], ['burned_total', 'Burned'], ['burned_active', 'Active'],
+  ['balance', 'Balance'], ['carbs_g', 'Carbs (g)'], ['fat_g', 'Fat (g)'], ['protein_g', 'Protein (g)'],
 ];
 const field = { background: 'var(--panel-2)', border: '1px solid var(--border-strong)', color: 'var(--text)', borderRadius: 8, padding: '9px 10px', fontSize: 16, width: '100%', minWidth: 0 };
 const heading = { fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent)' };
 
 function dayLine(day) {
   return [
-    day.weight !== null && `${number(day.weight)} lb`,
+    day.weight !== null && `home ${number(day.weight)}`,
+    day.weight_pf !== null && `PF ${number(day.weight_pf)}`,
     day.calories_in !== null && `in ${number(day.calories_in)}`,
     day.burned_total !== null && `out ${number(day.burned_total)}`,
     day.balance !== null && balanceText(day.balance),
     day.burned_total === null && day.burned_active !== null && `active ${number(day.burned_active)}`,
     macroText(day),
+    day.calories_partial && `so far${day.calories_as_of ? ` at ${day.calories_as_of}` : ''}`,
+    day.gym_session,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -44,7 +54,7 @@ function Weeks({ now, before }) {
     <section style={{ ...card, display: 'flex', flexDirection: 'column', gap: 6 }}>
       <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>Daily averages</h2>
       <Table maxHeight={null} headings={['', 'This week', 'Last week']} rows={rows} />
-      <div style={dim}>Each average covers only the days with that number, shown in brackets.</div>
+      <div style={dim}>Each average covers only the days with that number, shown in brackets. Unfinished (“so far”) calorie days are left out.</div>
     </section>
   );
 }
@@ -60,6 +70,7 @@ export default function DailyTab({ active, focus, onSaved }) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [all, setAll] = useState(false);
+  const [importing, setImporting] = useState(false);
   const form = useRef(null);
   const date = picked || todayISO();
 
@@ -89,14 +100,27 @@ export default function DailyTab({ active, focus, onSaved }) {
   const saved = data?.days.find((d) => d.date === date);
   const value = (key) => edits[key] ?? saved?.[key] ?? '';
   const changed = Object.keys(edits).length > 0;
+  const hasCalories = CALORIE_KEYS.some((key) => String(value(key)) !== '');
+  // Numbers typed for today start as "so far"; earlier days as final.
+  const savedCalories = saved && CALORIE_KEYS.some((key) => saved[key] !== null);
+  const partial = edits.calories_partial ?? (savedCalories ? saved.calories_partial : date === todayISO());
 
   async function submit(event) {
     event.preventDefault();
     const fields = {};
     for (const [key, text] of Object.entries(edits)) {
+      if (key === 'calories_partial') continue;
+      if (TEXT_KEYS.includes(key)) {
+        fields[key] = text.trim() || null;
+        continue;
+      }
       const trimmed = String(text).trim().replace(/,(?=\d{3}\b)/g, '').replace(',', '.');
       if (trimmed !== '' && !Number.isFinite(Number(trimmed))) return setError(`“${text}” isn’t a number`);
       fields[key] = trimmed === '' ? null : Number(trimmed);
+    }
+    if (hasCalories && (edits.calories_partial !== undefined || CALORIE_KEYS.some((key) => key in edits))) {
+      fields.calories_partial = partial;
+      if (!partial) fields.calories_as_of = null;
     }
     setBusy(true);
     setError('');
@@ -117,6 +141,18 @@ export default function DailyTab({ active, focus, onSaved }) {
 
   return (
     <>
+      {importing ? (
+        <DailyImport
+          onClose={() => setImporting(false)}
+          onSaved={async () => {
+            setEdits({});
+            await refresh();
+          }}
+        />
+      ) : (
+        <button type="button" onClick={() => setImporting(true)} style={{ ...outline, alignSelf: 'flex-start' }}>Import from daily note</button>
+      )}
+
       <form ref={form} onSubmit={submit} style={{ ...card, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
           <div style={{ fontSize: 15, fontWeight: 600 }}>{date === todayISO() ? 'Today' : longDate(date)}</div>
@@ -144,10 +180,37 @@ export default function DailyTab({ active, focus, onSaved }) {
             </div>
           </fieldset>
         ))}
+        {hasCalories && (
+          <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" checked={!!partial} onChange={(e) => setEdits((current) => ({ ...current, calories_partial: e.target.checked }))} style={{ width: 18, height: 18, accentColor: 'var(--accent)' }} />
+            Calories are “so far”{saved?.calories_as_of && partial ? ` (as of ${saved.calories_as_of})` : ''}; leave out of averages
+          </label>
+        )}
+        <details key={date}>
+          <summary style={{ ...dim, cursor: 'pointer' }}>Notes{TEXT_KEYS.some((key) => saved?.[key]) ? ' (saved)' : ''}</summary>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+            {NOTES.map(([key, label]) => (
+              <label key={key} style={{ ...dim, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {label}
+                <textarea
+                  rows={key === 'gym_note' || key === 'body_note' ? 4 : 2}
+                  value={value(key)}
+                  maxLength={2000}
+                  onChange={(e) => {
+                    const { value: text } = e.target;
+                    setMessage('');
+                    setEdits((current) => ({ ...current, [key]: text }));
+                  }}
+                  style={{ ...field, resize: 'vertical' }}
+                />
+              </label>
+            ))}
+          </div>
+        </details>
         {saved?.balance !== null && saved?.balance !== undefined && (
           <div style={{ fontSize: 14 }}>
             <strong style={{ color: 'var(--accent)' }}>{balanceText(saved.balance)}</strong>
-            <span style={dim}> · eaten {number(saved.calories_in)} minus burned {number(saved.burned_total)}</span>
+            <span style={dim}> {saved.calories_partial ? 'so far ' : ''}· eaten {number(saved.calories_in)} minus burned {number(saved.burned_total)}</span>
           </div>
         )}
         {error && <div role="alert" style={{ fontSize: 13, color: '#ff6b6b' }}>{error}</div>}
