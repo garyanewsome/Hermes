@@ -1,14 +1,27 @@
 import { useEffect, useState } from 'react';
 import TopBar from '../components/TopBar.jsx';
-import { deleteHabit, listHabits, logHabit, setHabitDay } from '../api.js';
+import { createHabit, deleteHabit, listHabits, logHabit, setHabitDay } from '../api.js';
+import AmountDialog from '../components/AmountDialog.jsx';
+import HabitSettings from '../components/HabitSettings.jsx';
+import { number } from './workoutStyles.js';
+import { shortDate } from '../components/Charts.jsx';
 import useIsMobile from '../hooks/useIsMobile.js';
 import HabitCalendarPopover from '../components/HabitCalendarPopover.jsx';
 
-function Dot({ day, onToggle }) {
+// What a habit that counts something has so far.
+function amountText(habit) {
+  const { totals, unit } = habit;
+  if (habit.add_up) return `${number(totals.today || 0)} ${unit} today · ${number(totals.this_week)} this week`;
+  if (!totals.latest) return `No ${unit} yet`;
+  const day = habit.last_7_days[habit.last_7_days.length - 1].date;
+  return `${number(totals.latest.amount)} ${unit}${totals.latest.date === day ? ' today' : ` on ${shortDate(totals.latest.date)}`}`;
+}
+
+function Dot({ day, unit, onToggle }) {
   return (
     <button
       onClick={() => onToggle(day.date, !day.logged)}
-      title={`${day.date}${day.logged ? ' — click to undo' : ' — click to log'}`}
+      title={unit ? `${day.date}${day.amount !== null ? ` — ${day.amount} ${unit}` : ''}` : `${day.date}${day.logged ? ' — click to undo' : ' — click to log'}`}
       style={{
         width: 16,
         height: 16,
@@ -70,6 +83,10 @@ export default function HabitsView({ onOpenDrawer }) {
   const [name, setName] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(null); // habit, or null
   const [calendarHabit, setCalendarHabit] = useState(null); // habit whose history is open, or null
+  const [entering, setEntering] = useState(null); // {habit, day} for a habit with a unit
+  const blank = { unit: '', add_up: true, hide_streak: false };
+  const [settings, setSettings] = useState(blank);
+  const [formError, setFormError] = useState('');
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -100,9 +117,18 @@ export default function HabitsView({ onOpenDrawer }) {
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
+    setFormError('');
+    try {
+      // A habit with a unit waits for its first number; a check-off is logged now.
+      if (settings.unit.trim() || settings.hide_streak) await createHabit({ name: trimmed, ...settings });
+      if (!settings.unit.trim()) await logHabit(trimmed);
+    } catch (err) {
+      setFormError(err.message);
+      return;
+    }
     setName('');
+    setSettings(blank);
     setShowForm(false);
-    await logHabit(trimmed);
     refresh();
   }
 
@@ -121,12 +147,13 @@ export default function HabitsView({ onOpenDrawer }) {
         {habits.map((h) => {
           const todayEntry = h.last_7_days[h.last_7_days.length - 1];
           const loggedToday = !!todayEntry?.logged;
+          const lit = h.hide_streak ? loggedToday : h.streak > 0;
           return (
           <div
             key={h.id}
             style={{
-              background: h.streak > 0 ? 'var(--accent-wash)' : 'var(--panel)',
-              border: h.streak > 0 ? '1px solid var(--accent-glow)' : '1px solid var(--border)',
+              background: lit ? 'var(--accent-wash)' : 'var(--panel)',
+              border: lit ? '1px solid var(--accent-glow)' : '1px solid var(--border)',
               borderRadius: 12,
               padding: isMobile ? '14px 16px' : '16px 20px',
               display: 'flex',
@@ -151,7 +178,7 @@ export default function HabitsView({ onOpenDrawer }) {
                 textAlign: 'left',
                 fontSize: 14,
                 fontWeight: 600,
-                color: h.streak > 0 ? 'var(--text)' : '#c7c8cc',
+                color: lit ? 'var(--text)' : '#c7c8cc',
                 cursor: 'pointer',
               }}
             >
@@ -163,27 +190,37 @@ export default function HabitsView({ onOpenDrawer }) {
             </button>
             <div style={{ display: 'flex', gap: 6 }}>
               {h.last_7_days.map((day) => (
-                <Dot key={day.date} day={day} onToggle={(date, logged) => handleToggleDay(h.id, date, logged)} />
+                <Dot
+                  key={day.date}
+                  day={day}
+                  unit={h.unit}
+                  onToggle={(date, logged) => (h.unit ? setEntering({ habit: h, day }) : handleToggleDay(h.id, date, logged))}
+                />
               ))}
             </div>
             <button
-              onClick={() => (loggedToday ? handleToggleDay(h.id, todayEntry.date, false) : handleLog(h.name))}
+              onClick={() => {
+                if (h.unit) setEntering({ habit: h, day: todayEntry });
+                else if (loggedToday) handleToggleDay(h.id, todayEntry.date, false);
+                else handleLog(h.name);
+              }}
               style={{
                 marginLeft: isMobile ? 0 : 'auto',
                 height: 30,
                 padding: '0 12px',
                 borderRadius: 8,
                 background: 'transparent',
-                border: `1px solid ${loggedToday ? 'color-mix(in srgb, var(--accent) 55%, var(--text-faint) 45%)' : 'var(--accent-glow)'}`,
-                color: loggedToday ? 'color-mix(in srgb, var(--accent) 55%, var(--text-faint) 45%)' : 'var(--accent)',
+                border: `1px solid ${loggedToday && !h.unit ? 'color-mix(in srgb, var(--accent) 55%, var(--text-faint) 45%)' : 'var(--accent-glow)'}`,
+                color: loggedToday && !h.unit ? 'color-mix(in srgb, var(--accent) 55%, var(--text-faint) 45%)' : 'var(--accent)',
                 fontSize: 12,
                 fontWeight: 600,
               }}
             >
-              {loggedToday ? 'Undo today' : 'Log today'}
+              {h.unit ? (todayEntry.amount === null ? 'Enter today' : h.add_up ? 'Add more' : 'Change today') : loggedToday ? 'Undo today' : 'Log today'}
             </button>
-            <div style={{ fontSize: 13, color: h.streak > 0 ? 'var(--accent)' : 'var(--text-faint)', fontWeight: 600, minWidth: isMobile ? 0 : 90, marginLeft: isMobile ? 'auto' : 0, textAlign: 'right' }}>
-              {h.streak > 0 ? `${h.streak} day streak` : 'no streak yet'}
+            <div style={{ fontSize: 13, color: lit ? 'var(--accent)' : 'var(--text-faint)', fontWeight: 600, minWidth: isMobile ? 0 : 90, marginLeft: isMobile ? 'auto' : 0, textAlign: 'right' }}>
+              {!h.hide_streak && <div>{h.streak > 0 ? `${h.streak} day streak` : 'no streak yet'}</div>}
+              {h.unit && <div style={{ fontWeight: 400, fontSize: 12, color: 'var(--text-dim)' }}>{amountText(h)}</div>}
             </div>
             <button
               onClick={() => setConfirmingDelete(h)}
@@ -200,16 +237,18 @@ export default function HabitsView({ onOpenDrawer }) {
         })}
 
         {showForm ? (
-          <form onSubmit={handleAdd} style={{ display: 'flex', gap: 10 }}>
+          <form onSubmit={handleAdd} style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 340, flexShrink: 0 }}>
             <input
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Habit name"
-              style={{ flex: 1, maxWidth: 240, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}
+              style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 8, padding: '8px 12px', fontSize: 16 }}
             />
+            <HabitSettings value={settings} onChange={setSettings} />
+            {formError && <div role="alert" style={{ fontSize: 13, color: '#ff6b6b' }}>{formError}</div>}
             <button type="submit" style={{ background: 'var(--accent)', color: 'var(--accent-text)', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600 }}>
-              Add and log today
+              {settings.unit.trim() ? 'Add habit' : 'Add and log today'}
             </button>
           </form>
         ) : (
@@ -234,6 +273,17 @@ export default function HabitsView({ onOpenDrawer }) {
       </div>
 
       {calendarHabit && <HabitCalendarPopover habit={calendarHabit} onClose={() => setCalendarHabit(null)} onChanged={refresh} />}
+
+      {entering && (
+        <AmountDialog
+          habit={entering.habit}
+          date={entering.day.date}
+          today={entering.habit.last_7_days[entering.habit.last_7_days.length - 1].date}
+          day={entering.day}
+          onClose={() => setEntering(null)}
+          onSaved={refresh}
+        />
+      )}
 
       {confirmingDelete && (
         <ConfirmDeleteHabit habit={confirmingDelete} onCancel={() => setConfirmingDelete(null)} onConfirm={handleConfirmDelete} />

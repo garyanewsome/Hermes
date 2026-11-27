@@ -20,6 +20,7 @@ import {
 } from '../api.js';
 import { DUE_COLORS, dueTone, formatDue, parseISODate, todayISO } from '../lib/dates.js';
 import { QUADRANT_BY_KEY, QUADRANTS } from '../lib/quadrants.js';
+import AmountDialog from '../components/AmountDialog.jsx';
 
 const POLL_INTERVAL_MS = 60000;
 const TODO_COLOR = '#b46bff';
@@ -484,6 +485,7 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
   const isMobile = useIsMobile();
   const [agenda, setAgenda] = useState(null);
   const [tasks, setTasks] = useState(null);
+  const [enteringHabit, setEnteringHabit] = useState(null); // a habit with a unit
   const [habits, setHabits] = useState(null);
   const [chores, setChores] = useState(null);
   const [weather, setWeather] = useState(null);
@@ -597,6 +599,11 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
 
   async function handleHabitToggle(habit) {
     const day = habit.last_7_days[habit.last_7_days.length - 1];
+    // A habit with a unit asks for its number.
+    if (habit.unit) {
+      setEnteringHabit(habit);
+      return;
+    }
     const next = !day.logged;
     setHabits((prev) =>
       prev.map((h) =>
@@ -757,7 +764,12 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
                 return (
                   <Row key={habit.id} left={<CheckCircle checked={logged} color={HABIT_COLOR} label={`${logged ? 'Unlog' : 'Log'} ${habit.name} today`} onClick={() => handleHabitToggle(habit)} />}>
                     <div style={{ flex: 1, minWidth: 0, fontSize: 16, color: logged ? 'var(--text-dim)' : 'var(--text)', overflowWrap: 'anywhere' }}>{habit.name}</div>
-                    {habit.streak > 0 && (
+                    {habit.unit && habit.last_7_days[habit.last_7_days.length - 1]?.amount !== null && (
+                      <div style={{ fontSize: 12.5, color: 'var(--text-faint)', flexShrink: 0 }}>
+                        {habit.last_7_days[habit.last_7_days.length - 1].amount} {habit.unit}
+                      </div>
+                    )}
+                    {habit.streak > 0 && !habit.hide_streak && (
                       <div style={{ fontSize: 12.5, color: 'var(--text-faint)', flexShrink: 0 }}>
                         {habit.streak} day{habit.streak === 1 ? '' : 's'}
                       </div>
@@ -770,6 +782,20 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
           </div>
         </div>
       </div>
+
+      {enteringHabit && (
+        <AmountDialog
+          habit={enteringHabit}
+          date={enteringHabit.last_7_days[enteringHabit.last_7_days.length - 1].date}
+          today={enteringHabit.last_7_days[enteringHabit.last_7_days.length - 1].date}
+          day={enteringHabit.last_7_days[enteringHabit.last_7_days.length - 1]}
+          onClose={() => setEnteringHabit(null)}
+          onSaved={async () => {
+            await refreshLocal();
+            announceChange();
+          }}
+        />
+      )}
 
       {editingLocation && (
         <LocationPopover current={weather?.location?.name || 'Latrobe, PA'} onPick={handlePickLocation} onClose={() => setEditingLocation(false)} />

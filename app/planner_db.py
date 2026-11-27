@@ -81,6 +81,17 @@ def init_planner_db() -> None:
             )
             """
         )
+        # Habits that count something (app/habit_amounts.py). A unit turns
+        # counting on; each logged day then holds one number.
+        conn.execute(
+            """
+            ALTER TABLE habits
+                ADD COLUMN IF NOT EXISTS unit TEXT,
+                ADD COLUMN IF NOT EXISTS add_up BOOLEAN NOT NULL DEFAULT true,
+                ADD COLUMN IF NOT EXISTS hide_streak BOOLEAN NOT NULL DEFAULT false
+            """
+        )
+        conn.execute("ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS amount NUMERIC(10, 2)")
         # Deliberately separate from `tasks` — a plain everyday checklist
         # (groceries, errands), kept simple on purpose so it never grows
         # the quadrant/notes/due-date machinery that makes sense for the
@@ -627,23 +638,38 @@ def habit_streak(name: str) -> int:
     return streak
 
 
+def habit_amounts_by_day(conn, habit_id: int) -> dict[date, float]:
+    rows = conn.execute(
+        "SELECT logged_date, amount::float8 AS amount FROM habit_logs WHERE habit_id = %s AND amount IS NOT NULL",
+        (habit_id,),
+    ).fetchall()
+    return {row["logged_date"]: row["amount"] for row in rows}
+
+
 def habit_history(habit_id: int) -> dict | None:
     """Every date this habit was logged, for the calendar popup. `today` is
     the app's own timezone-aware date so the calendar agrees with the streak
     about which day it is. None if the habit doesn't exist."""
+    from app import habit_amounts
+
+    today = _today()
     with _connect() as conn:
-        habit = conn.execute("SELECT id, name FROM habits WHERE id = %s", (habit_id,)).fetchone()
+        habit = conn.execute(
+            "SELECT id, name, unit, add_up, hide_streak FROM habits WHERE id = %s", (habit_id,)
+        ).fetchone()
         if habit is None:
             return None
         rows = conn.execute(
             "SELECT logged_date FROM habit_logs WHERE habit_id = %s ORDER BY logged_date",
             (habit_id,),
         ).fetchall()
+        amounts = habit_amounts_by_day(conn, habit_id)
     return {
-        "id": habit["id"],
-        "name": habit["name"],
-        "today": _today().isoformat(),
+        **habit,
+        "today": today.isoformat(),
         "dates": [row["logged_date"].isoformat() for row in rows],
+        "amounts": {day.isoformat(): n for day, n in amounts.items()},
+        "chart": habit_amounts.chart(amounts, habit["add_up"], today),
     }
 
 
@@ -657,13 +683,13 @@ def habit_last_n_days(habit_id: int, days: int = 7) -> list[dict]:
     start = today - timedelta(days=days - 1)
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT logged_date FROM habit_logs WHERE habit_id = %s AND logged_date >= %s",
+            "SELECT logged_date, amount::float8 AS amount FROM habit_logs WHERE habit_id = %s AND logged_date >= %s",
             (habit_id, start),
         ).fetchall()
-    logged_dates = {row["logged_date"] for row in rows}
+    logged = {row["logged_date"]: row["amount"] for row in rows}
     return [
-        {"date": (start + timedelta(days=i)).isoformat(), "logged": (start + timedelta(days=i)) in logged_dates}
-        for i in range(days)
+        {"date": day.isoformat(), "logged": day in logged, "amount": logged.get(day)}
+        for day in (start + timedelta(days=i) for i in range(days))
     ]
 
 
@@ -682,14 +708,21 @@ def set_habit_log(habit_id: int, on_date: date, logged: bool) -> None:
 
 
 def list_habits_with_streaks() -> list[dict]:
+    from app import habit_amounts
+
+    today = _today()
     with _connect() as conn:
-        rows = conn.execute("SELECT id, name FROM habits ORDER BY name").fetchall()
+        rows = conn.execute("SELECT id, name, unit, add_up, hide_streak FROM habits ORDER BY name").fetchall()
+        totals = {
+            row["id"]: habit_amounts.summary(habit_amounts_by_day(conn, row["id"]), today)
+            for row in rows if row["unit"]
+        }
     return [
         {
-            "id": row["id"],
-            "name": row["name"],
+            **row,
             "streak": habit_streak(row["name"]),
             "last_7_days": habit_last_n_days(row["id"]),
+            "totals": totals.get(row["id"]),
         }
         for row in rows
     ]

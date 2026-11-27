@@ -195,6 +195,19 @@ export async function setHabitDay(habitId, date, logged) {
   });
 }
 
+const habitRequest = async (url, method, payload) => {
+  const res = await apiFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  if (!res.ok) {
+    const detail = (await res.json().catch(() => null))?.detail;
+    throw new Error(typeof detail === 'string' ? detail : `That didn’t save (${res.status})`);
+  }
+  return res.json();
+};
+export const createHabit = (habit) => habitRequest('/habits', 'POST', habit);
+export const updateHabit = (habitId, settings) => habitRequest(`/habits/${habitId}`, 'PATCH', settings);
+export const putHabitAmount = (habitId, date, amount, mode) =>
+  habitRequest(`/habits/${habitId}/amount`, 'PUT', { date, amount, mode });
+
 export async function deleteHabit(habitId) {
   await apiFetch(`/habits/${habitId}`, { method: 'DELETE' });
 }

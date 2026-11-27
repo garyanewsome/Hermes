@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { addDays, parseISODate, toISODate } from '../lib/dates.js';
-import { getHabitHistory, setHabitDay } from '../api.js';
+import { getHabitHistory, setHabitDay, updateHabit } from '../api.js';
+import { number, outline, solid } from '../views/workoutStyles.js';
+import AmountDialog from './AmountDialog.jsx';
+import { Line } from './Charts.jsx';
+import HabitSettings from './HabitSettings.jsx';
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -54,13 +58,22 @@ export default function HabitCalendarPopover({ habit, onClose, onChanged }) {
   const [history, setHistory] = useState(null); // {today, dates: Set}
   const [failed, setFailed] = useState(false);
   const [view, setView] = useState(null); // {y, m}
+  const [entering, setEntering] = useState(null); // a date, for habits with a unit
+  const [settings, setSettings] = useState(null); // the form while it's open
+  const [settingsError, setSettingsError] = useState('');
+
+  const load = () =>
+    getHabitHistory(habit.id).then((h) => {
+      setHistory({ ...h, dates: new Set(h.dates) });
+      return h;
+    });
 
   useEffect(() => {
     let cancelled = false;
     getHabitHistory(habit.id)
       .then((h) => {
         if (cancelled) return;
-        setHistory({ today: h.today, dates: new Set(h.dates) });
+        setHistory({ ...h, dates: new Set(h.dates) });
         const t = parseISODate(h.today);
         setView({ y: t.getFullYear(), m: t.getMonth() });
       })
@@ -74,11 +87,29 @@ export default function HabitCalendarPopover({ habit, onClose, onChanged }) {
 
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Escape') onClose();
+      // With the number box open, Escape closes only that.
+      if (e.key === 'Escape' && !entering) onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, entering]);
+
+  async function reload() {
+    await load();
+    onChanged?.();
+  }
+
+  async function saveSettings(event) {
+    event.preventDefault();
+    setSettingsError('');
+    try {
+      await updateHabit(habit.id, settings);
+      setSettings(null);
+      await reload();
+    } catch (err) {
+      setSettingsError(err.message);
+    }
+  }
 
   const stats = useMemo(() => {
     if (!history || !view) return null;
@@ -160,8 +191,8 @@ export default function HabitCalendarPopover({ habit, onClose, onChanged }) {
           <>
             <div style={{ display: 'flex', gap: 8 }}>
               <Stat label="Month" value={stats.inMonth} />
-              <Stat label="Streak" value={stats.streak} />
-              <Stat label="Best" value={stats.best} />
+              {!history.hide_streak && <Stat label="Streak" value={stats.streak} />}
+              {!history.hide_streak && <Stat label="Best" value={stats.best} />}
               <Stat label="Total" value={stats.total} />
             </div>
 
@@ -196,9 +227,9 @@ export default function HabitCalendarPopover({ habit, onClose, onChanged }) {
                     type="button"
                     className="dp-day"
                     disabled={future}
-                    aria-label={`${d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}${logged ? ', logged' : ''}`}
+                    aria-label={`${d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}${logged ? ', logged' : ''}${history.amounts[iso] !== undefined && history.unit ? `, ${history.amounts[iso]} ${history.unit}` : ''}`}
                     aria-pressed={logged}
-                    onClick={() => toggle(iso)}
+                    onClick={() => (history.unit ? setEntering(iso) : toggle(iso))}
                     style={{
                       height: 40,
                       borderRadius: 10,
@@ -214,12 +245,50 @@ export default function HabitCalendarPopover({ habit, onClose, onChanged }) {
                     }}
                   >
                     {d.getDate()}
+                    {history.unit && history.amounts[iso] !== undefined && (
+                      <span style={{ display: 'block', fontSize: 9.5, lineHeight: 1, fontWeight: 400 }}>{number(history.amounts[iso])}</span>
+                    )}
                   </button>
                 );
               })}
             </div>
 
-            <div style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>Tap a day to log or unlog it.</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>
+              {history.unit ? 'Tap a day to enter its number.' : 'Tap a day to log or unlog it.'}
+            </div>
+
+            {history.unit && history.chart.points.length > 0 && (
+              <Line
+                key={history.chart.kind}
+                title={history.chart.kind === 'weeks' ? `Weekly total (${history.unit})` : `Logged ${history.unit}`}
+                valueHeading={history.unit}
+                start={history.chart.points[0].date}
+                end={history.chart.points[history.chart.points.length - 1].date}
+                points={history.chart.points.map((point) => ({
+                  ...point,
+                  detail: `${history.chart.kind === 'weeks' ? 'week total ' : ''}${number(point.value)} ${history.unit}`,
+                }))}
+              />
+            )}
+
+            {settings ? (
+              <form onSubmit={saveSettings} style={{ display: 'flex', flexDirection: 'column', gap: 10, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                <HabitSettings value={settings} onChange={setSettings} />
+                {settingsError && <div role="alert" style={{ fontSize: 13, color: '#ff6b6b' }}>{settingsError}</div>}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="submit" style={solid}>Save settings</button>
+                  <button type="button" onClick={() => setSettings(null)} style={outline}>Cancel</button>
+                </div>
+              </form>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSettings({ unit: history.unit || '', add_up: history.add_up, hide_streak: history.hide_streak })}
+                style={{ ...outline, alignSelf: 'flex-start' }}
+              >
+                Settings
+              </button>
+            )}
           </>
         )}
 
@@ -233,6 +302,16 @@ export default function HabitCalendarPopover({ habit, onClose, onChanged }) {
           </button>
         </div>
       </div>
+      {entering && ready && (
+        <AmountDialog
+          habit={history}
+          date={entering}
+          today={history.today}
+          day={{ logged: history.dates.has(entering), amount: history.amounts[entering] ?? null }}
+          onClose={() => setEntering(null)}
+          onSaved={reload}
+        />
+      )}
     </div>
   );
 }

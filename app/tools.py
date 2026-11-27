@@ -25,7 +25,7 @@ from app.config import (
     UPLOADS_DIR,
     VAULT_KEEPER_URL,
 )
-from app import chore_chat, db, documents, music, planner_db, show_chat, tone_analysis, web, workout_chat
+from app import chore_chat, db, documents, habit_chat, music, planner_db, show_chat, tone_analysis, web, workout_chat
 from app.pod_go_reference import AMPS_CLEAN, AMPS_CRUNCH, AMPS_HIGH_GAIN, CABS_COMMON, EFFECTS_SHORT
 
 logger = logging.getLogger("hermes")
@@ -144,30 +144,12 @@ def complete_task(title: str) -> str:
     return f"Marked \"{matches[0]['title']}\" done."
 
 
-def log_habit(name: str) -> str:
-    planner_db.log_habit(name)
-    streak = planner_db.habit_streak(name)
-    day = "day" if streak == 1 else "days"
-    return f"Logged \"{name}\" for today. Current streak: {streak} {day}."
-
-
-def _format_last_7_days(days: list[dict]) -> str:
-    return ", ".join(f"{d['date']}: {'done' if d['logged'] else 'missed'}" for d in days)
+def log_habit(name: str, amount: float | None = None, unit: str | None = None, when: str | None = None) -> str:
+    return habit_chat.log(name, amount, unit, when)
 
 
 def habit_status(name: str | None = None) -> str:
-    habits = planner_db.list_habits_with_streaks()
-    if not habits:
-        return "No habits being tracked yet."
-    if name:
-        match = next((h for h in habits if h["name"] == name), None)
-        if not match:
-            return f"No habit named \"{name}\" found."
-        habits = [match]
-    return "\n".join(
-        f"{h['name']}: {h['streak']} day streak. Last 7 days — {_format_last_7_days(h['last_7_days'])}."
-        for h in habits
-    )
+    return habit_chat.status(name)
 
 
 def log_chore(name: str, when: str | None = None) -> str:
@@ -865,14 +847,21 @@ TOOLS = [
         "function": {
             "name": "log_habit",
             "description": (
-                "Log today's occurrence of a habit and report the current streak. "
-                "Use when the user mentions doing something they track as a habit "
-                "(e.g. 'went for a run today', 'meditated this morning')."
+                "Record that the user did a habit, with a number if they give one, e.g. 'meditated this "
+                "morning', 'practiced bass for 45 minutes', 'played bass for an hour yesterday', 'read 20 pages', 'I weigh 182'. Use when they "
+                "report something they track as a habit, never for a question. Call it for every report: "
+                "nothing is saved unless you do."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "name": {"type": "string", "description": "The habit's name, e.g. 'meditate' or 'run'"}
+                    "name": {"type": "string", "description": "The habit's name, e.g. 'meditate' or 'run'"},
+                    "amount": {"type": "number", "description": "Only a number the user said"},
+                    "unit": {"type": "string", "description": "The unit the user used, e.g. 'minutes' or 'hours'"},
+                    "when": {
+                        "type": "string",
+                        "description": "Only if not today, as said: 'yesterday', 'saturday' or YYYY-MM-DD",
+                    },
                 },
                 "required": ["name"],
             },
@@ -883,7 +872,8 @@ TOOLS = [
         "function": {
             "name": "habit_status",
             "description": (
-                "Report streak(s) and the last 7 days' actual logged/missed dates "
+                "Report habits: totals or latest value for ones that count something (e.g. 'how much did "
+                "I practice this week?'), streaks and the last 7 days' actual logged/missed dates "
                 "for habits being tracked — use this for anything about recent "
                 "consistency or patterns (e.g. 'how did I do this week', 'did I "
                 "miss meditating on Tuesday'), not just the current streak number. "
@@ -1739,7 +1729,7 @@ GROUP_KEYWORDS: dict[str, list[str]] = {
     "dev_backlog": ["backlog", "dev task", "coding task", "code task", "bug"],
     "vst_memory": ["vst", "plugin", "project memory"],
     "board": ["board", "task", "quadrant", "backlog"],
-    "habits": ["habit", "streak", "meditat", "exercis"],
+    "habits": ["habit", "streak", "meditat", "exercis", "practic", "i weigh"],
     "todo": ["todo", "to-do", "to do", "grocery", "groceries", "errand", "remind me", "checklist"],
     "chores": [
         "chore", "dusted", "dusting", "cleaned", "cleaning", "descale", "vacuum", "mopped", "mopping",
@@ -1800,6 +1790,12 @@ def select_tools(recent_texts: list[str], has_attachments: bool) -> list[dict]:
                 matched_groups.add("workouts")
         except Exception:
             logger.exception("Couldn't check the message against the workout log")
+    if "habits" not in matched_groups:
+        try:
+            if habit_chat.mentions(haystack):
+                matched_groups.add("habits")
+        except Exception:
+            logger.exception("Couldn't check the message against the habit names")
     # Titles on the watch list are keywords too ("finished Dark Matter").
     if "shows" not in matched_groups:
         try:
