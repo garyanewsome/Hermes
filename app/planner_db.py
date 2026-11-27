@@ -409,12 +409,6 @@ def init_planner_db() -> None:
             WHERE vault_path LIKE '01 Hermes/%'
             """
         )
-        conn.execute(
-            """
-            UPDATE note_vault_exports SET vault_path = '01 Naradi/' || substr(vault_path, length('01 Hermes/') + 1)
-            WHERE vault_path LIKE '01 Hermes/%'
-            """
-        )
         # TV and movies (app/entertainment.py).
         conn.execute(
             """
@@ -478,6 +472,12 @@ def init_planner_db() -> None:
                 vault_path TEXT NOT NULL,
                 exported_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )
+            """
+        )
+        conn.execute(
+            """
+            UPDATE note_vault_exports SET vault_path = '01 Naradi/' || substr(vault_path, length('01 Hermes/') + 1)
+            WHERE vault_path LIKE '01 Hermes/%'
             """
         )
         # Small key/value store for app-level preferences (the weather
