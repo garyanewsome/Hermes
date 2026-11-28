@@ -136,25 +136,46 @@ function CheckCircle({ checked, color, onClick, label }) {
   );
 }
 
-function Card({ title, color, count, onOpen, desktop, children }) {
+// A collapsible card is one line until opened, like the weekly recap, and
+// takes a full row of its own rather than a place in the columns.
+function Card({ title, color, count, onOpen, desktop, collapsible, children }) {
+  const [expanded, setExpanded] = useState(false);
+  const open = !collapsible || expanded;
+  const heading = (
+    <>
+      <span style={{ fontSize: desktop ? 14 : 13, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color }}>{title}</span>
+      {count != null && <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>{count}</span>}
+    </>
+  );
   return (
     <section
       style={{
         background: 'var(--panel)',
         border: '1px solid var(--border)',
         borderRadius: 14,
-        padding: desktop ? '18px 18px 8px' : '14px 14px 6px',
+        padding: desktop ? `18px 18px ${open ? 8 : 18}px` : `14px 14px ${open ? 6 : 14}px`,
         // Keep a card whole inside its column and space the stack.
         breakInside: desktop ? 'avoid' : undefined,
-        marginBottom: desktop ? 18 : undefined,
+        marginBottom: desktop && !collapsible ? 18 : undefined,
         // Desktop: a neon rule along the top edge in the section's own color.
         boxShadow: desktop ? `inset 0 2px 0 0 ${color}, 0 0 24px -12px ${color}` : undefined,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 6, padding: '0 2px' }}>
-        <div style={{ fontSize: desktop ? 14 : 13, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color }}>{title}</div>
-        {count != null && <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>{count}</div>}
-        {onOpen && (
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: open ? 6 : 0, padding: '0 2px' }}>
+        {collapsible ? (
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            aria-expanded={expanded}
+            style={{ flex: 1, display: 'flex', alignItems: 'baseline', gap: 10, background: 'transparent', border: 'none', padding: 0, textAlign: 'left' }}
+          >
+            {heading}
+            <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--text-dim)' }}>{expanded ? 'Close' : 'Show'}</span>
+          </button>
+        ) : (
+          heading
+        )}
+        {open && onOpen && (
           <button
             type="button"
             onClick={onOpen}
@@ -164,7 +185,7 @@ function Card({ title, color, count, onOpen, desktop, children }) {
           </button>
         )}
       </div>
-      {children}
+      {open && children}
     </section>
   );
 }
@@ -667,6 +688,26 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
 
           <RecapCard active={active} />
 
+          {/* The server sends chores only on weekends, and only due ones. It
+              sits outside the columns so opening it doesn't reshuffle them. */}
+          {chores && chores.chores.length > 0 && (
+          <Card collapsible desktop={!isMobile} title="Chores" color={CHORE_COLOR} count={chores.chores.filter((c) => c.last_done !== chores.today).length} onOpen={() => onNavigate('chores')}>
+            {chores.chores.map((chore) => {
+              const done = chore.last_done === chores.today;
+              return (
+                <Row key={chore.id} left={<CheckCircle checked={done} color={CHORE_COLOR} label={done ? `Undo: ${chore.name}` : `Did it: ${chore.name}`} onClick={() => handleChoreToggle(chore)} />}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 16, lineHeight: 1.3, color: done ? 'var(--text-dim)' : 'var(--text)', overflowWrap: 'anywhere' }}>{chore.name}</div>
+                    <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2 }}>
+                      {done ? 'done today' : chore.days_ago === null ? 'never done' : `last done ${chore.days_ago} days ago`}
+                    </div>
+                  </div>
+                </Row>
+              );
+            })}
+          </Card>
+          )}
+
           {/* On a wide screen the sections sit side by side as CSS columns
               (cards stack under each other without leaving holes when one
               is taller than its neighbour); on a phone they stack. */}
@@ -731,25 +772,6 @@ export default function TodayView({ onOpenDrawer, onNavigate, active }) {
                   </Row>
                 );
               })}
-          </Card>
-          )}
-
-          {/* The server sends chores only on weekends, and only due ones. */}
-          {chores && chores.chores.length > 0 && (
-          <Card desktop={!isMobile} title="Chores" color={CHORE_COLOR} count={chores.chores.filter((c) => c.last_done !== chores.today).length} onOpen={() => onNavigate('chores')}>
-            {chores.chores.map((chore) => {
-              const done = chore.last_done === chores.today;
-              return (
-                <Row key={chore.id} left={<CheckCircle checked={done} color={CHORE_COLOR} label={done ? `Undo: ${chore.name}` : `Did it: ${chore.name}`} onClick={() => handleChoreToggle(chore)} />}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 16, lineHeight: 1.3, color: done ? 'var(--text-dim)' : 'var(--text)', overflowWrap: 'anywhere' }}>{chore.name}</div>
-                    <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2 }}>
-                      {done ? 'done today' : chore.days_ago === null ? 'never done' : `last done ${chore.days_ago} days ago`}
-                    </div>
-                  </div>
-                </Row>
-              );
-            })}
           </Card>
           )}
 
