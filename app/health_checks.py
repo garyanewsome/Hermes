@@ -26,6 +26,7 @@ logger = logging.getLogger("naradi")
 
 INTERVAL_SECONDS = 30 * 60
 EXTRACT_TIMEOUT = 120.0
+VAULT_RETRY_DELAY = 30.0
 CANARY_TEXT = "Gary decided on 2026-01-15 to use CMake for the build system."
 
 _lock = threading.Lock()
@@ -61,7 +62,7 @@ def _check_hindsight_extraction() -> dict:
     return {"ok": True, "text": "Hindsight extraction works"}
 
 
-def _check_vault_keeper() -> dict:
+def _ask_vault_keeper() -> dict:
     # /health only says vault-keeper is up. /health/deep asks the vault's git
     # remote with the same deploy key a write uses, so a revoked key or a
     # broken network shows here instead of as every note save failing.
@@ -76,6 +77,17 @@ def _check_vault_keeper() -> dict:
             detail = resp.text
         return {"ok": False, "text": f"vault-keeper can't reach the vault on GitHub (HTTP {resp.status_code}: {str(detail)[:160]})"}
     return {"ok": True, "text": "vault-keeper can reach the vault"}
+
+
+def _check_vault_keeper() -> dict:
+    # One slow trip to GitHub on a jittery network is not worth an alert that
+    # stays up until the next run, so a failure has to happen twice.
+    result = _ask_vault_keeper()
+    if result["ok"]:
+        return result
+    logger.info("vault-keeper check failed, trying once more: %s", result["text"])
+    time.sleep(VAULT_RETRY_DELAY)
+    return _ask_vault_keeper()
 
 
 CHECKS = {
